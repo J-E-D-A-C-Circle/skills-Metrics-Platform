@@ -1,0 +1,7 @@
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#fff;font-family:Inter,system-ui,sans-serif;color:#111827;-webkit-font-smoothing:antialiased}
+a{color:#127a42;text-decoration:none}
+a:hover{color:#0d3b2a;text-decoration:underline}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#c9cdd3;border-radius:8px}
