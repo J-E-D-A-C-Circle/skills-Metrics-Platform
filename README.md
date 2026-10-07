@@ -19,10 +19,38 @@ Set `NEXT_PUBLIC_DEMO_ROLE` to `staff`, `manager`, `creator` or `admin` to chang
 app/
   layout.jsx            fonts, icon font, global CSS
   globals.css           body reset and link colours
-  page.jsx              renders AppRouter (next.config.mjs rewrites every app URL to "/")
+  page.jsx              Home dashboard route (/)
+  home/page.jsx         Home route (/home)
+  profile/page.jsx      My Profile route (/profile)
+  plan/page.jsx         Development Plan route (/plan)
+  assessments/page.jsx  My Assessments route (/assessments)
+  evidence/page.jsx     Evidence & Certifications route (/evidence)
+  take/page.jsx         Take Assessment route (/take)
+  team/page.jsx         Team Evaluations route (/team)
+  team-evals/page.jsx   Team Evaluations route (/team-evals)
+  feedback/page.jsx     360° Feedback route (/feedback)
+  approvals/page.jsx    Plan Approvals route (/approvals)
+  analytics/page.jsx    Analytics route (/analytics)
+  dashboard/page.jsx    Executive Dashboard route (/dashboard)
+  heatmap/page.jsx      Skill Heatmap route (/heatmap)
+  reports/page.jsx      Report Builder route (/reports)
+  schedules/page.jsx    Scheduled Reports route (/schedules)
+  framework/page.jsx    Skill Framework route (/framework)
+  forms/page.jsx        Form Builder route (/forms)
+  library/page.jsx      Competency Library route (/library)
+  targets/page.jsx      Target Profiles route (/targets)
+  scales/page.jsx       Rating Scales route (/scales)
+  builder/page.jsx      Assessment Scheduling route (/builder)
+  system/page.jsx       System Administration route (/system)
+  users/page.jsx        User Management route (/users)
+  audit/page.jsx        Audit Logs route (/audit)
+  settings/page.jsx     System Settings route (/settings)
+  help/page.jsx         Help & Guides route (/help)
+  signin/page.jsx       Sign In route (/signin)
+  not-found.jsx         Fallback Not Found route
 components/
-  AppRouter.jsx         maps the URL (/profile?tab=skills, /forms, /users …) to the app; back/forward supported
-  SkillMatrixApp.jsx    shell: glass header, hover/pin sidebar, notes, notifications, routing
+  AppRouter.jsx         Client-side router bridge for page state & back/forward support
+  SkillMatrixApp.jsx    Shell: glass header, hover/pin sidebar, notes, notifications, routing
   SMHome.jsx            Home dashboard
   SMProfile.jsx         Profile (Account, Skill Profile, History, Development Plan)
   SMAssessmentSession.jsx  timed one-day assessment (timer, autosave, integrity checks)

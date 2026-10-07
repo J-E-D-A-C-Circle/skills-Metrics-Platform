@@ -1,2 +1,16 @@
 .h0:hover{filter:brightness(1.1) !important}
 .h1:hover{border-color:#c7ccd4 !important}
+
+.stickyAside {
+  position: sticky !important;
+  top: 80px !important;
+  align-self: flex-start !important;
+  max-height: calc(100vh - 96px) !important;
+  overflow-y: auto !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.stickyAside::-webkit-scrollbar {
+  display: none;
+}

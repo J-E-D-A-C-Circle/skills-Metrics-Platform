@@ -26,8 +26,8 @@ class SMAnalytics extends React.Component {
   download(name, text, mime) { try { const b = new Blob([text], { type: mime }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} }
   renderVals() {
     const d = this.props.data, s = this.state, go = this.props.go || (() => {});
-    if (!d) return {};
-    const view = this.props.view || 'dashboard', P = +s.period, QL = ['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'];
+    const rawView = this.props.view;
+    const view = (rawView === 'analytics' ? 'dashboard' : rawView) || 'dashboard', P = +s.period, QL = ['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'];
     const sel = s.dept === 'All' ? d.depts : d.depts.filter(x => x.name === s.dept);
     const staff = sel.reduce((a, x) => a + x.staff, 0), assessed = sel.reduce((a, x) => a + Math.round(x.assessed * (0.7 + P * 0.1)), 0);
     const wavg = (list, p) => list.reduce((a, x) => a + x.trend[p] * x.staff, 0) / list.reduce((a, x) => a + x.staff, 0);

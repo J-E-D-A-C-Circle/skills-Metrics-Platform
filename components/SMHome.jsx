@@ -4,7 +4,28 @@ import __css from './SMHome.module.css';
 
 
 class SMHome extends React.Component {
-  state = { heatOpen: true, alert: true, ym: null };
+  state = { heatOpen: true, alert: true, ym: null, avatar: null };
+
+  componentDidMount() {
+    try {
+      const av = localStorage.getItem('skm-user-avatar');
+      if (av) this.setState({ avatar: av });
+    } catch (e) {}
+    this.onAvatarStorage = () => {
+      try {
+        const av = localStorage.getItem('skm-user-avatar');
+        this.setState({ avatar: av || null });
+      } catch (e) {}
+    };
+    window.addEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.addEventListener('storage', this.onAvatarStorage);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.removeEventListener('storage', this.onAvatarStorage);
+  }
+
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
@@ -43,6 +64,7 @@ class SMHome extends React.Component {
       gapScale: d.GAP,
       asideMax: vw >= 1280 ? '380px' : 'none',
       monthName: new Date(ym[0], ym[1], 1).toLocaleString('en', { month: 'long', year: 'numeric' }), days, prevMonth: shift(-1), nextMonth: shift(1),
+      avatar: s.avatar,
       timeline: [
         { name: 'ASSESSMENT DAY (TIMED)', when: C.dayLabel, ring: '#ea7a12', fill: st === 'submitted' ? '#ea7a12' : '#fff' },
         { name: 'MANAGER EVALUATIONS CLOSE', when: C.mgrCloseLabel, ring: '#111827', fill: '#fff' },
@@ -60,7 +82,32 @@ class SMHome extends React.Component {
             <div style={{ position: "relative", minHeight: "180px", background: "#0d3b2a", display: "flex" }}>
               <div style={{ position: "relative", zIndex: "1", flex: "1", padding: "18px clamp(16px,2.4vw,28px) 22px", display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", margin: "4px 0 0 clamp(0px,2.5vw,32px)" }}>
-                  <div style={{ width: "72px", height: "72px", borderRadius: "50%", border: "3px solid #fff", flex: "none", background: "repeating-linear-gradient(135deg,#cbd2da 0 5px,#b8c0ca 5px 10px)", display: "flex", alignItems: "center", justifyContent: "center", font: "600 10px 'JetBrains Mono',monospace", color: "#475569" }}>photo</div>
+                  <div
+                    onClick={__v.goProfile}
+                    title={"View profile / change photo"}
+                    style={{
+                      width: "72px",
+                      height: "72px",
+                      borderRadius: "50%",
+                      border: "3px solid #fff",
+                      flex: "none",
+                      background: __v.avatar ? "transparent" : "linear-gradient(135deg,#0d3b2a 0%,#15904c 100%)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      font: "700 22px Inter,sans-serif",
+                      color: "#fff",
+                      overflow: "hidden",
+                      boxShadow: "0 4px 14px rgba(0,0,0,.25)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {__v.avatar ? (
+                      <img src={__v.avatar} alt={"Profile"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    ) : (
+                      "AD"
+                    )}
+                  </div>
                   <div style={{ color: "#fff", minWidth: "0", flex: "1 1 auto" }}>
                     <div style={{ fontSize: "14.5px", fontWeight: "500" }}>Welcome back,</div>
                     <div style={{ fontSize: "clamp(18px,2vw,22px)", fontWeight: "700", letterSpacing: "-0.2px", marginTop: "2px" }}>ADJEI DENZIL ASIAM</div>
@@ -321,7 +368,7 @@ class SMHome extends React.Component {
             </div>
           </>) : null}
         </div>
-        <aside style={{ flex: "1 1 320px", maxWidth: __v.asideMax, background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "28px 18px 24px" }}>
+        <aside className={__css.stickyAside} style={{ position: "sticky", top: "80px", alignSelf: "flex-start", flex: "1 1 320px", maxWidth: __v.asideMax, maxHeight: "calc(100vh - 96px)", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "28px 18px 24px" }}>
           <button onClick={__v.goAssessments} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#127a42" }}>Full Assessment Calendar</button>
           <div style={{ display: "flex", gap: "16px", marginTop: "14px", fontSize: "11.5px", color: "#4b5563" }}>
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ea7a12" }}></span>Assessment</span>

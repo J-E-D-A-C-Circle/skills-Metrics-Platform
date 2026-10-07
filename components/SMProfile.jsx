@@ -2,14 +2,117 @@
 import React from 'react';
 
 
+function processAvatarFile(file, callback) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 400;
+      let width = img.width;
+      let height = img.height;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      callback(dataUrl);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 class SMProfile extends React.Component {
-  state = { closed: {}, devicesOpen: false, devices: [
-      { id: 1, name: 'Chrome on Windows', meta: 'Accra · Active now', current: true }, { id: 2, name: 'Safari on iPhone', meta: 'Accra · 2 hours ago' }, { id: 3, name: 'Edge on Windows', meta: 'Kumasi · 3 days ago' }],
-    adding: false, newAction: '', newComp: '', newDue: '', toast: '',
+  state = {
+    avatar: null,
+    avatarHover: false,
+    closed: {},
+    devicesOpen: false,
+    devices: [
+      { id: 1, name: 'Chrome on Windows', meta: 'Accra · Active now', current: true },
+      { id: 2, name: 'Safari on iPhone', meta: 'Accra · 2 hours ago' },
+      { id: 3, name: 'Edge on Windows', meta: 'Kumasi · 3 days ago' }
+    ],
+    adding: false,
+    newAction: '',
+    newComp: '',
+    newDue: '',
+    toast: '',
     plan: [
       { id: 1, action: 'CompTIA CySA+ certification course', comp: 8, due: 'Dec 2026', pct: 40, ok: true },
       { id: 2, action: 'Run a DR drill alongside the infrastructure team', comp: 3, due: 'Nov 2026', pct: 0, ok: false },
-      { id: 3, action: 'Azure Fundamentals (AZ-900)', comp: 9, due: 'Jan 2027', pct: 15, ok: true }] };
+      { id: 3, action: 'Azure Fundamentals (AZ-900)', comp: 9, due: 'Jan 2027', pct: 15, ok: true }
+    ]
+  };
+
+  componentDidMount() {
+    try {
+      const av = localStorage.getItem('skm-user-avatar');
+      if (av) this.setState({ avatar: av });
+    } catch (e) {}
+    this.onAvatarStorage = () => {
+      try {
+        const av = localStorage.getItem('skm-user-avatar');
+        this.setState({ avatar: av || null });
+      } catch (e) {}
+    };
+    window.addEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.addEventListener('storage', this.onAvatarStorage);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.removeEventListener('storage', this.onAvatarStorage);
+  }
+
+  handleAvatarUpload = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      this.flash('Please select an image file (PNG, JPG, WebP)');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.flash('Image size must be less than 10MB');
+      return;
+    }
+    processAvatarFile(file, dataUrl => {
+      try {
+        localStorage.setItem('skm-user-avatar', dataUrl);
+        window.dispatchEvent(new Event('skm-avatar-changed'));
+        this.setState({ avatar: dataUrl });
+        this.flash('Profile picture updated successfully!');
+      } catch (err) {
+        this.flash('Could not save photo to storage');
+      }
+    });
+    if (e.target) e.target.value = '';
+  };
+
+  handleAvatarRemove = () => {
+    try {
+      localStorage.removeItem('skm-user-avatar');
+      window.dispatchEvent(new Event('skm-avatar-changed'));
+      this.setState({ avatar: null });
+      this.flash('Profile picture removed');
+    } catch (err) {}
+  };
+
+  triggerFileInput = () => {
+    if (this.fileInput) this.fileInput.click();
+  };
+
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
@@ -36,6 +139,13 @@ class SMProfile extends React.Component {
     const newComp = s.newComp || (gapComps[0] && gapComps[0].id);
     const canSave = s.newAction.trim().length > 3;
     return {
+      avatar: s.avatar,
+      avatarHover: s.avatarHover,
+      onAvatarHover: val => this.setState({ avatarHover: val }),
+      triggerFileInput: this.triggerFileInput,
+      onAvatarUpload: this.handleAvatarUpload,
+      onAvatarRemove: this.handleAvatarRemove,
+      fileRef: el => { this.fileInput = el; },
       roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', admin: 'Administrator' }[this.props.role || 'staff'],
       avgText: d.fmt(avg) + ' / 5', avgLabel: d.LEVEL[Math.round(avg)], openGaps: comps.filter(c => c.gap > 0).length,
       tabs: T.map(([k, label, icon, count]) => ({ label, icon, count: count || '', onClick: () => setTab(k),
@@ -76,7 +186,137 @@ class SMProfile extends React.Component {
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px clamp(14px,3.4vw,52px)" }}>
         <h1 style={{ margin: "0 0 clamp(18px,2.4vw,32px)", fontSize: "clamp(26px,3vw,32px)", fontWeight: "700", letterSpacing: "-0.5px" }}>Profile</h1>
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", minHeight: "190px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "20px", padding: "24px clamp(18px,2.6vw,34px)" }}>
-          <div style={{ width: "124px", height: "124px", borderRadius: "50%", border: "4px solid #fff", boxShadow: "0 3px 12px rgba(0,0,0,.18)", background: "repeating-linear-gradient(135deg,#cbd2da 0 6px,#b8c0ca 6px 12px)", display: "flex", alignItems: "center", justifyContent: "center", font: "600 11px 'JetBrains Mono',monospace", color: "#475569", flex: "none" }}>photo</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", flex: "none" }}>
+            <div
+              style={{ position: "relative", width: "128px", height: "128px" }}
+              onMouseEnter={() => __v.onAvatarHover(true)}
+              onMouseLeave={() => __v.onAvatarHover(false)}
+            >
+              <div
+                onClick={__v.triggerFileInput}
+                title={"Click to change profile picture"}
+                style={{
+                  width: "128px",
+                  height: "128px",
+                  borderRadius: "50%",
+                  border: "4px solid #fff",
+                  boxShadow: "0 4px 18px rgba(15,35,65,.18), 0 0 0 1px rgba(21,144,76,.2)",
+                  background: __v.avatar ? "transparent" : "linear-gradient(135deg, #0d3b2a 0%, #17603f 50%, #2fb36b 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  overflow: "hidden",
+                  position: "relative"
+                }}
+              >
+                {__v.avatar ? (
+                  <img
+                    src={__v.avatar}
+                    alt={"Profile photo"}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                ) : (
+                  <span style={{ font: "700 38px Inter, sans-serif", color: "#fff", letterSpacing: "1px" }}>
+                    AD
+                  </span>
+                )}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: "0",
+                    background: "rgba(10,52,36,0.6)",
+                    backdropFilter: "blur(2px)",
+                    WebkitBackdropFilter: "blur(2px)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    opacity: __v.avatarHover ? 1 : 0,
+                    transition: "opacity .2s ease",
+                    pointerEvents: "none"
+                  }}
+                >
+                  <i className={"icon-camera"} style={{ fontSize: "24px" }}></i>
+                  <span style={{ fontSize: "11px", fontWeight: "600", marginTop: "3px" }}>Change</span>
+                </div>
+              </div>
+              <button
+                onClick={__v.triggerFileInput}
+                title={"Upload new profile photo"}
+                style={{
+                  position: "absolute",
+                  bottom: "2px",
+                  right: "2px",
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "50%",
+                  background: "linear-gradient(180deg,#2fb36b,#15904c)",
+                  color: "#fff",
+                  border: "3px solid #fff",
+                  boxShadow: "0 4px 12px rgba(21,144,76,.4)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0"
+                }}
+              >
+                <i className={"icon-camera"} style={{ fontSize: "16px" }}></i>
+              </button>
+              <input
+                ref={__v.fileRef}
+                type={"file"}
+                accept={"image/png,image/jpeg,image/webp,image/gif"}
+                onChange={__v.onAvatarUpload}
+                style={{ display: "none" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                onClick={__v.triggerFileInput}
+                style={{
+                  fontSize: "11.5px",
+                  fontWeight: "600",
+                  color: "#15904c",
+                  background: "rgba(47,179,107,.12)",
+                  border: "1px solid rgba(47,179,107,.25)",
+                  borderRadius: "999px",
+                  padding: "3px 10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+              >
+                <i className={"icon-upload"} style={{ fontSize: "12px" }}></i>
+                {__v.avatar ? "Change photo" : "Upload photo"}
+              </button>
+              {__v.avatar ? (
+                <button
+                  onClick={__v.onAvatarRemove}
+                  title={"Reset to default initials"}
+                  style={{
+                    fontSize: "11.5px",
+                    fontWeight: "600",
+                    color: "#dc2626",
+                    background: "rgba(239,68,68,.1)",
+                    border: "1px solid rgba(239,68,68,.2)",
+                    borderRadius: "999px",
+                    padding: "3px 10px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                >
+                  <i className={"icon-trash-2"} style={{ fontSize: "12px" }}></i>
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
           <div style={{ flex: "1 1 320px", textAlign: "center", minWidth: "0" }}>
             <div style={{ fontSize: "clamp(20px,2.2vw,25px)", fontWeight: "700", letterSpacing: "-0.2px" }}>ADJEI DENZIL ASIAM</div>
             <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}><span style={{ color: "#374151", fontWeight: "500" }}>123456789</span> · IT OFFICER · IT DEPARTMENT · HEAD OFFICE</div>

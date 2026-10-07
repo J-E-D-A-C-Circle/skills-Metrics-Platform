@@ -25,7 +25,8 @@ class SMFramework extends React.Component {
   renderVals() {
     const d = this.props.data, s = this.state, vw = this.props.vw || 1440;
     if (!d) return {};
-    const view = this.props.view || 'library';
+    const rawView = this.props.view;
+    const view = (rawView === 'framework' ? 'library' : rawView) || 'library';
     const lib = this.lib(), tree = lib[s.libDept] || [];
     const saveLib = (dept, majors) => this.setState({ lib: { ...lib, [dept]: majors } });
     const roles = ['IT Officer G4', 'Senior IT Officer G5', 'Network Engineer', 'Database Admin', 'Security Analyst'];

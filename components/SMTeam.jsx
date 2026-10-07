@@ -12,7 +12,8 @@ class SMTeam extends React.Component {
   renderVals() {
     const d = this.props.data, s = this.state;
     if (!d) return {};
-    const view = this.props.view || 'team-evals';
+    const rawView = this.props.view;
+    const view = (rawView === 'team' ? 'team-evals' : rawView) || 'team-evals';
     const ini = n => n.split(' ').map(x => x[0]).slice(0, 2).join('');
     const CH = { Submitted: ['#dcfce7', '#15803d'], 'In progress': ['#fef3c7', '#92400e'], 'Not started': ['#f3f4f6', '#4b5563'], Pending: ['#ffedd5', '#9a3412'], Evaluated: ['#dcfce7', '#15803d'], Locked: ['#f3f4f6', '#6b7280'] };
     const team = d.team.map(t => ({ ...t, eval: s.evals[t.id] || t.eval }));

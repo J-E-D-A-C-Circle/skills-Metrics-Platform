@@ -56,7 +56,8 @@ class SMSystem extends React.Component {
   renderVals() {
     const d = this.props.data, s = this.state, go = this.props.go || (() => {});
     if (!d) return {};
-    const view = this.props.view || 'users';
+    const rawView = this.props.view;
+    const view = (rawView === 'system' ? 'settings' : rawView) || 'users';
     const q = s.uq.trim().toLowerCase();
     const users = s.users.filter(u => (s.uRole === 'All' || u.role === s.uRole) && (!q || (u.name + u.email).toLowerCase().includes(q)));
     const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.nEmail.trim()), uname = s.nUser.trim().toLowerCase();

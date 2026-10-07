@@ -90,11 +90,57 @@ const NAV = [
   { label: 'Administration', roles: ['admin'], items: [['User Management', 'icon-user-cog', 'users'], ['Audit Logs', 'icon-scroll-text', 'audit'], ['System Settings', 'icon-settings', 'settings']] },
   { label: 'Support', items: [['Help & Guides', 'icon-life-buoy', 'help']] },
 ];
-const GROUP = { assessments: 'assess', evidence: 'assess', 'team-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics', library: 'framework', targets: 'framework', scales: 'framework', builder: 'framework', users: 'system', audit: 'system', settings: 'system', help: 'system' };
+const GROUP = {
+  assess: 'assess', assessments: 'assess', evidence: 'assess',
+  team: 'team', 'team-evals': 'team', feedback: 'team', approvals: 'team',
+  analytics: 'analytics', dashboard: 'analytics', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
+  framework: 'framework', library: 'framework', targets: 'framework', scales: 'framework', builder: 'framework',
+  system: 'system', users: 'system', audit: 'system', settings: 'system', help: 'system'
+};
+
+function resolvePageAndActive(p, t) {
+  let page = p || 'home';
+  let active = p || 'home';
+  let tab = t || 'account';
+  if (page === 'plan' || tab === 'plan') {
+    page = 'profile';
+    active = 'plan';
+    tab = 'plan';
+  } else if (page === 'analytics') {
+    active = 'dashboard';
+  } else if (page === 'team') {
+    active = 'team-evals';
+  } else if (page === 'framework') {
+    active = 'library';
+  } else if (page === 'system') {
+    active = 'settings';
+  }
+  return { page, active, tab };
+}
+
 class SkillMatrixApp extends React.Component {
-  state = { page: this.props.routePage ?? this.props.startPage ?? 'home', active: this.props.routePage ?? this.props.startPage ?? 'home', tab: this.props.routeTab || 'account', history: [], vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
-    navOpen: false, bellOpen: false, query: '', closed: {}, status: 'not_started',
-    notesOpen: false, notes: [], selId: null, draft: { title: '', body: '' }, dirty: false };
+  constructor(props) {
+    super(props);
+    const { page, active, tab } = resolvePageAndActive(props.routePage ?? props.startPage, props.routeTab);
+    this.state = {
+      page,
+      active,
+      tab,
+      history: [],
+      vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
+      navOpen: false,
+      bellOpen: false,
+      query: '',
+      closed: {},
+      status: 'not_started',
+      notesOpen: false,
+      notes: [],
+      selId: null,
+      draft: { title: '', body: '' },
+      dirty: false,
+      avatar: null
+    };
+  }
   componentDidMount() {
     this.onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
     this.onResize();
@@ -102,12 +148,34 @@ class SkillMatrixApp extends React.Component {
     window.addEventListener('resize', this.onResize);
     try { const n = JSON.parse(localStorage.getItem('skm-notes') || '[]'); if (Array.isArray(n)) this.setState({ notes: n }); } catch (e) {}
     try { const s = JSON.parse(localStorage.getItem('skm-session') || 'null'); if (s) this.setState({ status: s.submittedAt ? 'submitted' : 'in_progress' }); } catch (e) {}
+    try {
+      const av = localStorage.getItem('skm-user-avatar');
+      if (av) this.setState({ avatar: av });
+    } catch (e) {}
+    this.onAvatarStorage = () => {
+      try {
+        const av = localStorage.getItem('skm-user-avatar');
+        this.setState({ avatar: av || null });
+      } catch (e) {}
+    };
+    window.addEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.addEventListener('storage', this.onAvatarStorage);
   }
   componentDidUpdate(pp) {
     const rp = this.props.routePage;
-    if (rp && rp !== pp.routePage && rp !== this.state.page) this.setState({ page: rp, active: rp === 'profile' && this.props.routeTab === 'plan' ? 'plan' : rp, tab: this.props.routeTab || 'account' });
+    const rt = this.props.routeTab;
+    if ((rp && rp !== pp.routePage) || (rt !== pp.routeTab)) {
+      const { page, active, tab } = resolvePageAndActive(rp, rt);
+      if (page !== this.state.page || active !== this.state.active || tab !== this.state.tab) {
+        this.setState({ page, active, tab });
+      }
+    }
   }
-  componentWillUnmount() { window.removeEventListener('resize', this.onResize); }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.onResize);
+    window.removeEventListener('skm-avatar-changed', this.onAvatarStorage);
+    window.removeEventListener('storage', this.onAvatarStorage);
+  }
   go = (key, tab) => {
     let page = key, t = tab || 'account';
     if (key === 'plan') { page = 'profile'; t = 'plan'; }
@@ -137,7 +205,7 @@ class SkillMatrixApp extends React.Component {
       const open = q ? true : !s.closed[g.label || 'Menu'];
       return { label: g.label, countLabel: (g.label || 'Menu') + ' · ' + items.length, showLabel: exp, showDivider: !exp && !!g.label, align: exp ? 'stretch' : 'center', items, open: exp ? open : true, chev: open ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => set({ closed: { ...s.closed, [g.label || 'Menu']: open } }) };
     }).filter(g => g.items.length);
-    const grp = GROUP[s.page];
+    const grp = GROUP[s.page] || s.page;
     const sel = s.notes.find(n => n.id === s.selId);
     const noteList = s.notes.map(n => ({ title: n.title || 'Untitled note', preview: n.body ? n.body.slice(0, 60) : 'Empty note',
       bg: n.id === s.selId ? '#262838' : 'transparent', accent: n.id === s.selId ? '#f5a623' : 'transparent', select: () => this.select(n.id) }));
@@ -147,6 +215,7 @@ class SkillMatrixApp extends React.Component {
       { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('plan') },
     ];
     return {
+      avatar: s.avatar,
       data: DATA, role, vw, go: this.go, page: s.page, tab: s.tab, onTab: t => set({ tab: t, active: t === 'plan' ? 'plan' : 'profile' }), status: s.status,
       onStatus: st => set({ status: st }),
       pTake: s.page === 'take', pSignin: s.page === 'signin', shell: s.page !== 'take' && s.page !== 'signin', pForms: s.page === 'forms',
@@ -254,7 +323,13 @@ class SkillMatrixApp extends React.Component {
             </>) : null}
             <aside onMouseEnter={__v.navEnter} onMouseLeave={__v.navLeave} style={{ position: __v.asidePos, top: __v.asideTop, left: __v.asideLeft, zIndex: "40", flex: "none", width: __v.asideW, height: __v.asideH, margin: __v.asideMargin, display: __v.asideDisplay, flexDirection: "column", borderRadius: "28px", background: "rgba(255,255,255,.58)", backdropFilter: "blur(32px) saturate(190%)", WebkitBackdropFilter: "blur(32px) saturate(190%)", border: "1px solid rgba(255,255,255,.85)", boxShadow: __v.asideShadow, transition: "width .28s cubic-bezier(.2,.8,.2,1),margin .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s" }}>
               <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "12px", padding: `20px ${__v.padX ?? ""} 16px`, justifyContent: __v.rowJustify }}>
-                <button onClick={__v.goProfile} title={"My Profile"} style={{ flex: "none", width: "44px", height: "44px", borderRadius: "50%", padding: "0", cursor: "pointer", border: "2px solid #fff", boxShadow: "0 0 0 2px rgba(21,144,76,.25),0 6px 14px rgba(15,35,65,.15)", background: "repeating-linear-gradient(135deg,#cbd2da 0 4px,#b8c0ca 4px 8px)", font: "600 10px 'JetBrains Mono',monospace", color: "#475569" }}>AD</button>
+                <button onClick={__v.goProfile} title={"My Profile"} style={{ flex: "none", width: "44px", height: "44px", borderRadius: "50%", padding: "0", cursor: "pointer", border: "2px solid #fff", boxShadow: "0 0 0 2px rgba(21,144,76,.25),0 6px 14px rgba(15,35,65,.15)", background: __v.avatar ? "transparent" : "linear-gradient(135deg, #0d3b2a 0%, #15904c 100%)", font: "600 12px Inter,sans-serif", color: "#fff", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {__v.avatar ? (
+                    <img src={__v.avatar} alt={"AD"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  ) : (
+                    "AD"
+                  )}
+                </button>
                 {(__v.exp) ? (<>
                   <div style={{ minWidth: "0", flex: "1" }}>
                     <div style={{ font: "500 11.5px Inter,sans-serif", color: "#6b7280" }}>{__v.greeting}</div>

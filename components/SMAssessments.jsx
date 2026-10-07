@@ -13,7 +13,8 @@ class SMAssessments extends React.Component {
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), s = this.state;
     if (!d) return {};
-    const view = this.props.view || 'assessments', st = this.props.status || 'not_started', C = d.cycle;
+    const rawView = this.props.view;
+    const view = (rawView === 'assess' ? 'assessments' : rawView) || 'assessments', st = this.props.status || 'not_started', C = d.cycle;
     const S = { not_started: ['OPEN TODAY', '#ffedd5', '#9a3412', 'Start Assessment', 'icon-play'], in_progress: ['IN PROGRESS', '#fee2e2', '#b91c1c', 'Resume Assessment', 'icon-timer'], submitted: ['SUBMITTED', '#dcfce7', '#15803d', 'View Receipt', 'icon-receipt'] }[st];
     const chip = (t, bg, fg) => ({ status: t, sBg: bg, sFg: fg });
     const done = st === 'submitted';
