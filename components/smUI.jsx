@@ -2,6 +2,7 @@
 // Shared building blocks so every admin page uses the same header, cards, tables, badges and drawers.
 import React, { useMemo, useState } from 'react';
 import { STATUS_C, STATUS_HINT, ALL } from './smModel';
+import { Select } from './ui/select';
 
 export const CARD = { background: 'rgba(255,255,255,.62)', backdropFilter: 'blur(28px) saturate(180%)', WebkitBackdropFilter: 'blur(28px) saturate(180%)', border: '1px solid rgba(255,255,255,.85)', borderRadius: '22px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)' };
 export const PAGE = { padding: 'clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px', display: 'flex', flexDirection: 'column', gap: '20px' };
@@ -57,9 +58,7 @@ export function Btn({ kind = 'secondary', icon, children, onClick, disabled, tit
 
 export function Sel({ value, onChange, options, style, disabled, title }) {
   return (
-    <select title={title} disabled={disabled} value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT, padding: '0 8px', ...(style || {}) }}>
-      {options.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return <option key={v} value={v}>{l}</option>; })}
-    </select>
+    <Select title={title} disabled={disabled} value={value} onValueChange={onChange} options={options} style={{ ...INPUT, padding: '0 10px', ...(style || {}) }} />
   );
 }
 

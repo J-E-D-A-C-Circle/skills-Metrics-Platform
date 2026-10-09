@@ -3,6 +3,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import __css from './SMSystem.module.css';
 import { PageHeader } from './smUI';
+import { Select } from './ui/select';
 
 
 const ROLES = ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Participant'];
@@ -143,12 +144,12 @@ class SMSystem extends React.Component {
                 <i className={"icon-search"} style={{ fontSize: "14px", color: "#9ca3af" }}></i>
                 <input value={__v.uq} onChange={__v.onUq} placeholder={"Search name, email or staff ID"} style={{ border: "0", outline: "0", flex: "1", minWidth: "0", font: "400 13.5px Inter,sans-serif" }} />
               </div>
-              <select value={__v.uRole} onChange={__v.onURole} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+              <Select value={__v.uRole} onChange={__v.onURole} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                 <option value={"All"}>All roles</option>
                 {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                   <option value={r}>{r}</option>
                 </React.Fragment>))}
-              </select>
+              </Select>
             </div>
             {(__v.adding) ? createPortal(<>
               <div onClick={__v.toggleAdd} onKeyDown={e => { if (e.key === 'Escape') __v.toggleAdd(); }} style={{ position: "fixed", inset: "0", zIndex: "80", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", background: "rgba(255,255,255,.45)", backdropFilter: "blur(10px) saturate(160%)", WebkitBackdropFilter: "blur(10px) saturate(160%)" }}>
@@ -165,16 +166,16 @@ class SMSystem extends React.Component {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: "12px" }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FULL NAME<input autoFocus value={__v.nName} onChange={__v.onNName} placeholder={"e.g. Isaac Addy"} aria-invalid={__v.nameHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.nameBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.nameHintColor }}>{__v.nameHint}</span></label>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EMAIL<input value={__v.nEmail} onChange={__v.onNEmail} placeholder={"firstname.lastname@dvla.gov.gh"} aria-invalid={__v.emailHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.emailBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.emailHintColor }}>{__v.emailHint}</span></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DEPARTMENT<select value={__v.nDept} onChange={__v.onNDept} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DEPARTMENT<Select value={__v.nDept} onChange={__v.onNDept} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
                       {(__v.deptNames || []).map((n, $index) => (<React.Fragment key={$index}>
                         <option value={n}>{n}</option>
                       </React.Fragment>))}
-                    </select></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ROLE<select value={__v.nRole} onChange={__v.onNRole} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
+                    </Select></label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ROLE<Select value={__v.nRole} onChange={__v.onNRole} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
                       {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                         <option value={r}>{r}</option>
                       </React.Fragment>))}
-                    </select></label>
+                    </Select></label>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>USERNAME<input value={__v.nUser} onChange={__v.onNUser} placeholder={"firstname.lastname"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", fontFamily: "'JetBrains Mono',monospace", borderColor: __v.userBorder }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.userHintColor }}>{__v.userHint}</span></label>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>TEMPORARY PASSWORD
               <div style={{ display: "flex", gap: "6px" }}>
@@ -265,11 +266,11 @@ class SMSystem extends React.Component {
                     </div>
                     <span style={{ font: "500 12.5px 'JetBrains Mono',monospace", color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u?.username}</span>
                     <span style={{ fontSize: "13px", color: "#374151" }}>{u?.dept}</span>
-                    <select value={u?.role} onChange={u?.onRole} style={{ height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 12.5px Inter,sans-serif", background: "#fff" }}>
+                    <Select value={u?.role} onChange={u?.onRole} style={{ height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 12.5px Inter,sans-serif", background: "#fff" }}>
                       {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                         <option value={r}>{r}</option>
                       </React.Fragment>))}
-                    </select>
+                    </Select>
                     <button onClick={u?.toggle} style={{ justifySelf: "start", font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "4px 10px", border: "0", cursor: "pointer", background: u?.sBg, color: u?.sFg }}>{u?.status}</button>
                     <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{u?.last}</span>
                     <button onClick={u?.reset} style={{ justifySelf: "start", display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "7px", background: "#fff", color: "#374151", font: "500 12px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}><i className={"icon-key-round"} style={{ fontSize: "12px" }}></i>Reset password</button>
@@ -337,11 +338,11 @@ class SMSystem extends React.Component {
                     </button>
                   </div>
                 </React.Fragment>))}
-                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "500 12px Inter,sans-serif", color: "#374151", marginTop: "14px" }}>Keep assessment records for<select value={__v.st?.retention} onChange={__v.on?.retention} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "500 12px Inter,sans-serif", color: "#374151", marginTop: "14px" }}>Keep assessment records for<Select value={__v.st?.retention} onChange={__v.on?.retention} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                     <option value={"3"}>3 years</option>
                     <option value={"5"}>5 years</option>
                     <option value={"7"}>7 years</option>
-                  </select></label>
+                  </Select></label>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { PageHeader } from './smUI';
+import { Select } from './ui/select';
 
 
 class SMProfile extends React.Component {
@@ -324,11 +325,11 @@ class SMProfile extends React.Component {
             {(__v.adding) ? (<>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-end", padding: "16px 24px", background: "rgba(255,255,255,.4)", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <label style={{ flex: "2 1 260px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ACTION<input value={__v.newAction} onChange={__v.onNewAction} placeholder={"e.g. Shadow the network team for two weeks"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", color: "#111827" }} /></label>
-                <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COMPETENCY<select value={__v.newComp} onChange={__v.onNewComp} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff" }}>
+                <label style={{ flex: "1 1 200px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COMPETENCY<Select value={__v.newComp} onChange={__v.onNewComp} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff" }}>
                     {(__v.gapComps || []).map((o, $index) => (<React.Fragment key={$index}>
                       <option value={o?.id}>{o?.label}</option>
                     </React.Fragment>))}
-                  </select></label>
+                  </Select></label>
                 <label style={{ flex: "0 1 160px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DUE<input type={"month"} value={__v.newDue} onChange={__v.onNewDue} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif" }} /></label>
                 <button onClick={__v.saveAction} style={{ height: "36px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.saveBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>Submit for approval</button>
               </div>

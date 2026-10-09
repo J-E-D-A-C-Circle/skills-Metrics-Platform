@@ -68,6 +68,7 @@ components/
   dvlaBanks.js          job levels, RBDI and HR frameworks and the eight question banks (generated from the PDFs)
   smModel.js            derived model: automatic scoring, interpretation bands, target-profile resolution, gaps, training, report data
   smUI.jsx              shared UI: PageHeader, Card, DataTable, badges, EmptyState, Drawer, StaffDrawer, ScopeSelect
+  ui/select.jsx         shadcn-style Select used for every dropdown (no native <select> anywhere)
   SMHome.jsx            personal Home (staff/manager/creator); SMAdminHome.jsx is the admin overview
   SMAnalytics.jsx       Executive Dashboard, Skill Heatmap, Report Builder, Scheduled Reports
   SMTraining.jsx        Training Needs (by competency / by staff)

@@ -2,6 +2,7 @@
 import React from 'react';
 import __css from './SMAssessments.module.css';
 import { PageHeader } from './smUI';
+import { Select } from './ui/select';
 
 
 class SMAssessments extends React.Component {
@@ -137,17 +138,17 @@ class SMAssessments extends React.Component {
           <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 320px", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
               <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Upload evidence</div>
-              <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COMPETENCY<select value={__v.comp} onChange={__v.onComp} style={{ height: "38px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff", color: "#111827" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COMPETENCY<Select value={__v.comp} onChange={__v.onComp} style={{ height: "38px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff", color: "#111827" }}>
                   {(__v.compOptions || []).map((o, $index) => (<React.Fragment key={$index}>
                     <option value={o?.id}>{o?.label}</option>
                   </React.Fragment>))}
-                </select></label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EVIDENCE TYPE<select value={__v.kind} onChange={__v.onKind} style={{ height: "38px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff", color: "#111827" }}>
+                </Select></label>
+              <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EVIDENCE TYPE<Select value={__v.kind} onChange={__v.onKind} style={{ height: "38px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff", color: "#111827" }}>
                   <option value={"Certificate"}>Certificate</option>
                   <option value={"Training record"}>Training record</option>
                   <option value={"Work sample"}>Work sample</option>
                   <option value={"Reference letter"}>Reference letter</option>
-                </select></label>
+                </Select></label>
               <label className={__css.h0} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", minHeight: "150px", border: "1.5px dashed #c7ccd4", borderRadius: "12px", background: "rgba(255,255,255,.4)", cursor: "pointer", textAlign: "center", padding: "18px" }}>
                 <i className={"icon-cloud-upload"} style={{ fontSize: "28px", color: "#0d3b2a" }}></i>
                 <span style={{ font: "600 14px Inter,sans-serif", color: "#111827" }}>Click to choose a file</span>

@@ -16,6 +16,7 @@ import SMSystem from './SMSystem';
 import SMStaffReport from './SMStaffReport';
 import { buildModel, ALL } from './smModel';
 import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from './dvlaBanks';
+import { Select } from './ui/select';
 
 // Feature flags. A feature that is off is removed from the sidebar, routes, Profile tabs,
 // Home cards, notifications and links. Its code stays in place so it can be switched back on.
@@ -440,10 +441,10 @@ class SkillMatrixApp extends React.Component {
                 {(__v.showScope) ? (<>
                   <label title={"Department scope for dashboards, heatmap, training needs, reports, staff evaluations and target profiles"} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", padding: "0 6px 0 12px", color: "#e3f1e8" }}>
                     <i className={"icon-building-2"} style={{ fontSize: "15px" }}></i>
-                    <select value={__v.scopeValue} onChange={__v.onScope} aria-label={"Department scope"} style={{ maxWidth: __v.wideHeader ? "200px" : "120px", height: "30px", border: "0", outline: "0", background: "transparent", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}>
+                    <Select value={__v.scopeValue} onChange={__v.onScope} aria-label={"Department scope"} style={{ maxWidth: __v.wideHeader ? "200px" : "120px", height: "30px", border: "0", outline: "0", background: "transparent", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}>
                       <option value={ALL} style={{ color: "#111827" }}>All departments</option>
                       {(__v.deptNames || []).map(n => <option key={n} value={n} style={{ color: "#111827" }}>{n}</option>)}
-                    </select>
+                    </Select>
                   </label>
                 </>) : null}
                 <button onClick={__v.toggleBell} aria-label={"Notifications"} style={{ position: "relative", width: "38px", height: "38px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#e3f1e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -566,12 +567,6 @@ class SkillMatrixApp extends React.Component {
               </div>
               <footer style={{ margin: "0 clamp(12px,2vw,20px)", borderTop: "1px solid rgba(15,35,65,.08)", padding: "20px 0 18px", textAlign: "center", fontSize: "13px", color: "#64748b" }}>© 2026 Skill Matrix &amp; Assessment Platform. All rights reserved.</footer>
             </main>
-          </div>
-          <div style={{ position: "fixed", right: "clamp(16px,2.5vw,36px)", bottom: "22px", zIndex: "35" }}>
-            <div style={{ position: "relative", width: "56px", height: "56px", borderRadius: "50%", background: "#0d3b2a", boxShadow: "0 0 0 10px rgba(255,255,255,.35),0 10px 26px rgba(10,52,36,.35),inset 0 1px 0 rgba(255,255,255,.25)", border: "1px solid rgba(255,255,255,.25)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", cursor: "pointer" }}>
-              <i className={"icon-messages-square"} style={{ fontSize: "24px" }}></i>
-              <span style={{ position: "absolute", top: "-10px", left: "-10px", background: "#fff", color: "#0d3b2a", font: "700 9px Inter,sans-serif", borderRadius: "999px", padding: "3px 6px", boxShadow: "0 1px 3px rgba(0,0,0,.2)" }}>AI</span>
-            </div>
           </div>
         </div>
       </>) : null}

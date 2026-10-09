@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Field, Badge, EmptyState, DataTable, Toast, Drawer, Toggle, INPUT, LABEL } from './smUI';
 import { ALL, CURRENT } from './smModel';
 import { loadForms, saveForms, newForm, makeQuestion, loadBank, QBANK_KEY } from './SMFormBuilder';
+import { Select } from './ui/select';
 
 const KEY = 'skm-cycles';
 const SC = { Draft: ['#fef3c7', '#92400e'], Scheduled: ['#e0e7ff', '#3730a3'], Open: ['#dcfce7', '#15803d'], Closed: ['#f3f4f6', '#4b5563'], Archived: ['#f3f4f6', '#9ca3af'] };
@@ -308,11 +309,11 @@ function UploadDrawer({ D, mode, forms, onClose, onImportAssessment, onImportQue
             { key: 'skip', label: 'Import', width: '60px', align: 'center', render: x => <input type="checkbox" checked={!x.r.skip} onChange={() => setRow(rows.indexOf(x.r), 'skip', !x.r.skip)} style={{ accentColor: '#0d3b2a' }} title={x.r.skip ? 'Skipped' : 'Will be imported'} /> },
             { key: 'competency', label: 'Competency', width: '180px', render: x => <input list="skm-comp-list" value={x.r.competency} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'competency', e.target.value)} style={cellIn} /> },
             { key: 'question', label: 'Question', render: x => <input value={x.r.question} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'question', e.target.value)} style={{ ...cellIn, minWidth: '220px' }} /> },
-            { key: 'type', label: 'Type', width: '110px', render: x => <select value={TYPE_ALIASES[x.r.type] || x.r.type} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'type', e.target.value)} style={{ ...cellIn, padding: '0 4px' }}>{!TYPE_ALIASES[x.r.type] ? <option value={x.r.type}>{x.r.type || '—'}</option> : null}{TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select> },
+            { key: 'type', label: 'Type', width: '110px', render: x => <Select value={TYPE_ALIASES[x.r.type] || x.r.type} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'type', e.target.value)} style={{ ...cellIn, padding: '0 4px' }}>{!TYPE_ALIASES[x.r.type] ? <option value={x.r.type}>{x.r.type || '—'}</option> : null}{TYPES.map(t => <option key={t} value={t}>{t}</option>)}</Select> },
             { key: 'options', label: 'Options (a|b|c)', width: '190px', render: x => <input value={x.r.options} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'options', e.target.value)} style={cellIn} /> },
             { key: 'correct', label: 'Correct answer', width: '150px', render: x => <input value={x.r.correct} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'correct', e.target.value)} style={cellIn} /> },
             { key: 'weight', label: 'Weight', width: '64px', render: x => <input value={x.r.weight} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'weight', e.target.value)} style={cellIn} /> },
-            { key: 'required', label: 'Req.', width: '74px', render: x => <select value={yes(x.r.required) ? 'yes' : 'no'} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'required', e.target.value)} style={{ ...cellIn, padding: '0 4px' }}><option value="yes">yes</option><option value="no">no</option></select> },
+            { key: 'required', label: 'Req.', width: '74px', render: x => <Select value={yes(x.r.required) ? 'yes' : 'no'} disabled={x.r.skip} onChange={e => setRow(rows.indexOf(x.r), 'required', e.target.value)} style={{ ...cellIn, padding: '0 4px' }}><option value="yes">yes</option><option value="no">no</option></Select> },
             { key: 'errs', label: 'Check', width: '200px', render: x => x.r.skip ? <Badge>Skipped</Badge> : x.errs.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>{x.errs.map(e => <span key={e} style={{ fontSize: '11.5px', color: '#b91c1c', display: 'flex', gap: '4px' }}><i className="icon-circle-alert" style={{ fontSize: '12px', marginTop: '1px' }}></i>{e}</span>)}</div> : <Badge bg="#dcfce7" fg="#15803d"><i className="icon-check" style={{ fontSize: '11px' }}></i>OK</Badge> },
           ]} />
         </Card> : !parseErr ? <EmptyState icon="icon-file-spreadsheet" title="No file yet" text="Download the template, fill it in, then choose it here. You'll see every row with any problems before anything is imported." /> : null}

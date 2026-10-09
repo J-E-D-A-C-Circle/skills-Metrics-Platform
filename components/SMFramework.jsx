@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Field, Badge, ScopeBadge, EmptyState, DataTable, Toast, Drawer, ScopeSelect, INPUT, LABEL } from './smUI';
 import { ALL, BANDS, TIERS, targetOf, resolveProfile, profileLabel } from './smModel';
 import { JOB_LEVELS } from './dvlaBanks';
+import { Select } from './ui/select';
 
 // Job levels used by the DVLA assessment tools and question banks.
 const LEVELS = JOB_LEVELS.map((t, i) => [String(i), t]);
@@ -138,7 +139,7 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
                 <td style={{ padding: '8px 16px', borderBottom: '1px solid rgba(15,35,65,.07)', position: 'sticky', left: '0', background: '#fff' }}><div style={{ fontWeight: '500' }}>{c.name}</div><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{c.category}{c.dept ? ' · ' + c.dept : ''}</div></td>
                 {columns.map(({ p }) => { const v = targetOf(p, c), own = p.comps && p.comps[c.id] != null; return (
                   <td key={p.id} style={{ padding: '6px 8px', borderBottom: '1px solid rgba(15,35,65,.07)', textAlign: 'center' }}>
-                    <select value={String(v)} onChange={e => setCell(p, c, e.target.value)} title={own ? 'Set for this competency' : 'From the ' + c.category + ' category target'} style={{ width: '64px', height: '32px', border: '1px solid rgba(15,35,65,.14)', borderRadius: '10px', textAlign: 'center', font: "600 13px 'JetBrains Mono',monospace", background: CELL_BG[v], color: own ? '#111827' : '#9ca3af' }}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}</select>
+                    <Select value={String(v)} onChange={e => setCell(p, c, e.target.value)} title={own ? 'Set for this competency' : 'From the ' + c.category + ' category target'} style={{ width: '64px', height: '32px', border: '1px solid rgba(15,35,65,.14)', borderRadius: '10px', textAlign: 'center', font: "600 13px 'JetBrains Mono',monospace", background: CELL_BG[v], color: own ? '#111827' : '#9ca3af' }}>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}</Select>
                   </td>); })}
               </tr>))}</tbody>
           </table>

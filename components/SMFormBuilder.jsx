@@ -2,6 +2,7 @@
 import React from 'react';
 import __css from './SMFormBuilder.module.css';
 import { PageHeader, Btn } from './smUI';
+import { Select } from './ui/select';
 
 
 const KEY = 'skm-forms';
@@ -345,15 +346,17 @@ class SMFormBuilder extends React.Component {
     };
   }
   render() {
+    // Forms load from localStorage after mount; render once they are there so every input starts controlled.
+    if (!this.state.forms) return null;
     const __v = this.renderVals() || {};
     return (
       <>
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
         <PageHeader title={"Form Builder"} description={"Build assessment forms by dragging question types onto the canvas. Each question shows exactly what staff will see."}
           actions={<>
-            <select value={__v.selValue} onChange={__v.onPickForm} aria-label={"Form"} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
+            <Select value={__v.selValue} onChange={__v.onPickForm} aria-label={"Form"} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
               {(__v.formOptions || []).map((o, $index) => (<option key={$index} value={o?.value}>{o?.label}</option>))}
-            </select>
+            </Select>
             <Btn kind={"primary"} icon={"icon-file-plus"} onClick={__v.newForm}>New form</Btn>
           </>} />
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
@@ -394,7 +397,7 @@ class SMFormBuilder extends React.Component {
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "14px" }}>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280", marginBottom: "4px" }}>QUESTION BANK</div>
                 <div style={{ fontSize: "11.5px", color: "#6b7280", marginBottom: "8px" }}>{__v.bankTotal} items: library competencies (as Likert) and the DVLA question banks</div>
-                <input value={__v.bankQ} onChange={__v.onBankQ} placeholder="Search questions or competencies" aria-label="Search the question bank" style={{ width: "100%", height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "9px", padding: "0 10px", font: "400 12.5px Inter,sans-serif", marginBottom: "8px", background: "#fff", boxSizing: "border-box" }} />
+                <input value={__v.bankQ || ""} onChange={__v.onBankQ} placeholder="Search questions or competencies" aria-label="Search the question bank" style={{ width: "100%", height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "9px", padding: "0 10px", font: "400 12.5px Inter,sans-serif", marginBottom: "8px", background: "#fff", boxSizing: "border-box" }} />
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "280px", overflowY: "auto" }}>
                   {(__v.bank || []).map((b, $index) => (<React.Fragment key={$index}>
                     <button className={__css.h2} onClick={b?.add} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 8px", border: "0", borderRadius: "7px", background: "transparent", cursor: "pointer", textAlign: "left" }}>
@@ -514,12 +517,12 @@ class SMFormBuilder extends React.Component {
                         </span>Required</button>
                       <label style={{ flex: "1 1 90px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>WEIGHT<input type={"number"} min={"0"} max={"10"} step={"0.5"} value={__v.insp?.weight} onChange={__v.insp?.onWeight} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
                     </div>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>LINKED COMPETENCY<select value={__v.insp?.comp} onChange={__v.insp?.onComp} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>LINKED COMPETENCY<Select value={__v.insp?.comp} onChange={__v.insp?.onComp} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                         <option value={""}>None</option>
                         {(__v.compOptions || []).map((o, $index) => (<React.Fragment key={$index}>
                           <option value={o}>{o}</option>
                         </React.Fragment>))}
-                      </select></label>
+                      </Select></label>
                   </>) : null}
                   {(__v.insp?.isLikert) ? (() => { const L = __v.insp.likert; const lab = { display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }; const inp = { height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "8px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }; return (<>
                     <div style={lab}>POINTS
@@ -527,9 +530,9 @@ class SMFormBuilder extends React.Component {
                         {L.pointOptions.map(n => <button key={n} type={"button"} onClick={() => L.setPoints(n)} style={{ flex: "1", height: "28px", border: "0", borderRadius: "7px", cursor: "pointer", font: "600 12.5px Inter,sans-serif", background: L.points === n ? "#fff" : "transparent", color: L.points === n ? "#111827" : "#4b5563", boxShadow: L.points === n ? "0 1px 2px rgba(0,0,0,.08)" : "none" }}>{n}</button>)}
                       </div>
                     </div>
-                    <label style={lab}>PRESET<select value={L.preset} onChange={e => L.setPreset(e.target.value)} style={{ ...inp, height: "34px", background: "#fff" }}>
+                    <label style={lab}>PRESET<Select value={L.preset} onChange={e => L.setPreset(e.target.value)} style={{ ...inp, height: "34px", background: "#fff" }}>
                         {L.presetOptions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                      </select>{L.preset === 'proficiency' ? <span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: "#6b7280" }}>Labels and anchors come from Rating Scales. Proficiency is a 5-point scale; other point counts switch to custom labels.</span> : null}</label>
+                      </Select>{L.preset === 'proficiency' ? <span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: "#6b7280" }}>Labels and anchors come from Rating Scales. Proficiency is a 5-point scale; other point counts switch to custom labels.</span> : null}</label>
                     <button type={"button"} onClick={L.toggleNumbers} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#374151" }}><span style={{ width: "34px", height: "20px", borderRadius: "999px", padding: "2px", display: "flex", justifyContent: L.showNumbers ? "flex-end" : "flex-start", background: L.showNumbers ? "#0d3b2a" : "#d1d5db" }}><span style={{ width: "16px", height: "16px", borderRadius: "50%", background: "#fff" }}></span></span>Show numbers</button>
                     <div style={lab}>LABELS &amp; ANCHOR DESCRIPTIONS
                       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -576,10 +579,10 @@ class SMFormBuilder extends React.Component {
                   {(__v.insp?.isText) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MIN CHARACTERS<input type={"number"} min={"0"} value={__v.insp?.minChars} onChange={__v.insp?.onMinChars} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>SCORING<select value={__v.insp?.scoring} onChange={__v.insp?.onScoring} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>SCORING<Select value={__v.insp?.scoring} onChange={__v.insp?.onScoring} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"manual"}>Manual review</option>
                           <option value={"none"}>Not scored</option>
-                        </select></label>
+                        </Select></label>
                     </div>
                   </>) : null}
                   {(__v.insp?.isMatrix) ? (<>
@@ -589,12 +592,12 @@ class SMFormBuilder extends React.Component {
                   </>) : null}
                   {(__v.insp?.isFile) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ALLOWED FILES<select value={__v.insp?.accept} onChange={__v.insp?.onAccept} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ALLOWED FILES<Select value={__v.insp?.accept} onChange={__v.insp?.onAccept} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"image/*"}>Images</option>
                           <option value={".pdf"}>PDF</option>
                           <option value={"image/*,.pdf"}>Images &amp; PDF</option>
                           <option value={""}>Any file</option>
-                        </select></label>
+                        </Select></label>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MAX SIZE (MB)<input type={"number"} min={"1"} max={"50"} value={__v.insp?.maxMB} onChange={__v.insp?.onMaxMB} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
                     </div>
                   </>) : null}
@@ -610,27 +613,27 @@ class SMFormBuilder extends React.Component {
                         <div style={{ fontSize: "11.5px", color: "#9ca3af" }}>Add a Likert, choice or numeric question above this one to use conditions.</div>
                       </>) : null}
                       {(__v.insp?.condOn) ? (<>
-                        <select value={__v.insp?.condEffect} onChange={__v.insp?.onCondEffect} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                        <Select value={__v.insp?.condEffect} onChange={__v.insp?.onCondEffect} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"show"}>Only show this question if…</option>
                           <option value={"score"}>Only count this score if…</option>
-                        </select>
-                        <select value={__v.insp?.condQ} onChange={__v.insp?.onCondQ} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                        </Select>
+                        <Select value={__v.insp?.condQ} onChange={__v.insp?.onCondQ} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           {(__v.insp?.sources || []).map((o, $index) => (<React.Fragment key={$index}>
                             <option value={o?.id}>{o?.label}</option>
                           </React.Fragment>))}
-                        </select>
+                        </Select>
                         <div style={{ display: "flex", gap: "6px" }}>
-                          <select value={__v.insp?.condOp} onChange={__v.insp?.onCondOp} style={{ width: "110px", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                          <Select value={__v.insp?.condOp} onChange={__v.insp?.onCondOp} style={{ width: "110px", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                             {(__v.insp?.ops || []).map((o, $index) => (<React.Fragment key={$index}>
                               <option value={o}>{o}</option>
                             </React.Fragment>))}
-                          </select>
+                          </Select>
                           {(__v.insp?.condValSelect) ? (<>
-                            <select value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                            <Select value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                               {(__v.insp?.condVals || []).map((o, $index) => (<React.Fragment key={$index}>
                                 <option value={o?.value}>{o?.label}</option>
                               </React.Fragment>))}
-                            </select>
+                            </Select>
                           </>) : null}
                           {(__v.insp?.condValInput) ? (<>
                             <input type={"number"} value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif" }} />
