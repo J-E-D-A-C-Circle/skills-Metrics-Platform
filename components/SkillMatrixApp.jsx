@@ -8,19 +8,41 @@ import SMProfile from './SMProfile';
 import SMAssessments from './SMAssessments';
 import SMTeam from './SMTeam';
 import SMAnalytics from './SMAnalytics';
+import SMTraining from './SMTraining';
 import SMFramework from './SMFramework';
+import SMCycles from './SMCycles';
 import SMFormBuilder from './SMFormBuilder';
 import SMSystem from './SMSystem';
+import SMStaffReport from './SMStaffReport';
+import { buildModel, ALL } from './smModel';
+import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from './dvlaBanks';
 
+// Feature flags. A feature that is off is removed from the sidebar, routes, Profile tabs,
+// Home cards, notifications and links. Its code stays in place so it can be switched back on.
+const FEATURES = { auditLogs: false, developmentPlan: false, feedback360: false, evidence: false, planApprovals: false };
+// Plan Approvals depends on the Development Plan, so it is only on when both are on.
+const FT = { ...FEATURES, planApprovals: FEATURES.planApprovals && FEATURES.developmentPlan };
+
+// Browser state saved against an older version of the sample data (departments, competencies, forms)
+// no longer matches, so it is cleared once. Change DATA_VERSION whenever buildData() changes shape.
+const DATA_VERSION = 'dvla-docs-1';
+if (typeof window !== 'undefined') {
+  try {
+    if (localStorage.getItem('skm-data-version') !== DATA_VERSION) {
+      ['skm-scope', 'skm-target-profiles', 'skm-evals', 'skm-cycles', 'skm-forms', 'skm-qbank', 'skm-session', 'skm-users', 'skm-notes'].forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('skm-data-version', DATA_VERSION);
+    }
+  } catch (e) {}
+}
 
 function buildData() {
   const GAP = [
-    { n: 0, label: 'No Gap', bg: '#d6336c', fg: '#fff', desc: "The employee's current skill level fully meets or exceeds the required level." },
-    { n: 1, label: 'Minimal', bg: '#1c8fd1', fg: '#fff', desc: 'Very close to the required level. Only minor improvements or refinements are needed.' },
+    { n: 0, label: 'No Gap', bg: '#d6336c', fg: '#fff', desc: "The employee's current skill level fully meets or exceeds the required skill level. There is no discrepancy between the required and current skills." },
+    { n: 1, label: 'Minimal', bg: '#1c8fd1', fg: '#fff', desc: "The employee's current skill level is very close to the required skill level. Only minor improvements or refinements are needed to meet the requirement." },
     { n: 2, label: 'Moderate', bg: '#2f9e44', fg: '#fff', desc: 'Close to the required level. Some improvement and refinement is needed.' },
-    { n: 3, label: 'Noticeable', bg: '#f2c200', fg: '#3b2f00', desc: 'Noticeably below the required level. Significant training and practice are needed.' },
-    { n: 4, label: 'Significant', bg: '#f08c00', fg: '#fff', desc: 'Well below the required level. Extensive training and development are required.' },
-    { n: 5, label: 'Critical', bg: '#e03131', fg: '#fff', desc: 'Far below the required level. Immediate, intensive training and ongoing support are necessary.' },
+    { n: 3, label: 'Noticeable', bg: '#f2c200', fg: '#3b2f00', desc: "The employee's current skill level is noticeably below the required skill level. Significant training and practice are needed to bridge the gap." },
+    { n: 4, label: 'Significant', bg: '#f08c00', fg: '#fff', desc: "The employee's current skill level is well below the required skill level. Extensive training and development are required to meet the requirement." },
+    { n: 5, label: 'Critical', bg: '#e03131', fg: '#fff', desc: "The employee's current skill level is far below the required skill level. Immediate and intensive training, along with ongoing support and development, are necessary to address the gap." },
   ];
   const IMP = [null,
     { n: 1, label: 'Not Important', short: 'Not Important', bg: '#1c8fd1', fg: '#fff', desc: "Peripheral to the job role; a 'nice-to-have' but not essential." },
@@ -60,41 +82,208 @@ function buildData() {
     { id: 't5', name: 'Yaw Darko', role: 'Helpdesk Lead', gaps: [3, 2, 4, 0], self: 'Submitted', eval: 'Pending' },
     { id: 't6', name: 'Abena Frimpong', role: 'Security Analyst', gaps: [2, 1, 0, 1], self: 'In progress', eval: 'Locked' },
   ];
-  const categories = ['Technical', 'Digital Literacy', 'Leadership', 'Customer Service', 'Compliance'];
-  const depts = [
-    { name: 'IT Department', staff: 24, assessed: 22, trend: [2.6, 2.8, 2.9, 3.1], gaps: [1, 0, 2, 1, 1] },
-    { name: 'Human Resources', staff: 18, assessed: 17, trend: [2.9, 3.0, 3.1, 3.2], gaps: [2, 1, 1, 0, 0] },
-    { name: 'Finance', staff: 31, assessed: 27, trend: [3.0, 3.0, 3.2, 3.3], gaps: [1, 2, 2, 1, 0] },
-    { name: 'Licensing Operations', staff: 142, assessed: 121, trend: [2.4, 2.5, 2.7, 2.8], gaps: [2, 3, 2, 1, 2] },
-    { name: 'Vehicle Registration', staff: 118, assessed: 104, trend: [2.5, 2.6, 2.6, 2.9], gaps: [2, 3, 3, 2, 1] },
-    { name: 'Internal Audit', staff: 12, assessed: 12, trend: [3.2, 3.3, 3.4, 3.4], gaps: [0, 1, 1, 1, 0] },
-    { name: 'Customer Service', staff: 64, assessed: 58, trend: [2.7, 2.8, 3.0, 3.0], gaps: [3, 2, 2, 0, 1] },
-  ];
+  const categories = ['Technical', 'General'];
   const now = new Date(), add = d => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
   const dl = (d, o) => d.toLocaleDateString('en-GB', o || { weekday: 'short', day: 'numeric', month: 'short' });
+  const pad = n => String(n).padStart(2, '0'), iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   const cycle = {
     name: 'Q4 2026 Skills Assessment', short: 'Q4 2026', day: add(0), dayLabel: dl(add(0)), dayLong: dl(add(0), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
-    window: '09:00 – 17:00', durationMin: 45, tabLimit: 3, questions: 18,
+    window: '09:00 – 17:00', durationMin: 45, tabLimit: 3,
     mgrClose: add(2), mgrCloseLabel: dl(add(2)), results: add(7), resultsLabel: dl(add(7)), plans: add(14), plansLabel: dl(add(14)),
   };
-  const user = { name: 'ADJEI DENZIL ASIAM', first: 'DENZIL', last: 'ADJEI', other: 'ASIAM', email: 'denzilasiam.adjei@dvla.gov.gh', mobile: '0256488784', id: '123456789', dept: 'IT DEPARTMENT', designation: 'IT OFFICER', location: 'HEAD OFFICE', dob: '13 April 1998', gender: 'Male', manager: 'HOD: Joseph Ahor Abandoh-Sam', target: 'IT Officer · Grade 10 · Technical Track' };
-  return { GAP, IMP, LEVEL, PROF, SKILLS, comps, majors, team, categories, depts, cycle, user, fmt };
+  const user = { name: 'ADJEI DENZIL ASIAM', first: 'DENZIL', last: 'ADJEI', other: 'ASIAM', email: 'denzilasiam.adjei@dvla.gov.gh', mobile: '0256488784', id: '123456789', dept: 'IT DEPARTMENT', deptName: 'IT Department', designation: 'IT OFFICER', location: 'HEAD OFFICE', dob: '13 April 1998', gender: 'Male', manager: 'HOD: Joseph Ahor Abandoh-Sam', target: JOB_LEVELS[1] + ' · Technical track' };
+
+  // ---- Organisation: departments, competency framework, training ----
+  // Taken from the DVLA source documents: the RBDI Competency Capacity Assessment Tools and the HR Skill
+  // Matrix Question Banks (one per job level, see dvlaBanks.js) and the Skills Matrix Data Analysis sample
+  // (Corporate Affairs technical and general skills). IT keeps the prototype's own technical skills.
+  const RBDI = 'Research, Business Development & Innovation';
+  const depts = [
+    { name: 'IT Department', code: 'IT', hod: 'Joseph Ahor Abandoh-Sam', size: 14, bias: 0, notStarted: 0.12, titles: [['Assistant IT Officer'], ['IT Officer', 'Senior IT Officer'], ['Assistant IT Manager', 'IT Manager'], ['Deputy Director, IT']] },
+    { name: 'Human Resources', code: 'HR', hod: 'Comfort Ansah', size: 12, bias: 0.1, notStarted: 0.08, bank: 'hr', titles: [['Assistant HR Officer'], ['HR Officer', 'Senior HR Officer'], ['Assistant HR Manager', 'HR Manager'], ['Deputy Director, HR']] },
+    { name: RBDI, code: 'RBDI', hod: 'Nana Appiah', size: 12, bias: -0.15, notStarted: 0.1, bank: 'rbdi', titles: [['Assistant Research Officer'], ['Research Officer', 'Senior Research Officer'], ['Assistant Manager, RBDI', 'Manager, RBDI'], ['Deputy Director, RBDI']] },
+    { name: 'Corporate Affairs', code: 'CA', hod: 'Kojo Quaye', size: 5, bias: 0, notStarted: 0, titles: [['Public Relations'], ['Public Relations'], ['Public Relations'], ['Public Relations']] },
+  ];
+  // General skills apply to every department (Skills Matrix Data Analysis sample).
+  const GENERAL = [['lead', 'Leadership & Management', 'Leadership', 5], ['comm', 'Communication', 'Communication', 5], ['service', 'Customer Service', 'Customer Service', 5],
+    ['team', 'Collaboration & Teamwork', 'Teamwork', 5], ['digital', 'Digital Skills', 'Digital Skills', 4]];
+  const CA_TECH = [['media', 'Media Relation', 'Media Relation', 5], ['brand', 'Branding & Position', 'Branding', 5], ['graphic', 'Graphic Design', 'Graphic Design', 4], ['social', 'Social Media', 'Social Media', 5], ['video', 'Video Editing', 'Video Editing', 4]];
+  const framework = [
+    ...GENERAL.map(([id, name, short, importance]) => ({ id, name, short, category: 'General', group: 'General Skills', importance, dept: null })),
+    ...comps.map(c => ({ id: 'it' + c.id, name: c.name, short: c.short, category: 'Technical', group: c.major, importance: c.importance, dept: 'IT Department' })),
+    ...HR_FRAMEWORK.map(c => ({ id: c.id, code: c.code, name: c.name, short: c.short, category: 'Technical', group: c.group, importance: 4, dept: 'Human Resources' })),
+    ...RBDI_FRAMEWORK.map(c => ({ id: c.id, name: c.name, short: c.short, category: 'Technical', group: 'RBDI Technical Competencies', areas: c.areas, importance: 4, dept: RBDI })),
+    ...CA_TECH.map(([id, name, short, importance]) => ({ id, name, short, category: 'Technical', group: 'Corporate Affairs Technical Skills', importance, dept: 'Corporate Affairs' })),
+  ];
+  const fwById = Object.fromEntries(framework.map(c => [c.id, c]));
+  // Interventions follow the Gaps Description: noticeable gaps and above need training and practice,
+  // smaller gaps need minor refinement on the job. HR (L&D) assigns the actual programme.
+  const training = Object.fromEntries(framework.map(c => [c.id, {
+    primary: { name: 'Training & practice: ' + c.name, provider: 'HR · Learning & Development', days: 0, mode: 'To be scheduled' },
+    refresher: { name: 'Coached practice: ' + c.name, provider: 'Line manager / workplace mentor', days: 0, mode: 'On the job' } }]));
+
+  // ---- Staff, with item-level answers for the current cycle and results for earlier cycles ----
+  const rng = seed => () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const cl = v => Math.max(1, Math.min(5, v));
+  const FIRST = ['Kwame', 'Akosua', 'Kwabena', 'Abena', 'Kwaku', 'Akua', 'Yaw', 'Yaa', 'Kojo', 'Afua', 'Kwesi', 'Adwoa', 'Fiifi', 'Esi', 'Ekow', 'Araba', 'Nii', 'Naa', 'Selorm', 'Dzifa', 'Elikem', 'Enyonam', 'Mawuli', 'Sena', 'Kobina', 'Mansa', 'Edem', 'Dede', 'Prosper', 'Gifty', 'Richmond', 'Comfort', 'Emmanuel', 'Mercy', 'Delali', 'Patience'];
+  const LAST = ['Mensah', 'Antwi', 'Amoah', 'Bonsu', 'Acheampong', 'Osei', 'Tetteh', 'Nkansah', 'Annan', 'Kuffour', 'Amponsah', 'Gyamfi', 'Asamoah', 'Danquah', 'Ampofo', 'Yeboah', 'Opoku', 'Ocran', 'Lartey', 'Agbeko', 'Dogbe', 'Kpodo', 'Fosu', 'Baah', 'Hammond', 'Quartey', 'Bediako', 'Appiah', 'Agyeman', 'Ofori', 'Sarpong', 'Addo', 'Quaye', 'Darko'];
+  const FIXED = { 'IT Department': ['Adjei Denzil Asiam', 'Ama Owusu', 'Kofi Boateng', 'Efua Asante', 'Yaw Darko', 'Abena Frimpong'] };
+  const used = new Set(Object.values(FIXED).flat()); let k = 0;
+  const nextName = () => { let nm; do { nm = FIRST[(k * 7 + 3) % FIRST.length] + ' ' + LAST[(k * 5 + 11) % LAST.length]; k++; } while (used.has(nm)); used.add(nm); return nm; };
+  const LOC = ['Head Office, Accra', 'Head Office, Accra', 'Accra (37) Office', 'Kumasi Office', 'Takoradi Office', 'Tamale Office', 'Tema Office', 'Ho Office'];
+  // Corporate Affairs: the five Public Relations records from the Skills Matrix Data Analysis sample
+  // (current ratings: Media Relation, Branding & Position, Graphic Design, Social Media, Video Editing;
+  // then Leadership & Management, Communication, Customer Service, Collaboration & Teamwork, Digital Skills).
+  const CA_REC = [{ level: 2, cur: [5, 3, 2, 3, 2, 5, 5, 5, 5, 4] }, { level: 1, cur: [3, 3, 1, 3, 1, 3, 4, 4, 3, 4] }, { level: 1, cur: [3, 3, 1, 3, 1, 3, 4, 4, 3, 4] },
+    { level: 2, cur: [3, 2, 1, 3, 2, 3, 3, 3, 4, 4] }, { level: 1, cur: [3, 3, 1, 3, 1, 3, 4, 4, 3, 4] }];
+  // Share of questions answered correctly that lands in each level band (see TIERS in smModel.js).
+  const AIM = [0, 25, 50, 70, 85, 95];
+  const REASONS = ['Observed handling this independently during the quarter', 'Completed the related certification after the assessment', 'Self-rating was overly modest; supervisor evidence supports a higher level', 'Needed close supervision on recent tasks; adjusted down'];
+  const ANSWERS = [
+    'Last month I took over a backlog that had grown to three weeks. I listed every item by risk, agreed priorities with my supervisor and cleared it in nine working days. Next time I would flag the backlog earlier.',
+    'I followed the documented procedure step by step and checked my work with a senior colleague. It went well, but I relied on them for the unusual cases, so I want more practice on those.',
+    'I led a small change for our unit, wrote a short plan, tested it on one case first and then rolled it out. Two customers were affected by a delay, which I would avoid by communicating the timing earlier.',
+    'I have done this a few times under supervision. I understand the main steps but I am not yet confident with the exceptions and would like training.',
+    'I trained two new colleagues on this area and wrote a checklist that the unit now uses. I would add more examples to the checklist for edge cases.'];
+  const TEXT_PROMPT = 'Describe a recent piece of work that shows your Leadership & Management skills. What did you do, and what would you do differently?';
+  const today = iso(now), staff = [];
+  let n = 0;
+  depts.forEach((dp, di) => {
+    const r = rng(1009 + di * 97);
+    const tech = framework.filter(c => c.dept === dp.name).map(c => c.id);
+    const ids = [...GENERAL.map(c => c[0]), ...tech];
+    for (let i = 0; i < dp.size; i++) {
+      n++;
+      const name = (FIXED[dp.name] || [])[i] || nextName();
+      const isMe = name === 'Adjei Denzil Asiam', ca = dp.code === 'CA' ? CA_REC[i] : null;
+      const level = isMe ? 1 : ca ? ca.level : i === dp.size - 1 ? 3 : (x => x < 0.3 ? 0 : x < 0.7 ? 1 : 2)(r());
+      const ability = dp.bias + level * 0.35 + (r() - 0.5) * 0.9;
+      const L = {};
+      ids.forEach(id => { L[id] = cl(Math.round(3 + ability + (r() - 0.58) * 3.4 - (fwById[id].importance >= 5 ? 0.3 : 0))); });
+      if (isMe) comps.forEach(c => { L['it' + c.id] = c.actual; });
+      if (ca) [...tech, ...GENERAL.map(c => c[0])].forEach((id, j) => { L[id] = ca.cur[j]; });
+      const hist = { 'Q1 2026': {}, 'Q2 2026': {}, 'Q3 2026': {} };
+      ids.forEach(id => {
+        const q3 = isMe || ca ? L[id] : cl(L[id] - (r() < 0.3 ? 1 : 0)), q2 = cl(q3 - (r() < 0.3 ? 1 : 0)), q1 = cl(q2 - (r() < 0.25 ? 1 : 0));
+        hist['Q3 2026'][id] = q3; hist['Q2 2026'][id] = q2; hist['Q1 2026'][id] = q1;
+      });
+      const x = r();
+      const raw = isMe ? 'not_started' : ca ? 'submitted' : x < dp.notStarted ? 'not_started' : x < dp.notStarted + 0.08 ? 'in_progress' : 'submitted';
+      // Technical competencies with a question bank are answered with that level's real questions;
+      // the rest are rated on the proficiency scale (a rating of v scores v × 20%).
+      const bank = dp.bank ? BANKS.find(b => b.id === dp.bank + '-' + level) : null;
+      const items = ids.flatMap(id => {
+        const qs = bank ? bank.items.map((q, qi) => [q, qi]).filter(([q]) => q[0] === id) : [];
+        if (!qs.length) { const v = !ca && r() < 0.2 ? cl(L[id] + (r() < 0.5 ? -1 : 1)) : L[id]; return [{ comp: id, type: 'likert', weight: 2, value: v, points: 5 }]; }
+        const right = Math.max(0, Math.min(qs.length, Math.round(qs.length * AIM[L[id]] / 100 + (r() - 0.5) * 1.2)));
+        const order = qs.map((_, j) => [r(), j]).sort((a, b) => a[0] - b[0]).map(o => o[1]);
+        return qs.map(([q, qi], j) => { const ok = order.indexOf(j) < right; const wrong = [0, 1, 2, 3].filter(o => o !== q[4]);
+          return { comp: id, type: 'single', weight: 1, value: ok ? 1 : 0, bank: bank.id, q: qi, pick: ok ? q[4] : wrong[Math.floor(r() * 3)] }; });
+      });
+      items.push({ comp: 'lead', type: 'text', weight: 2 });
+      let seed = {};
+      if (ca) seed = { text: L.lead, confirmed: true, by: dp.hod };
+      else if (raw === 'submitted') {
+        const y = r(), txt = cl(L.lead - (r() < 0.3 ? 1 : 0));
+        if (y < 0.3) seed = {};
+        else if (y < 0.65) seed = { text: txt };
+        else {
+          seed = { text: txt, confirmed: true, by: dp.hod };
+          if (r() < 0.3) { const id = ids[Math.floor(r() * ids.length)]; const up = r() < 0.7; seed.adj = { [id]: { score: cl(L[id] + (up ? 1 : -1)), reason: REASONS[up ? Math.floor(r() * 3) : 3], by: dp.hod } }; }
+        }
+      }
+      const mins = 9 * 60 + 8 + Math.floor(r() * 420);
+      const parts = name.toLowerCase().replace(/[^a-z ]/g, '').split(' ');
+      const titles = dp.titles[level];
+      staff.push({ id: 's' + String(n).padStart(3, '0'), staffNo: String(100200300 + n * 7919).slice(0, 9), name, email: (isMe ? 'denzilasiam.adjei' : parts[0] + '.' + parts[parts.length - 1]) + '@dvla.gov.gh',
+        dept: dp.name, designation: isMe ? 'IT Officer' : titles[Math.floor(r() * titles.length)], level, levelName: JOB_LEVELS[level], track: level >= 2 ? 'Management' : 'Technical', hod: dp.hod,
+        location: isMe ? 'Head Office, Accra' : ca ? 'Head Office' : LOC[Math.floor(r() * LOC.length)], bank: bank ? bank.id : null,
+        comps: ids, hist, raw, seed, sub: { items }, submittedAt: 'Today · ' + pad(Math.floor(mins / 60)) + ':' + pad(mins % 60), submittedIso: today,
+        textItem: { comp: 'lead', prompt: TEXT_PROMPT, answer: ANSWERS[Math.floor(r() * ANSWERS.length)] } });
+    }
+  });
+
+  // ---- Target profiles: org-wide by job level, with department overrides ----
+  const P = (id, level, scope, targets, comps) => ({ id, title: JOB_LEVELS[level], track: level >= 2 ? 'Management' : 'Technical', level, scope, targets, comps: comps || {} });
+  const profiles = [
+    P('p1', 0, 'all', { Technical: 3, General: 3 }), P('p2', 1, 'all', { Technical: 4, General: 3 }), P('p3', 2, 'all', { Technical: 4, General: 4 }), P('p4', 3, 'all', { Technical: 5, General: 5 }),
+    P('p5', 1, ['IT Department'], { Technical: 4, General: 3 }, Object.fromEntries(comps.map(c => ['it' + c.id, c.target]))),
+    // Required levels from the Skills Matrix Data Analysis sample (Corporate Affairs, Public Relations).
+    P('p6', 1, ['Corporate Affairs'], { Technical: 5, General: 5 }, { lead: 3, comm: 4, service: 5, team: 4, digital: 5 }),
+    P('p7', 2, ['Corporate Affairs'], { Technical: 5, General: 5 }),
+  ];
+
+  // ---- Assessment cycles ----
+  const N = { invite: true, reminder: true, results: true };
+  const cycles = [
+    { id: 'cy1', name: 'Q1 2026 Skills Assessment', form: 'General Skills Self-Assessment', depts: 'all', start: '2026-03-12', end: '2026-03-12', open: '09:00', close: '17:00', duration: 45, attempts: 1, notify: N, status: 'Closed', description: 'First organisation-wide baseline of the year.' },
+    { id: 'cy2', name: 'Q2 2026 Skills Assessment', form: 'General Skills Self-Assessment', depts: 'all', start: '2026-06-02', end: '2026-06-02', open: '09:00', close: '17:00', duration: 45, attempts: 1, notify: N, status: 'Closed', description: 'Mid-year assessment across all departments.' },
+    { id: 'cy3', name: 'Q3 2026 Skills Assessment', form: 'General Skills Self-Assessment', depts: 'all', start: '2026-08-28', end: '2026-08-28', open: '09:00', close: '17:00', duration: 45, attempts: 1, notify: N, status: 'Closed', description: 'Third-quarter assessment; results feed the Q4 training plan.' },
+    { id: 'cy4', name: cycle.name, form: 'General Skills Self-Assessment', depts: 'all', start: iso(add(0)), end: iso(add(0)), open: '09:00', close: '17:00', duration: cycle.durationMin, attempts: 1, notify: N, status: 'Open', description: 'Timed one-day assessment. HR and RBDI staff also answer the question bank for their job level. Managers confirm results by ' + cycle.mgrCloseLabel + '.' },
+    { id: 'cy5', name: 'RBDI Competency Capacity Assessment · Q1 2027', form: 'RBDI Competency Assessment · ' + JOB_LEVELS[1], depts: [RBDI], start: iso(add(30)), end: iso(add(30)), open: '09:00', close: '16:00', duration: 90, attempts: 1, notify: N, status: 'Scheduled', description: '82 scenario questions across the 8 RBDI competencies.' },
+    { id: 'cy6', name: 'HR Skill Matrix Assessment · Q1 2027', form: 'HR Skill Matrix Question Bank · ' + JOB_LEVELS[2], depts: ['Human Resources'], start: iso(add(45)), end: iso(add(45)), open: '09:00', close: '15:00', duration: 75, attempts: 1, notify: { invite: true, reminder: false, results: true }, status: 'Draft', description: 'Draft: Talent Acquisition & Selection and Learning & Development Management.' },
+  ];
+
+  return { GAP, IMP, LEVEL, PROF, SKILLS, comps, majors, team, categories, depts, cycle, user, fmt, framework, training, staff, profiles, cycles, iso, JOB_LEVELS, BANKS };
 }
 const DATA = buildData();
+
+// Sidebar for each role. `feature` items only appear when that flag is on.
 const NAV = [
-  { label: '', items: [['Home', 'icon-house', 'home'], ['My Profile', 'icon-circle-user', 'profile']] },
-  { label: 'Assessments', items: [['My Assessments', 'icon-clipboard-list', 'assessments'], ['Take Assessment', 'icon-timer', 'take'], ['Evidence & Certifications', 'icon-award', 'evidence'], ['Development Plan', 'icon-target', 'plan']] },
-  { label: 'My Team', roles: ['manager', 'admin'], items: [['Team Evaluations', 'icon-users', 'team-evals'], ['360° Feedback', 'icon-refresh-cw', 'feedback'], ['Plan Approvals', 'icon-badge-check', 'approvals']] },
-  { label: 'Analytics & Reports', roles: ['manager', 'admin'], items: [['Executive Dashboard', 'icon-chart-column', 'dashboard'], ['Skill Heatmap', 'icon-grid-3x3', 'heatmap'], ['Report Builder', 'icon-file-spreadsheet', 'reports'], ['Scheduled Reports', 'icon-calendar-clock', 'schedules']] },
-  { label: 'Skill Framework', roles: ['creator', 'admin'], items: [['Form Builder', 'icon-file-pen-line', 'forms'], ['Competency Library', 'icon-network', 'library'], ['Target Profiles', 'icon-crosshair', 'targets'], ['Rating Scales', 'icon-sliders-horizontal', 'scales'], ['Assessment Scheduling', 'icon-calendar-cog', 'builder']] },
-  { label: 'Administration', roles: ['admin'], items: [['User Management', 'icon-user-cog', 'users'], ['Audit Logs', 'icon-scroll-text', 'audit'], ['System Settings', 'icon-settings', 'settings']] },
-  { label: 'Support', items: [['Help & Guides', 'icon-life-buoy', 'help']] },
+  { label: 'Overview', items: [{ label: 'Home', icon: 'icon-house', key: 'home' }] },
+  { label: 'Analytics', items: [
+    { label: 'Executive Dashboard', icon: 'icon-chart-column', key: 'dashboard', roles: ['admin', 'manager'] },
+    { label: 'Skill Heatmap', icon: 'icon-grid-3x3', key: 'heatmap', roles: ['admin', 'manager'] },
+    { label: 'Training Needs', icon: 'icon-graduation-cap', key: 'training', roles: ['admin', 'manager'] },
+    { label: 'Report Builder', icon: 'icon-file-spreadsheet', key: 'reports', roles: ['admin'] },
+    { label: 'Scheduled Reports', icon: 'icon-calendar-clock', key: 'schedules', roles: ['admin'] }] },
+  { label: 'Assessments', items: [
+    { label: 'Assessment Cycles', icon: 'icon-calendar-cog', key: 'cycles', roles: ['admin'] },
+    { label: 'Form Builder', icon: 'icon-file-pen-line', key: 'forms', roles: ['admin', 'creator'] },
+    { label: 'Staff Evaluations', icon: 'icon-users', key: 'staff-evals', roles: ['admin', 'manager'] },
+    { label: '360° Feedback', icon: 'icon-refresh-cw', key: 'feedback', roles: ['admin', 'manager'], feature: 'feedback360' },
+    { label: 'Plan Approvals', icon: 'icon-badge-check', key: 'approvals', roles: ['admin', 'manager'], feature: 'planApprovals' },
+    { label: 'My Assessments', icon: 'icon-clipboard-list', key: 'assessments' },
+    { label: 'Evidence & Certifications', icon: 'icon-award', key: 'evidence', feature: 'evidence' },
+    { label: 'Development Plan', icon: 'icon-target', key: 'plan', feature: 'developmentPlan' }] },
+  { label: 'Skill Framework', items: [
+    { label: 'Competency Library', icon: 'icon-network', key: 'library', roles: ['admin', 'creator'] },
+    { label: 'Target Profiles', icon: 'icon-crosshair', key: 'targets', roles: ['admin', 'creator'] },
+    { label: 'Rating Scales', icon: 'icon-sliders-horizontal', key: 'scales', roles: ['admin', 'creator'] }] },
+  { label: 'Administration', items: [
+    { label: 'User Management', icon: 'icon-user-cog', key: 'users', roles: ['admin'] },
+    { label: 'Audit Logs', icon: 'icon-scroll-text', key: 'audit', roles: ['admin'], feature: 'auditLogs' },
+    { label: 'System Settings', icon: 'icon-settings', key: 'settings', roles: ['admin'] }] },
 ];
-const GROUP = { assessments: 'assess', evidence: 'assess', 'team-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics', library: 'framework', targets: 'framework', scales: 'framework', builder: 'framework', users: 'system', audit: 'system', settings: 'system', help: 'system' };
+const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
+  training: 'training', library: 'framework', targets: 'framework', scales: 'framework', cycles: 'cycles', users: 'system', audit: 'system', settings: 'system', help: 'system', report: 'report' };
+// Old URLs keep working.
+const ALIAS = { builder: 'cycles', 'team-evals': 'staff-evals' };
+const ALWAYS = ['home', 'profile', 'take', 'signin', 'help'];
+const navItems = role => NAV.flatMap(g => g.items).filter(i => (!i.feature || FT[i.feature]) && (!i.roles || i.roles.includes(role)));
+// Returns the page and tab to show for a URL, or Home when the page is hidden or not allowed for the role.
+function normalize(page, tab, role) {
+  let p = ALIAS[page] || page || 'home', t = tab;
+  if (p === 'plan') { p = 'profile'; t = 'plan'; }
+  if (p === 'profile') { if (t === 'plan' && !FT.developmentPlan) return ['home', undefined]; if (t && !['account', 'skills', 'history', 'plan'].includes(t)) t = undefined; return ['profile', t]; }
+  if (p === 'report') return role === 'admin' || role === 'manager' ? ['report', undefined] : ['home', undefined];
+  if (ALWAYS.includes(p)) return [p, undefined];
+  return navItems(role).some(i => i.key === p) ? [p, undefined] : ['home', undefined];
+}
+const load = (k, f) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? f : v; } catch (e) { return f; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+
 class SkillMatrixApp extends React.Component {
-  state = { page: this.props.routePage ?? this.props.startPage ?? 'home', active: this.props.routePage ?? this.props.startPage ?? 'home', tab: this.props.routeTab || 'account', history: [], vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
-    navOpen: false, bellOpen: false, query: '', closed: {}, status: 'not_started',
-    notesOpen: false, notes: [], selId: null, draft: { title: '', body: '' }, dirty: false };
+  constructor(props) {
+    super(props);
+    const role = props.role || 'admin';
+    const [page, tab] = normalize(props.routePage ?? props.startPage ?? 'home', props.routeTab, role);
+    this.state = { page, active: page === 'profile' && tab === 'plan' ? 'plan' : page, tab: tab || 'account', id: props.routeId || null, history: [], vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
+      navOpen: false, bellOpen: false, query: '', closed: {}, status: 'not_started',
+      notesOpen: false, notes: [], selId: null, draft: { title: '', body: '' }, dirty: false,
+      scope: ALL, profiles: DATA.profiles, evals: {} };
+  }
+  role() { return this.state.roleOverride || this.props.role || 'admin'; }
   componentDidMount() {
     this.onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
     this.onResize();
@@ -102,58 +291,84 @@ class SkillMatrixApp extends React.Component {
     window.addEventListener('resize', this.onResize);
     try { const n = JSON.parse(localStorage.getItem('skm-notes') || '[]'); if (Array.isArray(n)) this.setState({ notes: n }); } catch (e) {}
     try { const s = JSON.parse(localStorage.getItem('skm-session') || 'null'); if (s) this.setState({ status: s.submittedAt ? 'submitted' : 'in_progress' }); } catch (e) {}
+    const sc = load('skm-scope', ALL), pr = load('skm-target-profiles', null), ev = load('skm-evals', {});
+    this.setState({ scope: sc === ALL || DATA.depts.some(d => d.name === sc) ? sc : ALL, profiles: Array.isArray(pr) && pr.length ? pr : DATA.profiles, evals: ev && typeof ev === 'object' ? ev : {} });
+    this.syncUrl();
+  }
+  // Replace the URL when it pointed at an alias, a hidden feature or a page the role cannot see.
+  syncUrl() {
+    const rp = this.props.routePage; if (!rp) return;
+    const [p, t] = normalize(rp, this.props.routeTab, this.role());
+    if (p !== rp || (t || undefined) !== (this.props.routeTab || undefined)) this.props.onNavigate && this.props.onNavigate(p, t, { replace: true });
   }
   componentDidUpdate(pp) {
     const rp = this.props.routePage;
-    if (rp && rp !== pp.routePage && rp !== this.state.page) this.setState({ page: rp, active: rp === 'profile' && this.props.routeTab === 'plan' ? 'plan' : rp, tab: this.props.routeTab || 'account' });
+    if (rp && (rp !== pp.routePage || this.props.routeTab !== pp.routeTab || this.props.routeId !== pp.routeId)) {
+      const [p, t] = normalize(rp, this.props.routeTab, this.role());
+      if (p !== this.state.page || (t || 'account') !== this.state.tab || this.props.routeId !== this.state.id) this.setState({ page: p, active: p === 'profile' && t === 'plan' ? 'plan' : p, tab: t || 'account', id: this.props.routeId || null });
+      this.syncUrl();
+    }
   }
   componentWillUnmount() { window.removeEventListener('resize', this.onResize); }
-  go = (key, tab) => {
-    let page = key, t = tab || 'account';
-    if (key === 'plan') { page = 'profile'; t = 'plan'; }
-    this.setState(s => ({ page, active: key, tab: t, navOpen: false, bellOpen: false, history: [...s.history, s.active].slice(-20) }));
-    this.props.onNavigate && this.props.onNavigate(page, t);
+  go = (key, tab, id) => {
+    const [page, t0] = normalize(key, tab, this.role());
+    const t = t0 || 'account';
+    this.setState(s => ({ page, active: page === 'profile' && t === 'plan' ? 'plan' : page, tab: t, id: id || null, navOpen: false, bellOpen: false, history: [...s.history, { page: s.page, tab: s.tab, id: s.id }].slice(-20) }));
+    this.props.onNavigate && this.props.onNavigate(page, t, { id });
     try { window.scrollTo(0, 0); } catch (e) {}
   };
+  setScope = v => { this.setState({ scope: v }); save('skm-scope', v); };
+  setProfiles = p => { this.setState({ profiles: p }); save('skm-target-profiles', p); };
+  setEval = (id, patch) => { this.setState(s => { const cur = s.evals[id] || {}; const next = { ...s.evals, [id]: { ...cur, ...patch, adj: { ...(cur.adj || {}), ...(patch.adj || {}) } } }; save('skm-evals', next); return { evals: next }; }); };
+  resetEvals = () => { this.setState({ evals: {} }); save('skm-evals', {}); };
   persist(notes) { try { localStorage.setItem('skm-notes', JSON.stringify(notes)); } catch (e) {} }
   select(id) { const n = this.state.notes.find(x => x.id === id); this.setState({ selId: id, draft: { title: n.title, body: n.body }, dirty: false }); }
   renderVals() {
     const s = this.state, set = o => this.setState(o);
-    const role = s.roleOverride || this.props.role || 'admin';
+    const role = this.role();
     const compact = s.vw < 1100, vw = s.vw, exp = compact || s.pinned || s.hover, floating = !compact && !s.pinned && s.hover;
     const q = s.query.trim().toLowerCase();
-    const statusBadge = { not_started: ['Open today', '#ffedd5', '#9a3412'], in_progress: ['In progress', '#fee2e2', '#b91c1c'], submitted: ['Submitted', '#dcfce7', '#15803d'] }[s.status];
-    const groups = NAV.filter(g => !g.roles || g.roles.includes(role)).map(g => {
-      const items = g.items.filter(i => !q || i[0].toLowerCase().includes(q)).map(([label, icon, key]) => {
-        const on = key === s.active;
-        const b = key === 'take' ? statusBadge : key === 'team-evals' ? ['3', '#ffedd5', '#9a3412'] : key === 'approvals' ? ['2', '#ffedd5', '#9a3412'] : null;
+    const model = buildModel(DATA, s.profiles, s.evals);
+    const myDept = DATA.user.deptName;
+    const scope = role === 'manager' ? myDept : s.scope;
+    const scopeStaff = model.staff.filter(x => scope === ALL || x.dept === scope);
+    const awaiting = scopeStaff.filter(x => x.status === 'Submitted' || x.status === 'Auto-scored').length;
+    const badges = { 'staff-evals': awaiting ? String(awaiting) : '' };
+    const allowed = navItems(role);
+    const groups = NAV.map(g => {
+      const items = g.items.filter(i => allowed.includes(i) && (!q || i.label.toLowerCase().includes(q))).map(({ label, icon, key }) => {
+        const on = key === s.active, b = badges[key];
         return { label, icon, onClick: () => this.go(key), exp, dot: !exp && !!b,
           w: exp ? '100%' : '46px', h: exp ? '42px' : '46px', pad: exp ? '0 10px 0 12px' : '0', justify: exp ? 'flex-start' : 'center',
           bg: on ? 'linear-gradient(180deg,#2fb36b,#15904c)' : 'transparent', hoverBg: on ? 'linear-gradient(180deg,#3cc078,#1a9a53)' : 'rgba(255,255,255,.7)',
           shadow: on ? '0 8px 18px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)' : 'none',
           color: on ? '#fff' : '#334155', iconColor: on ? '#fff' : '#64748b',
-          badge: b ? b[0] : '', badgeBg: on ? 'rgba(255,255,255,.95)' : (key === 'take' ? b && b[1] : '#ff3b30'), badgeFg: on ? '#15904c' : (key === 'take' ? b && b[2] : '#fff') };
+          badge: b || '', badgeBg: on ? 'rgba(255,255,255,.95)' : '#ff3b30', badgeFg: on ? '#15904c' : '#fff' };
       });
-      const open = q ? true : !s.closed[g.label || 'Menu'];
-      return { label: g.label, countLabel: (g.label || 'Menu') + ' · ' + items.length, showLabel: exp, showDivider: !exp && !!g.label, align: exp ? 'stretch' : 'center', items, open: exp ? open : true, chev: open ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => set({ closed: { ...s.closed, [g.label || 'Menu']: open } }) };
+      const open = q ? true : !s.closed[g.label];
+      return { label: g.label, countLabel: g.label.toUpperCase() + ' · ' + items.length, showLabel: exp, showDivider: !exp, align: exp ? 'stretch' : 'center', items, open: exp ? open : true, chev: open ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => set({ closed: { ...s.closed, [g.label]: open } }) };
     }).filter(g => g.items.length);
     const grp = GROUP[s.page];
     const sel = s.notes.find(n => n.id === s.selId);
     const noteList = s.notes.map(n => ({ title: n.title || 'Untitled note', preview: n.body ? n.body.slice(0, 60) : 'Empty note',
       bg: n.id === s.selId ? '#262838' : 'transparent', accent: n.id === s.selId ? '#f5a623' : 'transparent', select: () => this.select(n.id) }));
+    const nextCycle = DATA.cycles.find(c => c.status === 'Scheduled');
     const notifs = [
       { icon: 'icon-timer', title: s.status === 'submitted' ? 'Assessment submitted' : 'Your assessment is open today', sub: DATA.cycle.dayLabel + ' · ' + DATA.cycle.window + ' · ' + DATA.cycle.durationMin + ' min', onClick: () => this.go(s.status === 'submitted' ? 'assessments' : 'take') },
-      { icon: 'icon-user-round-check', title: 'Manager evaluation received', sub: 'Q3 2026 · Joseph Ahor Abandoh-Sam', onClick: () => this.go('assessments') },
-      { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('plan') },
-    ];
+      (role === 'admin' || role === 'manager') && awaiting ? { icon: 'icon-user-round-check', title: awaiting + ' result' + (awaiting > 1 ? 's' : '') + ' waiting for review', sub: (scope === ALL ? 'All departments' : scope) + ' · ' + DATA.cycle.short, onClick: () => this.go('staff-evals') } : null,
+      role === 'admin' && nextCycle ? { icon: 'icon-calendar-cog', title: nextCycle.name + ' is scheduled', sub: 'Opens ' + new Date(nextCycle.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), onClick: () => this.go('cycles') } : null,
+      { icon: 'icon-user-round-check', title: 'Manager evaluation received', sub: 'Q3 2026 · Joseph Ahor Abandoh-Sam', onClick: () => this.go('profile', 'history') },
+      FT.developmentPlan ? { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('plan') } : null,
+    ].filter(Boolean);
+    const common = { data: DATA, role, vw, go: this.go, features: FT, model, scope, myDept };
     return {
-      data: DATA, role, vw, go: this.go, page: s.page, tab: s.tab, onTab: t => set({ tab: t, active: t === 'plan' ? 'plan' : 'profile' }), status: s.status,
-      onStatus: st => set({ status: st }),
+      ...common, page: s.page, tab: s.tab, id: s.id, onTab: t => { set({ tab: t, active: t === 'plan' ? 'plan' : 'profile' }); this.props.onNavigate && this.props.onNavigate('profile', t, { replace: true }); }, status: s.status,
+      onStatus: st => set({ status: st }), profiles: s.profiles, setProfiles: this.setProfiles, evals: s.evals, setEval: this.setEval, resetEvals: this.resetEvals,
       pTake: s.page === 'take', pSignin: s.page === 'signin', shell: s.page !== 'take' && s.page !== 'signin', pForms: s.page === 'forms',
-      signOut: () => this.go('signin'),
-      onSignedIn: u => { const m = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff' }; this.setState({ roleOverride: m[u.role] || 'staff' }); this.go('home'); },
-      pHome: s.page === 'home', pProfile: s.page === 'profile', pAssess: grp === 'assess', pTeam: grp === 'team', pAnalytics: grp === 'analytics', pFramework: grp === 'framework', pSystem: grp === 'system',
-      compact, notCompact: !compact, wideHeader: vw >= 760,
+      onSignedIn: u => { const m = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff' }; this.setState({ roleOverride: m[u.role] || 'staff' }, () => this.go('home')); },
+      pHome: s.page === 'home', pProfile: s.page === 'profile', pAssess: grp === 'assess', pTeam: grp === 'team', pAnalytics: grp === 'analytics', pTraining: grp === 'training', pFramework: grp === 'framework', pCycles: grp === 'cycles', pSystem: grp === 'system', pReport: grp === 'report',
+      compact, notCompact: !compact, wideHeader: vw >= 760, showScope: role === 'admin',
+      scopeValue: s.scope, onScope: e => this.setScope(e.target.value), deptNames: DATA.depts.map(d => d.name),
       titleText: vw < 520 ? 'Skill Matrix' : 'Skill Matrix & Assessment Platform',
       roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', creator: 'Assessment Creator', admin: 'Administrator' }[role],
       toggleNav: () => set({ navOpen: !s.navOpen }), drawerOverlay: compact && s.navOpen,
@@ -170,9 +385,7 @@ class SkillMatrixApp extends React.Component {
       greeting: (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,'; })(),
       quick: (exp ? [['Notifications', 'icon-bell', () => set({ bellOpen: !s.bellOpen }), notifs.length], ['Help & Guides', 'icon-life-buoy', () => this.go('help')], [role === 'admin' ? 'System Settings' : 'My Profile', 'icon-settings', () => this.go(role === 'admin' ? 'settings' : 'profile')], ['Sign out', 'icon-log-out', () => this.go('signin')]]
         : [['Help & Guides', 'icon-life-buoy', () => this.go('help')], ['Sign out', 'icon-log-out', () => this.go('signin')]]).map(([label, icon, onClick, badge]) => ({ label, icon, onClick, badge: badge || '', color: icon === 'icon-log-out' ? '#e5484d' : '#475569' })),
-      ctaTitle: s.status === 'submitted' ? 'View receipt' : s.status === 'in_progress' ? 'Resume assessment' : 'Take assessment', ctaIcon: s.status === 'submitted' ? 'icon-receipt' : s.status === 'in_progress' ? 'icon-timer' : 'icon-play',
-      ctaSub: s.status === 'submitted' ? 'Submitted · results soon' : s.status === 'in_progress' ? 'Timer is running' : 'Open today · ' + DATA.cycle.window, ctaAction: () => this.go('take'), bigCta: exp && s.vh >= 720, smallCta: !exp || s.vh < 720,
-      goBack: () => { const h = [...s.history]; const prev = h.pop() || 'home'; this.go(prev); this.setState({ history: h }); },
+      goBack: () => { const h = [...s.history]; const prev = h.pop() || { page: 'home' }; this.go(prev.page, prev.tab, prev.id); this.setState({ history: h }); },
       goProfile: () => this.go('profile'),
       bellOpen: s.bellOpen, toggleBell: () => set({ bellOpen: !s.bellOpen }), notifs, notifCount: notifs.length,
       groups, query: s.query, onQuery: e => set({ query: e.target.value }),
@@ -191,10 +404,11 @@ class SkillMatrixApp extends React.Component {
   }
   render() {
     const __v = this.renderVals() || {};
+    const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept };
     return (
       <>
       {(__v.pSignin) ? (<>
-        <SMSignIn data={__v.data} vw={__v.vw} onSignedIn={__v.onSignedIn} />
+        <SMSignIn data={__v.data} vw={__v.vw} onSignedIn={__v.onSignedIn} features={__v.features} />
       </>) : null}
       {(__v.pTake) ? (<>
         <SMAssessmentSession data={__v.data} go={__v.go} onStatus={__v.onStatus} vw={__v.vw} />
@@ -223,9 +437,22 @@ class SkillMatrixApp extends React.Component {
                 </>) : null}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "clamp(8px,1.2vw,14px)", flex: "none" }}>
+                {(__v.showScope) ? (<>
+                  <label title={"Department scope for dashboards, heatmap, training needs, reports, staff evaluations and target profiles"} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", padding: "0 6px 0 12px", color: "#e3f1e8" }}>
+                    <i className={"icon-building-2"} style={{ fontSize: "15px" }}></i>
+                    <select value={__v.scopeValue} onChange={__v.onScope} aria-label={"Department scope"} style={{ maxWidth: __v.wideHeader ? "200px" : "120px", height: "30px", border: "0", outline: "0", background: "transparent", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}>
+                      <option value={ALL} style={{ color: "#111827" }}>All departments</option>
+                      {(__v.deptNames || []).map(n => <option key={n} value={n} style={{ color: "#111827" }}>{n}</option>)}
+                    </select>
+                  </label>
+                </>) : null}
                 <button onClick={__v.toggleBell} aria-label={"Notifications"} style={{ position: "relative", width: "38px", height: "38px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#e3f1e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <i className={"icon-bell"} style={{ fontSize: "18px" }}></i>
                   <span style={{ position: "absolute", top: "-4px", right: "-4px", background: "#ff3b30", color: "#fff", fontSize: "10px", fontWeight: "700", borderRadius: "999px", minWidth: "17px", height: "17px", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #0f4a33" }}>{__v.notifCount}</span>
+                </button>
+                <button onClick={__v.goProfile} title={"My Profile"} style={{ display: "flex", alignItems: "center", gap: "8px", height: "38px", padding: "0 10px 0 3px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#fff", cursor: "pointer" }}>
+                  <span style={{ width: "32px", height: "32px", borderRadius: "50%", background: "repeating-linear-gradient(135deg,#cbd2da 0 4px,#b8c0ca 4px 8px)", border: "2px solid #fff", font: "600 10px 'JetBrains Mono',monospace", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center" }}>AD</span>
+                  {(__v.wideHeader) ? (<span style={{ font: "600 13px Inter,sans-serif", whiteSpace: "nowrap" }}>Denzil A.</span>) : null}
                 </button>
               </div>
               {(__v.bellOpen) ? (<>
@@ -284,9 +511,9 @@ class SkillMatrixApp extends React.Component {
                 {(__v.groups || []).map((g, $index) => (<React.Fragment key={$index}>
                   <div style={{ marginBottom: "14px" }}>
                     {(g?.showLabel) ? (<>
-                      <button onClick={g?.toggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "0", padding: "6px 8px", cursor: "pointer", whiteSpace: "nowrap", font: "600 11.5px Inter,sans-serif", color: "#7b8594" }}>{g?.countLabel}<i className={g?.chev} style={{ fontSize: "14px", color: "#a0a8b4" }}></i></button>
+                      <button onClick={g?.toggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "0", padding: "6px 8px", cursor: "pointer", whiteSpace: "nowrap", font: "600 11px Inter,sans-serif", letterSpacing: ".4px", color: "#7b8594" }}>{g?.countLabel}<i className={g?.chev} style={{ fontSize: "14px", color: "#a0a8b4" }}></i></button>
                     </>) : null}
-                    {(g?.showDivider) ? (<>
+                    {(g?.showDivider && $index > 0) ? (<>
                       <div style={{ height: "1px", margin: "2px 14px 10px", background: "rgba(15,35,65,.08)" }}></div>
                     </>) : null}
                     {(g?.open) ? (<>
@@ -313,7 +540,7 @@ class SkillMatrixApp extends React.Component {
               <div style={{ flex: "none", padding: `0 ${__v.navPad ?? ""} 14px`, display: "flex", flexDirection: "column", gap: "10px", alignItems: __v.footAlign }}>
                 <div style={{ flexShrink: "0", display: "flex", flexDirection: __v.quickDir, gap: "4px", padding: "6px", borderRadius: "18px", background: "rgba(255,255,255,.72)", border: "1px solid rgba(255,255,255,.9)", boxShadow: "0 4px 14px rgba(15,35,65,.06)", justifyContent: "space-between", width: __v.quickW }}>
                   {(__v.quick || []).map((qk, $index) => (<React.Fragment key={$index}>
-                    <button className={__css.h3} onClick={qk?.onClick} title={qk?.label} style={{ position: "relative", width: "36px", height: "34px", borderRadius: "11px", border: "0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: qk?.color }}>
+                    <button className={__css.h3} onClick={qk?.onClick} title={qk?.label} aria-label={qk?.label} style={{ position: "relative", width: "36px", height: "34px", borderRadius: "11px", border: "0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: qk?.color }}>
                       <i className={qk?.icon} style={{ fontSize: "16px" }}></i>
                       {(qk?.badge) ? (<>
                         <span style={{ position: "absolute", top: "2px", right: "2px", minWidth: "14px", height: "14px", borderRadius: "999px", background: "#ff3b30", color: "#fff", font: "700 9px Inter,sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>{qk?.badge}</span>
@@ -321,48 +548,21 @@ class SkillMatrixApp extends React.Component {
                     </button>
                   </React.Fragment>))}
                 </div>
-                {(__v.bigCta) ? (<>
-                  <button className={__css.h4} onClick={__v.ctaAction} style={{ flexShrink: "0", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", padding: "16px 12px 14px", borderRadius: "20px", cursor: "pointer", background: "rgba(255,255,255,.8)", border: "1px solid rgba(255,255,255,.95)", boxShadow: "0 8px 24px rgba(15,35,65,.08)" }}>
-                    <span style={{ width: "46px", height: "46px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 8px 20px rgba(21,144,76,.4),inset 0 1px 0 rgba(255,255,255,.4)" }}>
-                      <i className={__v.ctaIcon} style={{ fontSize: "20px" }}></i>
-                    </span>
-                    <span style={{ font: "700 14px Inter,sans-serif", color: "#0f172a" }}>{__v.ctaTitle}</span>
-                    <span style={{ font: "500 11.5px Inter,sans-serif", color: "#6b7280", marginTop: "-4px" }}>{__v.ctaSub}</span>
-                  </button>
-                </>) : null}
-                {(__v.smallCta) ? (<>
-                  <button onClick={__v.ctaAction} title={__v.ctaTitle} style={{ width: "48px", height: "48px", borderRadius: "50%", border: "0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 8px 20px rgba(21,144,76,.4),inset 0 1px 0 rgba(255,255,255,.4)" }}>
-                    <i className={__v.ctaIcon} style={{ fontSize: "20px" }}></i>
-                  </button>
-                </>) : null}
               </div>
             </aside>
             <main style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column", minHeight: "calc(100vh - 68px)" }}>
               <div style={{ flex: "1" }}>
-                {(__v.pHome) ? (<>
-                  <SMHome data={__v.data} role={__v.role} vw={__v.vw} go={__v.go} status={__v.status} />
-                </>) : null}
-                {(__v.pProfile) ? (<>
-                  <SMProfile data={__v.data} role={__v.role} vw={__v.vw} go={__v.go} tab={__v.tab} onTab={__v.onTab} />
-                </>) : null}
-                {(__v.pAssess) ? (<>
-                  <SMAssessments data={__v.data} view={__v.page} vw={__v.vw} go={__v.go} status={__v.status} />
-                </>) : null}
-                {(__v.pTeam) ? (<>
-                  <SMTeam data={__v.data} view={__v.page} vw={__v.vw} go={__v.go} />
-                </>) : null}
-                {(__v.pAnalytics) ? (<>
-                  <SMAnalytics data={__v.data} view={__v.page} vw={__v.vw} go={__v.go} />
-                </>) : null}
-                {(__v.pFramework) ? (<>
-                  <SMFramework data={__v.data} view={__v.page} vw={__v.vw} go={__v.go} />
-                </>) : null}
-                {(__v.pForms) ? (<>
-                  <SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} />
-                </>) : null}
-                {(__v.pSystem) ? (<>
-                  <SMSystem data={__v.data} view={__v.page} vw={__v.vw} go={__v.go} role={__v.role} />
-                </>) : null}
+                {(__v.pHome) ? (<SMHome {...P} status={__v.status} />) : null}
+                {(__v.pProfile) ? (<SMProfile {...P} tab={__v.tab} onTab={__v.onTab} />) : null}
+                {(__v.pAssess) ? (<SMAssessments {...P} view={__v.page} status={__v.status} />) : null}
+                {(__v.pTeam) ? (<SMTeam {...P} view={__v.page} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
+                {(__v.pAnalytics) ? (<SMAnalytics key={__v.page} {...P} view={__v.page} />) : null}
+                {(__v.pTraining) ? (<SMTraining {...P} />) : null}
+                {(__v.pFramework) ? (<SMFramework {...P} view={__v.page} profiles={__v.profiles} setProfiles={__v.setProfiles} />) : null}
+                {(__v.pCycles) ? (<SMCycles {...P} />) : null}
+                {(__v.pForms) ? (<SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} />) : null}
+                {(__v.pSystem) ? (<SMSystem {...P} view={__v.page} />) : null}
+                {(__v.pReport) ? (<SMStaffReport key={__v.id} {...P} id={__v.id} />) : null}
               </div>
               <footer style={{ margin: "0 clamp(12px,2vw,20px)", borderTop: "1px solid rgba(15,35,65,.08)", padding: "20px 0 18px", textAlign: "center", fontSize: "13px", color: "#64748b" }}>© 2026 Skill Matrix &amp; Assessment Platform. All rights reserved.</footer>
             </main>

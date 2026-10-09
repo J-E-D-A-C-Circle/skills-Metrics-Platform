@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import __css from './SMAssessments.module.css';
+import { PageHeader } from './smUI';
 
 
 class SMAssessments extends React.Component {
@@ -13,18 +14,18 @@ class SMAssessments extends React.Component {
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), s = this.state;
     if (!d) return {};
-    const view = this.props.view || 'assessments', st = this.props.status || 'not_started', C = d.cycle;
+    const view = this.props.view || 'assessments', st = this.props.status || 'not_started', C = d.cycle, ft = this.props.features || {};
     const S = { not_started: ['OPEN TODAY', '#ffedd5', '#9a3412', 'Start Assessment', 'icon-play'], in_progress: ['IN PROGRESS', '#fee2e2', '#b91c1c', 'Resume Assessment', 'icon-timer'], submitted: ['SUBMITTED', '#dcfce7', '#15803d', 'View Receipt', 'icon-receipt'] }[st];
     const chip = (t, bg, fg) => ({ status: t, sBg: bg, sFg: fg });
     const done = st === 'submitted';
     const H = [
       ['Q3 2026', 'Manager Evaluation', 'Joseph Ahor Abandoh-Sam', '12 Sep 2026', '3.1'], ['Q3 2026', 'Self-Assessment', 'Self (timed)', '28 Aug 2026', '3.4'],
       ['Q2 2026', '360° Feedback', '5 assessors', '30 Jun 2026', '3.0'], ['Q2 2026', 'Manager Evaluation', 'Joseph Ahor Abandoh-Sam', '14 Jun 2026', '2.9'], ['Q2 2026', 'Self-Assessment', 'Self (timed)', '02 Jun 2026', '3.2']];
-    const F = ['All', 'Self-Assessment', 'Manager Evaluation', '360° Feedback'];
+    const F = ['All', 'Self-Assessment', 'Manager Evaluation', ...(ft.feedback360 ? ['360° Feedback'] : [])];
     const STS = { 'Verified': ['#dcfce7', '#15803d'], 'Pending review': ['#fef3c7', '#92400e'] };
     return {
       title: view === 'evidence' ? 'Evidence & Certifications' : 'My Assessments',
-      subtitle: view === 'evidence' ? 'Upload proof that backs up your skill ratings' : 'Your timed one-day assessments, evaluations and results',
+      subtitle: view === 'evidence' ? 'Upload proof that backs up your skill ratings' : 'Your timed one-day assessments, evaluations and results. Start the current one here.',
       isList: view === 'assessments', isEvidence: view === 'evidence',
       chipText: S[0], chipBg: S[1], chipFg: S[2], ctaText: S[3], ctaIcon: S[4], cta: () => go('take'),
       cycleName: C.name, cycleText: C.dayLong + ' · ' + C.window,
@@ -32,10 +33,10 @@ class SMAssessments extends React.Component {
       steps: [
         { icon: 'icon-timer', name: 'Self-assessment (timed)', desc: C.dayLabel + ' · ' + C.window + ' · ' + C.durationMin + ' min once started', ...(done ? chip('Submitted', '#dcfce7', '#15803d') : st === 'in_progress' ? chip('In progress', '#fee2e2', '#b91c1c') : chip('Open today', '#ffedd5', '#9a3412')), dotBg: done ? '#0d3b2a' : '#fff', dotFg: done ? '#fff' : '#0d3b2a', dotBorder: '#0d3b2a' },
         { icon: 'icon-user-round-check', name: 'Manager evaluation', desc: 'Joseph Ahor Abandoh-Sam rates each competency · closes ' + C.mgrCloseLabel, ...(done ? chip('With manager', '#e0e7ff', '#3730a3') : chip('Opens after you submit', '#f3f4f6', '#4b5563')), dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#d1d5db' },
-        { icon: 'icon-refresh-cw', name: '360° peer feedback', desc: '5 assessors invited · 3 responded', ...chip('3 of 5', '#f3f4f6', '#4b5563'), dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#d1d5db' },
-        { icon: 'icon-chart-column', name: 'Results & gap report', desc: 'Target − actual gaps are calculated automatically', ...chip(C.resultsLabel, '#f3f4f6', '#4b5563'), dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#d1d5db' }],
+        ft.feedback360 ? { icon: 'icon-refresh-cw', name: '360° peer feedback', desc: '5 assessors invited · 3 responded', ...chip('3 of 5', '#f3f4f6', '#4b5563'), dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#d1d5db' } : null,
+        { icon: 'icon-chart-column', name: 'Results & gap report', desc: 'Target − actual gaps are calculated automatically', ...chip(C.resultsLabel, '#f3f4f6', '#4b5563'), dotBg: '#fff', dotFg: '#6b7280', dotBorder: '#d1d5db' }].filter(Boolean),
       filters: F.map(f => ({ label: f, onClick: () => this.setState({ filter: f }), bg: s.filter === f ? '#fff' : 'transparent', fg: s.filter === f ? '#111827' : '#4b5563' })),
-      rows: H.filter(h => s.filter === 'All' || h[1] === s.filter).map(([cycle, type, assessor, date, score]) => ({ cycle, type, assessor, date, score, onReport: () => this.flash('Downloading ' + cycle + ' ' + type + ' (PDF)…') })),
+      rows: H.filter(h => (ft.feedback360 || h[1] !== '360° Feedback') && (s.filter === 'All' || h[1] === s.filter)).map(([cycle, type, assessor, date, score]) => ({ cycle, type, assessor, date, score, onReport: () => this.flash('Downloading ' + cycle + ' ' + type + ' (PDF)…') })),
       comp: s.comp, kind: s.kind, onComp: e => this.setState({ comp: e.target.value }), onKind: e => this.setState({ kind: e.target.value }),
       compOptions: d.comps.map(c => ({ id: String(c.id), label: c.name })),
       onFile: e => { const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -54,12 +55,7 @@ class SMAssessments extends React.Component {
     return (
       <>
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: "12px" }}>
-          <div>
-            <h1 style={{ margin: "0", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.5px" }}>{__v.title}</h1>
-            <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "6px" }}>{__v.subtitle}</div>
-          </div>
-        </div>
+        <PageHeader title={__v.title} description={__v.subtitle} actions={__v.isList ? <button onClick={__v.cta} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 16px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={__v.ctaIcon} style={{ fontSize: "14px" }}></i>{__v.ctaText}</button> : null} />
         {(__v.isList) ? (<>
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", overflow: "hidden" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "16px", padding: "22px clamp(18px,2.4vw,24px)", background: "linear-gradient(120deg,#0d3b2a,#17603f)", color: "#fff" }}>

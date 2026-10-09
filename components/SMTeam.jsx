@@ -1,8 +1,10 @@
 'use client';
 import React from 'react';
+import StaffEvaluations from './SMStaffEvals';
 
 
-class SMTeam extends React.Component {
+// 360° Feedback and Plan Approvals (hidden by FEATURES). Kept so they can be switched back on.
+class TeamLegacy extends React.Component {
   state = { evals: {}, modal: null, ratings: {}, comment: '', toast: '', done360: {}, apTab: 'Pending',
     approvals: [
       { id: 1, member: 'Adjei Denzil Asiam', action: 'Run a DR drill alongside the infrastructure team', comp: 'Backup & Disaster Recovery', gap: 3, due: 'Nov 2026', state: 'Pending' },
@@ -36,7 +38,7 @@ class SMTeam extends React.Component {
     const rated = Object.keys(s.ratings).length, ready = m && rated === total;
     const apList = s.approvals.filter(a => a.state === s.apTab);
     return {
-      title: { 'team-evals': 'Team Evaluations', feedback: '360° Feedback', approvals: 'Plan Approvals' }[view],
+      title: { 'team-evals': 'Staff Evaluations', feedback: '360° Feedback', approvals: 'Plan Approvals' }[view],
       subtitle: { 'team-evals': 'Rate each direct report after they submit their timed self-assessment', feedback: 'Give and track multi-source feedback for this cycle', approvals: 'Review development actions proposed by your team' }[view],
       isEvals: view === 'team-evals', isFeedback: view === 'feedback', isApprovals: view === 'approvals',
       kpis: [{ label: 'Direct reports', value: team.length, sub: 'IT Department' }, { label: 'Self-assessments submitted', value: team.filter(t => t.self === 'Submitted').length + ' / ' + team.length, sub: 'Timed · ' + d.cycle.dayLabel },
@@ -227,4 +229,6 @@ class SMTeam extends React.Component {
 }
 
 
-export default SMTeam;
+export default function SMTeam(props) {
+  return props.view === 'staff-evals' ? <StaffEvaluations {...props} /> : <TeamLegacy {...props} />;
+}

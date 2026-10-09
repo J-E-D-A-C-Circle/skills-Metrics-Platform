@@ -4,14 +4,9 @@ import __css from './SMAssessmentSession.module.css';
 
 
 const KEY = 'skm-session';
-const MCQ = [
-  { id: 'm1', type: 'single', section: 'Systems & Infrastructure', text: "A user can't reach any internal system, but the internet works fine. What should you check first?", options: ['DNS resolution for internal domains', 'Replace the network cable', 'Reinstall the web browser', 'Escalate to the vendor immediately'] },
-  { id: 'm2', type: 'single', section: 'Cybersecurity', text: 'You suspect a ransomware infection on several workstations. What is the first thing you do?', options: ['Isolate the affected machines from the network', 'Pay the ransom to restore access quickly', 'Delete the event logs to stop the spread', 'Restart all servers'] },
-  { id: 'm3', type: 'single', section: 'Systems & Infrastructure', text: 'Which backup approach best meets a Recovery Point Objective (RPO) of one hour?', options: ['Hourly incremental backups with a daily full backup', 'A weekly full backup only', 'A monthly archive to tape', 'RAID 1 disk mirroring only'] },
-  { id: 'm4', type: 'multi', section: 'Cybersecurity', text: 'Which of these are good controls for privileged (admin) accounts?', hint: 'Select all that apply.', options: ['Multi-factor authentication', 'Shared admin passwords for the team', 'Just-in-time access elevation', 'Regular access reviews'] },
-  { id: 'n1', type: 'numeric', section: 'IT Service Management', text: 'A service has a 99.9% monthly uptime SLA. About how many minutes of downtime are allowed in a 30-day month?', unit: 'minutes' },
-  { id: 'o1', type: 'text', section: 'IT Service Management', text: 'Describe a recent change you implemented and how you managed the risk.', min: 40 },
-];
+// The assessment for the signed-in officer: a self-rating of their department's technical skills and the
+// DVLA general skills, plus one open-text answer that a reviewer scores. Departments with a DVLA question
+// bank (HR, RBDI) sit that bank's questions instead; see the Form Builder.
 const pad = n => String(n).padStart(2, '0');
 class SMAssessmentSession extends React.Component {
   state = { sess: null, idx: 0, now: Date.now(), agreed: false, review: false, warn: false, savedAt: null };
@@ -21,8 +16,11 @@ class SMAssessmentSession extends React.Component {
   componentWillUnmount() { this.disarm(); }
   questions() {
     const d = this.props.data;
-    const lik = d.comps.map(c => ({ id: 'c' + c.id, type: 'likert', section: c.major, text: 'How would you rate your current proficiency in ' + c.name + '?', hint: 'Choose the description that best matches what you can do today.' }));
-    return [...lik, ...MCQ];
+    const hint = 'Choose the description that best matches what you can do today.';
+    const lik = d.comps.map(c => ({ id: 'c' + c.id, type: 'likert', section: c.major, text: 'How would you rate your current proficiency in ' + c.name + '?', hint }));
+    const gen = d.framework.filter(c => c.category === 'General').map(c => ({ id: 'g' + c.id, type: 'likert', section: 'General skills', text: 'How would you rate your current proficiency in ' + c.name + '?', hint }));
+    const text = { id: 'o1', type: 'text', section: 'General skills', text: 'Describe a recent piece of work that shows your Leadership & Management skills. What did you do, and what would you do differently?', min: 40 };
+    return [...lik, ...gen, text];
   }
   save(sess) { try { localStorage.setItem(KEY, JSON.stringify(sess)); } catch (e) {} this.setState({ sess, savedAt: Date.now() }); }
   arm() {

@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import { PageHeader } from './smUI';
 
 
 class SMProfile extends React.Component {
@@ -14,7 +15,8 @@ class SMProfile extends React.Component {
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
-    const tab = this.props.tab || 'account', setTab = this.props.onTab || (() => {});
+    const ft = this.props.features || {};
+    const tab = this.props.tab === 'plan' && !ft.developmentPlan ? 'account' : (this.props.tab || 'account'), setTab = this.props.onTab || (() => {});
     const comps = d.comps.map(c => ({ ...c, gapLabel: d.GAP[c.gap].label, gapBg: d.GAP[c.gap].bg, gapFg: d.GAP[c.gap].fg,
       impShort: d.IMP[c.importance].short, impBg: d.IMP[c.importance].bg, impFg: d.IMP[c.importance].fg,
       levelLabel: d.LEVEL[c.actual] + ' → ' + d.LEVEL[c.target],
@@ -23,7 +25,7 @@ class SMProfile extends React.Component {
     const N = comps.length, cx = 180, cy = 170, R = 120;
     const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [cx + Math.cos(a) * R * v / 5, cy + Math.sin(a) * R * v / 5]; };
     const poly = f => comps.map((c, i) => pt(i, f(c)).map(n => n.toFixed(1)).join(',')).join(' ');
-    const T = [['account', 'Account Profile', 'icon-user'], ['skills', 'Skill Profile', 'icon-radar', N], ['history', 'Assessment History', 'icon-history', 5], ['plan', 'Development Plan', 'icon-target', s.plan.length]];
+    const T0 = [['account', 'Account Profile', 'icon-user'], ['skills', 'Skill Profile', 'icon-radar', N], ['history', 'Assessment History', 'icon-history', 0], ['plan', 'Development Plan', 'icon-target', s.plan.length]];
     const ST = { done: ['Completed', '#dcfce7', '#15803d'], draft: ['Draft · auto-saved', '#fef3c7', '#92400e'] };
     const history = [
       ['Q3 2026', 'Manager Evaluation', 'icon-user-round-check', 'Joseph Ahor Abandoh-Sam, HOD', '12 Sep 2026', '3.1'],
@@ -31,12 +33,13 @@ class SMProfile extends React.Component {
       ['Q2 2026', '360° Feedback', 'icon-refresh-cw', '5 assessors', '30 Jun 2026', '3.0'],
       ['Q2 2026', 'Manager Evaluation', 'icon-user-round-check', 'Joseph Ahor Abandoh-Sam, HOD', '14 Jun 2026', '2.9'],
       ['Q2 2026', 'Self-Assessment', 'icon-user-check', 'Self (timed, 45 min)', '02 Jun 2026', '3.2'],
-    ].map(([cycle, type, icon, assessor, date, score]) => ({ cycle, type, icon, assessor, date, score, report: 'PDF', status: 'Completed', sBg: '#dcfce7', sFg: '#15803d', onReport: () => this.flash('Downloading ' + cycle + ' ' + type + ' report (PDF)…') }));
+    ].filter(h => ft.feedback360 || h[1] !== '360° Feedback').map(([cycle, type, icon, assessor, date, score]) => ({ cycle, type, icon, assessor, date, score, report: 'PDF', status: 'Completed', sBg: '#dcfce7', sFg: '#15803d', onReport: () => this.flash('Downloading ' + cycle + ' ' + type + ' report (PDF)…') }));
+    const T = T0.filter(t => t[0] !== 'plan' || ft.developmentPlan).map(t => t[0] === 'history' ? [...t.slice(0, 3), history.length] : t);
     const gapComps = comps.filter(c => c.gap > 0).map(c => ({ id: String(c.id), label: c.name + ' (gap ' + c.gap + ')' }));
     const newComp = s.newComp || (gapComps[0] && gapComps[0].id);
     const canSave = s.newAction.trim().length > 3;
     return {
-      roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', admin: 'Administrator' }[this.props.role || 'staff'],
+      roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', creator: 'Assessment Creator', admin: 'Administrator' }[this.props.role || 'staff'],
       avgText: d.fmt(avg) + ' / 5', avgLabel: d.LEVEL[Math.round(avg)], openGaps: comps.filter(c => c.gap > 0).length,
       tabs: T.map(([k, label, icon, count]) => ({ label, icon, count: count || '', onClick: () => setTab(k),
         bg: tab === k ? '#fff' : 'transparent', color: tab === k ? '#111827' : '#4b5563', shadow: tab === k ? '0 1px 2px rgba(0,0,0,.08)' : 'none' })),
@@ -55,7 +58,7 @@ class SMProfile extends React.Component {
         labels: comps.map((c, i) => { const [x, y] = pt(i, 5.9); return { x, y, text: c.short, anchor: Math.abs(x - cx) < 8 ? 'middle' : x > cx ? 'start' : 'end' }; }) },
       gapScale: d.GAP,
       matrix: d.majors.map(m => { const open = !s.closed[m.name]; return { ...m, open, chev: open ? 'icon-chevron-down' : 'icon-chevron-right', items: comps.filter(c => c.major === m.name), toggle: () => this.setState({ closed: { ...s.closed, [m.name]: open } }) }; }),
-      exportCsv: () => this.flash('CSV export started'), goEvidence: () => go('evidence'),
+      exportCsv: () => this.flash('CSV export started'), goEvidence: () => go('evidence'), showEvidence: !!ft.evidence, historySub: ft.feedback360 ? 'Self, manager and 360° assessments from every cycle' : 'Self-assessments and manager evaluations from every cycle',
       history,
       adding: s.adding, toggleAdd: () => this.setState({ adding: !s.adding }), newAction: s.newAction, newComp, newDue: s.newDue, gapComps,
       onNewAction: e => this.setState({ newAction: e.target.value }), onNewComp: e => this.setState({ newComp: e.target.value }), onNewDue: e => this.setState({ newDue: e.target.value }),
@@ -73,8 +76,8 @@ class SMProfile extends React.Component {
     const __v = this.renderVals() || {};
     return (
       <>
-      <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px clamp(14px,3.4vw,52px)" }}>
-        <h1 style={{ margin: "0 0 clamp(18px,2.4vw,32px)", fontSize: "clamp(26px,3vw,32px)", fontWeight: "700", letterSpacing: "-0.5px" }}>Profile</h1>
+      <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px" }}>
+        <div style={{ marginBottom: "20px" }}><PageHeader title={"My Profile"} description={"Your account details, skill profile and assessment history"} /></div>
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", minHeight: "190px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "20px", padding: "24px clamp(18px,2.6vw,34px)" }}>
           <div style={{ width: "124px", height: "124px", borderRadius: "50%", border: "4px solid #fff", boxShadow: "0 3px 12px rgba(0,0,0,.18)", background: "repeating-linear-gradient(135deg,#cbd2da 0 6px,#b8c0ca 6px 12px)", display: "flex", alignItems: "center", justifyContent: "center", font: "600 11px 'JetBrains Mono',monospace", color: "#475569", flex: "none" }}>photo</div>
           <div style={{ flex: "1 1 320px", textAlign: "center", minWidth: "0" }}>
@@ -82,7 +85,7 @@ class SMProfile extends React.Component {
             <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}><span style={{ color: "#374151", fontWeight: "500" }}>123456789</span> · IT OFFICER · IT DEPARTMENT · HEAD OFFICE</div>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px", marginTop: "10px" }}>
               <span style={{ fontSize: "12px", color: "#374151", background: "#f3f4f6", borderRadius: "999px", padding: "3px 10px" }}>{__v.roleLabel}</span>
-              <span style={{ fontSize: "12px", color: "#374151", background: "#f3f4f6", borderRadius: "999px", padding: "3px 10px" }}>Target: IT Officer · Grade 10</span>
+              <span style={{ fontSize: "12px", color: "#374151", background: "#f3f4f6", borderRadius: "999px", padding: "3px 10px" }}>Target: {this.props.data?.user?.target}</span>
             </div>
           </div>
           <div style={{ flex: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", minWidth: "150px" }}>
@@ -224,7 +227,7 @@ class SMProfile extends React.Component {
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button onClick={__v.exportCsv} style={{ display: "flex", alignItems: "center", gap: "6px", height: "32px", padding: "0 12px", border: "1px solid #e5e7eb", borderRadius: "10px", background: "#fff", cursor: "pointer", font: "500 12.5px Inter,sans-serif", color: "#374151" }}><i className={"icon-download"} style={{ fontSize: "13px" }}></i>Export CSV</button>
-                  <button onClick={__v.goEvidence} style={{ display: "flex", alignItems: "center", gap: "6px", height: "32px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-upload"} style={{ fontSize: "13px" }}></i>Upload Evidence</button>
+                  {(__v.showEvidence) ? <button onClick={__v.goEvidence} style={{ display: "flex", alignItems: "center", gap: "6px", height: "32px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-upload"} style={{ fontSize: "13px" }}></i>Upload Evidence</button> : null}
                 </div>
               </div>
               <div style={{ overflowX: "auto" }}>
@@ -247,7 +250,7 @@ class SMProfile extends React.Component {
                           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 140px 150px 118px", gap: "14px", alignItems: "center", padding: "12px 24px 12px 48px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                             <div style={{ minWidth: "0" }}>
                               <div style={{ fontSize: "14px", fontWeight: "500" }}>{c?.name}</div>
-                              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>{c?.levelLabel}{(c?.evidence) ? (<> · <span style={{ color: "#15803d" }}>{c?.evidence}</span></>) : null}</div>
+                              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>{c?.levelLabel}{(__v.showEvidence && c?.evidence) ? (<> · <span style={{ color: "#15803d" }}>{c?.evidence}</span></>) : null}</div>
                             </div>
                             <span style={{ justifySelf: "start", font: "600 11px Inter,sans-serif", borderRadius: "6px", padding: "3px 8px", background: c?.impBg, color: c?.impFg, whiteSpace: "nowrap" }}>{c?.importance} · {c?.impShort}</span>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -279,7 +282,7 @@ class SMProfile extends React.Component {
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "20px 24px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
               <div>
                 <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Assessment History</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "5px" }}>Self, manager and 360° assessments from every cycle</div>
+                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "5px" }}>{__v.historySub}</div>
               </div>
               <button onClick={__v.exportCsv} style={{ display: "flex", alignItems: "center", gap: "6px", height: "32px", padding: "0 12px", border: "1px solid #e5e7eb", borderRadius: "10px", background: "#fff", cursor: "pointer", font: "500 12.5px Inter,sans-serif", color: "#374151" }}><i className={"icon-download"} style={{ fontSize: "13px" }}></i>Export CSV</button>
             </div>
