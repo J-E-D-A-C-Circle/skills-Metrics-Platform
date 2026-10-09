@@ -1,6 +1,8 @@
 'use client';
 import React from 'react';
 import __css from './SMFormBuilder.module.css';
+import { PageHeader, Btn } from './smUI';
+import { Select } from './ui/select';
 
 
 const KEY = 'skm-forms';
@@ -10,13 +12,54 @@ const TYPES = {
   signature: ['Signature', 'icon-signature'], gps: ['GPS location', 'icon-map-pin'] };
 const SCALES = { proficiency: ['Novice', 'Basic', 'Competent', 'Proficient', 'Expert'], importance: ['Not important', 'Minor', 'Moderate', 'Very important', 'Critical'], agree: ['Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree'] };
 const COLORS = ['#0d3b2a', '#2f9e44', '#1c8fd1', '#f08c00', '#e03131', '#6d28d9'];
+// Likert presets. Proficiency comes from the Rating Scales (DATA.PROF) and is a 5-point scale.
+const PRESETS = {
+  proficiency: { label: 'Proficiency 1–5 (Rating Scales)' },
+  agree: { label: 'Agreement', 3: ['Disagree', 'Neutral', 'Agree'], 4: ['Strongly disagree', 'Disagree', 'Agree', 'Strongly agree'], 5: SCALES.agree, 7: ['Strongly disagree', 'Disagree', 'Somewhat disagree', 'Neutral', 'Somewhat agree', 'Agree', 'Strongly agree'] },
+  frequency: { label: 'Frequency', 3: ['Rarely', 'Sometimes', 'Often'], 4: ['Never', 'Sometimes', 'Often', 'Always'], 5: ['Never', 'Rarely', 'Sometimes', 'Often', 'Always'], 7: ['Never', 'Very rarely', 'Rarely', 'Sometimes', 'Often', 'Very often', 'Always'] },
+  importance: { label: 'Importance 1–5', 5: SCALES.importance },
+  custom: { label: 'Custom labels' },
+};
+const POINTS = [3, 4, 5, 7];
+function presetLabels(preset, n, d) {
+  if (preset === 'proficiency' && n === 5) return d ? d.PROF.slice(1).map(p => p.label) : SCALES.proficiency;
+  const p = PRESETS[preset]; return p && p[n] ? [...p[n]] : null;
+}
+function presetDescs(preset, n, d) {
+  if (preset === 'proficiency' && n === 5 && d) return d.PROF.slice(1).map(p => p.desc);
+  if (preset === 'importance' && n === 5 && d) return d.IMP.slice(1).map(p => p.desc);
+  return Array(n).fill('');
+}
+const fit = (a, n, f) => Array.from({ length: n }, (_, i) => (a && a[i] != null ? a[i] : f(i)));
+// The scale a participant sees for a Likert question (handles older questions that only stored `scale`).
+function likertOf(q, d) {
+  const preset = q.preset || ({ agree: 'agree', importance: 'importance' }[q.scale] || 'proficiency');
+  const points = q.points || 5;
+  const labels = q.labels && q.labels.length === points ? q.labels : (presetLabels(preset, points, d) || fit(q.labels, points, i => 'Level ' + (i + 1)));
+  const descs = q.descs && q.descs.length === points ? q.descs : presetDescs(preset, points, d);
+  return { preset, points, labels, descs, showNumbers: q.showNumbers !== false };
+}
+// Renders the scale exactly as participants see it. `value`/`onPick` make it interactive (Preview).
+function LikertScale({ sc, value, onPick }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(' + sc.points + ',minmax(0,1fr))', gap: '6px' }}>
+      {sc.labels.map((l, k) => { const on = value === k + 1; return (
+        <button key={k} type="button" onClick={onPick ? e => { e.stopPropagation(); onPick(k + 1); } : undefined} tabIndex={onPick ? 0 : -1} title={sc.descs[k] || l}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', padding: '8px 4px', borderRadius: '9px', cursor: onPick ? 'pointer' : 'inherit', minWidth: '0', background: on ? '#0d3b2a' : '#fff', color: on ? '#fff' : '#374151', border: '1.5px solid ' + (on ? '#0d3b2a' : '#e5e7eb'), pointerEvents: onPick ? 'auto' : 'none' }}>
+          {sc.showNumbers ? <span style={{ font: '700 15px Inter,sans-serif' }}>{k + 1}</span> : null}
+          <span style={{ font: '600 11px Inter,sans-serif', textAlign: 'center', overflowWrap: 'anywhere' }}>{l}</span>
+          {sc.descs[k] ? <span style={{ font: '400 10px/1.35 Inter,sans-serif', color: on ? '#cfe6d8' : '#6b7280', textAlign: 'center', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sc.descs[k]}</span> : null}
+        </button>); })}
+    </div>
+  );
+}
 let UID = Date.now();
 const nid = () => 'q' + (UID++).toString(36);
 const today = () => new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 const clone = x => JSON.parse(JSON.stringify(x));
 function blank(type, over) {
   const b = { id: nid(), type, text: type === 'section' ? 'New section' : 'Untitled ' + TYPES[type][0].toLowerCase() + ' question', help: '', required: type !== 'section' && type !== 'file', weight: ['section', 'signature', 'gps', 'file'].includes(type) ? 0 : 1, comp: '', cond: null };
-  if (type === 'likert') b.scale = 'proficiency';
+  if (type === 'likert') Object.assign(b, { scale: 'proficiency', preset: 'proficiency', points: 5, showNumbers: true });
   if (type === 'single') b.options = [{ label: 'Option A', score: 1 }, { label: 'Option B', score: 0 }, { label: 'Option C', score: 0 }];
   if (type === 'multi') b.options = [{ label: 'Option A', score: 1 }, { label: 'Option B', score: 1 }, { label: 'Option C', score: -1 }];
   if (type === 'numeric') Object.assign(b, { min: 0, max: 100, unit: '', answer: '', tol: 0 });
@@ -25,30 +68,46 @@ function blank(type, over) {
   if (type === 'file') Object.assign(b, { accept: 'image/*,.pdf', maxMB: 10 });
   return Object.assign(b, over || {});
 }
-const TIERS = () => [{ name: 'Expert', min: 85, color: '#0d3b2a' }, { name: 'Proficient', min: 70, color: '#2f9e44' }, { name: 'Competent', min: 55, color: '#1c8fd1' }, { name: 'Basic', min: 40, color: '#f08c00' }, { name: 'Novice', min: 0, color: '#e03131' }];
+const TIERS = () => [{ name: 'Expert', min: 90, color: '#0d3b2a' }, { name: 'Proficient', min: 80, color: '#2f9e44' }, { name: 'Competent', min: 60, color: '#1c8fd1' }, { name: 'Basic', min: 40, color: '#f08c00' }, { name: 'Novice', min: 0, color: '#e03131' }];
+// Seed forms come from the DVLA source documents: one RBDI tool and one HR question bank per job level
+// (questions, options and answer keys verbatim), plus self-ratings for the general and technical skills.
 function seed(d) {
-  const net = blank('likert', { text: 'How would you rate your current proficiency in Network Administration?', comp: 'Network Administration', weight: 2 });
-  const items = [
-    blank('section', { text: 'Part A · Self-rating', help: 'Rate yourself honestly. Your line manager will also rate you.' }),
-    net,
-    blank('likert', { text: 'How would you rate your current proficiency in Backup & Disaster Recovery?', comp: 'Backup & Disaster Recovery', weight: 2 }),
-    blank('likert', { text: 'How would you rate your current proficiency in Incident Response?', comp: 'Incident Response', weight: 2 }),
-    blank('section', { text: 'Part B · Knowledge check' }),
-    blank('single', { text: "A user can't reach any internal system, but the internet works fine. What should you check first?", comp: 'Network Administration', options: [{ label: 'DNS resolution for internal domains', score: 1 }, { label: 'Replace the network cable', score: 0 }, { label: 'Reinstall the web browser', score: 0 }, { label: 'Escalate to the vendor', score: 0 }] }),
-    blank('multi', { text: 'Which of these are good controls for privileged (admin) accounts?', help: 'Select all that apply.', comp: 'Identity & Access Management', options: [{ label: 'Multi-factor authentication', score: 1 }, { label: 'Shared admin passwords', score: -1 }, { label: 'Just-in-time elevation', score: 1 }, { label: 'Regular access reviews', score: 1 }] }),
-    blank('numeric', { text: 'A service has a 99.9% monthly uptime SLA. About how many minutes of downtime are allowed in a 30-day month?', unit: 'minutes', min: 0, max: 1000, answer: 43, tol: 2 }),
-    blank('section', { text: 'Part C · Practical evidence' }),
-    blank('matrix', { text: 'Rate your hands-on experience with each task', rows: ['Configuring VLANs', 'Patching servers', 'Restoring from backup'], cols: ['Novice', 'Basic', 'Competent', 'Proficient', 'Expert'], weight: 2 }),
-    blank('text', { text: 'Describe a recent change you implemented and how you managed the risk.', minChars: 40 }),
+  const fw = Object.fromEntries(d.framework.map(c => [c.id, c]));
+  const form = (id, name, items, note, date) => { const scoring = { pass: 60, mode: 'weighted', tiers: TIERS() };
+    return { id, name, status: 'Published', version: 1, items, scoring, history: [{ v: 1, status: 'Published', date: date || '01 Oct 2026', note, items: null, scoring: clone(scoring) }] }; };
+  const rate = c => blank('likert', { text: 'How would you rate your current proficiency in ' + c.name + '?', comp: c.name, weight: 2 });
+  const fromBank = bank => {
+    const items = []; let last = null;
+    bank.items.forEach(([cid, area, text, opts, ans]) => {
+      const c = fw[cid];
+      if (c.id !== last) { last = c.id; items.push(blank('section', { text: (c.code ? c.code + ' ' : '') + c.name, help: c.areas ? 'Skill areas: ' + c.areas.join(', ') : c.group })); }
+      items.push(blank('single', { text, help: c.areas ? 'Skill area: ' + area : '', comp: c.name, options: opts.map((label, i) => ({ label, score: i === ans ? 1 : 0 })) }));
+    });
+    return items;
+  };
+  const general = d.framework.filter(c => c.category === 'General');
+  const forms = [
+    form('f1', 'General Skills Self-Assessment', [blank('section', { text: 'General skills', help: 'Rate yourself honestly against the proficiency scale. Your line manager confirms the result.' }), ...general.map(rate),
+      blank('text', { text: 'Describe a recent piece of work that shows your Leadership & Management skills. What did you do, and what would you do differently?', comp: 'Leadership & Management', minChars: 40, weight: 2 })], 'General skills from the Skills Matrix Data Analysis sample', '02 Jun 2026'),
+    ...d.BANKS.map((b, i) => form('f' + (i + 2), b.title, fromBank(b), 'Imported from ' + b.source + ' (' + b.items.length + ' questions)')),
   ];
-  const cert = blank('file', { text: 'Upload your networking certificate', help: 'CCNA, Network+ or equivalent', required: false, cond: { qid: net.id, op: '≥', value: '4', effect: 'show' } });
-  items.push(cert, blank('signature', { text: 'Sign to confirm this is your own work' }), blank('gps', { text: 'Confirm your work location', required: false, help: 'Only needed for field staff' }));
-  const f1 = { id: 'f1', name: 'Q4 2026 IT Skills Assessment', status: 'Published', version: 3, items, scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [] };
-  f1.history = [{ v: 1, status: 'Superseded', date: '02 Jun 2026', note: 'Initial version', items: clone(items.slice(0, 8)), scoring: clone(f1.scoring) }, { v: 2, status: 'Superseded', date: '28 Aug 2026', note: 'Added practical evidence', items: clone(items.slice(0, 11)), scoring: clone(f1.scoring) }, { v: 3, status: 'Published', date: '01 Oct 2026', note: 'Added signature and GPS', items: clone(items), scoring: clone(f1.scoring) }];
-  const hrItems = [blank('section', { text: 'Talent Acquisition & Selection' }), blank('likert', { text: 'Rate your proficiency in Job Analysis and Role Profiling', comp: 'Job Analysis and Role Profiling', weight: 2 }), blank('single', { text: 'Which interview format gives the most reliable comparison between candidates?', options: [{ label: 'Structured, competency-based interview', score: 1 }, { label: 'Unstructured conversation', score: 0 }, { label: 'Panel with no scoring guide', score: 0 }] })];
-  const f2 = { id: 'f2', name: 'HR Talent Acquisition Assessment', status: 'Draft', version: 1, items: hrItems, scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: 'Draft in progress', items: null }] };
-  return [f1, f2];
+  d.depts.filter(dp => !dp.bank).forEach((dp, i) => {
+    const tech = d.framework.filter(c => c.dept === dp.name);
+    forms.push(form('fs' + i, dp.name + ' Technical Skills Self-Rating', [blank('section', { text: dp.name + ' technical skills' }), ...tech.map(rate)], 'Technical skills for ' + dp.name));
+  });
+  return forms;
 }
+// Shared with Assessment Cycles, which can create forms and add questions from an upload.
+export const QBANK_KEY = 'skm-qbank';
+export function makeQuestion(type, over) { return blank(type, over); }
+export function loadForms(d) {
+  let f = null; try { f = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+  if (Array.isArray(f) && f.length) return f;
+  const s = seed(d); saveForms(s); return s;
+}
+export function saveForms(forms) { try { localStorage.setItem(KEY, JSON.stringify(forms)); } catch (e) {} }
+export function newForm(name, items, note) { return { id: 'f' + Date.now().toString(36), name, status: 'Draft', version: 1, items, scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: note || 'Created', items: null }] }; }
+export function loadBank() { try { const b = JSON.parse(localStorage.getItem(QBANK_KEY) || '[]'); return Array.isArray(b) ? b : []; } catch (e) { return []; } }
 function condMet(q, items, ans) {
   const c = q.cond; if (!c) return true;
   const src = items.find(x => x.id === c.qid); if (!src) return true;
@@ -74,7 +133,7 @@ function score(form, ans) {
     if (q.type === 'text' && q.scoring === 'manual') { out.pending++; return; }
     const w = form.scoring.mode === 'equal' ? (q.weight > 0 ? 1 : 0) : (+q.weight || 0); if (w <= 0) return;
     const v = ans[q.id]; let frac = null;
-    if (q.type === 'likert') frac = v ? v / 5 : 0;
+    if (q.type === 'likert') frac = v ? v / (q.points || 5) : 0;
     else if (q.type === 'single') { const m = Math.max(...q.options.map(o => +o.score || 0)); if (m <= 0) return; frac = v !== undefined ? Math.max(0, +q.options[v].score || 0) / m : 0; }
     else if (q.type === 'multi') { const pos = q.options.reduce((a, o) => a + Math.max(0, +o.score || 0), 0); if (pos <= 0) return; const sum = (v || []).reduce((a, i) => a + (+q.options[i].score || 0), 0); frac = Math.max(0, Math.min(pos, sum)) / pos; }
     else if (q.type === 'numeric') { if (q.answer === '' || q.answer === undefined) return; frac = v !== undefined && v !== '' && Math.abs(+v - +q.answer) <= (+q.tol || 0) ? 1 : 0; }
@@ -86,7 +145,7 @@ function score(form, ans) {
 }
 class SMFormBuilder extends React.Component {
   state = { forms: null, sel: 0, selQ: null, tab: 'build', ans: {}, tried: false, submitMsg: '', submitOk: false, over: null, gpsBusy: null, toast: '' };
-  componentDidMount() { let f = null; try { f = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {} this.setState({ forms: Array.isArray(f) && f.length ? f : seed(this.props.data) }); this._sig = {}; }
+  componentDidMount() { this.setState({ forms: loadForms(this.props.data), bankUp: loadBank() }); this._sig = {}; }
   setState(u, cb) { return super.setState(u, () => { const fm = this.state.forms; if (fm && fm !== this._saved) { this._saved = fm; try { localStorage.setItem(KEY, JSON.stringify(fm)); } catch (e) {} } cb && cb(); }); }
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
   edit(fn) {
@@ -125,7 +184,7 @@ class SMFormBuilder extends React.Component {
     const sel = items.find(q => q.id === s.selQ);
     const condLabel = q => { if (!q.cond) return ''; const src = items.find(x => x.id === q.cond.qid); return (q.cond.effect === 'score' ? 'Scored if ' : 'Shown if ') + (src ? 'Q' + numOf[src.id] : '?') + ' ' + q.cond.op + ' ' + q.cond.value; };
     const summary = q => ({
-      likert: '5-point ' + (q.scale === 'importance' ? 'importance' : q.scale === 'agree' ? 'agreement' : 'proficiency') + ' scale',
+      likert: (sc => sc.points + '-point ' + PRESETS[sc.preset].label.replace(/ \(.*\)| 1–5/g, '').toLowerCase() + ' scale' + (sc.showNumbers ? '' : ' · numbers hidden'))(likertOf(q, d)),
       single: q.options && q.options.length + ' options · ' + q.options.filter(o => +o.score > 0).length + ' scoring',
       multi: q.options && q.options.length + ' options · select all that apply',
       numeric: (q.min ?? '') + '–' + (q.max ?? '') + ' ' + (q.unit || '') + (q.answer !== '' && q.answer !== undefined ? ' · answer ' + q.answer + (q.tol ? ' ±' + q.tol : '') : ' · not scored'),
@@ -137,6 +196,8 @@ class SMFormBuilder extends React.Component {
     const canvas = items.map((q, i) => ({
       isSection: q.type === 'section', isQuestion: q.type !== 'section', text: q.text, help: q.help, num: numOf[q.id], icon: TYPES[q.type][1], typeLabel: TYPES[q.type][0],
       required: q.required, weightText: q.weight > 0 ? 'Weight ' + q.weight : 'Not scored', condText: condLabel(q), comp: q.comp, summary: summary(q),
+      // What the participant sees, rendered inline on the canvas.
+      type: q.type, scale: q.type === 'likert' ? likertOf(q, d) : null, options: q.options || [], radius: q.type === 'multi' ? '5px' : '50%', rows: q.rows || [], cols: q.cols || [], unit: q.unit, range: (q.min ?? '') + '–' + (q.max ?? ''), minChars: q.minChars, accept: q.accept, maxMB: q.maxMB,
       border: q.id === s.selQ ? '#0d3b2a' : '#e5e7eb', outline: q.id === s.selQ ? '2px solid #f2a516' : 'none', dropLine: s.over === i ? '#f2a516' : 'transparent',
       select: () => this.setState({ selQ: q.id }),
       onDragStart: e => { this._drag = { kind: 'move', from: i }; try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', q.id); } catch (er) {} },
@@ -158,7 +219,13 @@ class SMFormBuilder extends React.Component {
         text: sel.text, help: sel.help, onText: e => u({ text: e.target.value }), onHelp: e => u({ help: e.target.value }),
         isQuestion: sel.type !== 'section', reqJustify: sel.required ? 'flex-end' : 'flex-start', reqBg: sel.required ? '#0d3b2a' : '#d1d5db', toggleReq: () => u({ required: !sel.required }),
         weight: sel.weight, onWeight: e => u({ weight: +e.target.value }), comp: sel.comp || '', onComp: e => u({ comp: e.target.value }),
-        isLikert: sel.type === 'likert', scale: sel.scale, onScale: e => u({ scale: e.target.value }), scaleLabels: (SCALES[sel.scale] || []).map((l, k) => ({ n: k + 1, label: l })),
+        isLikert: sel.type === 'likert', likert: sel.type === 'likert' ? (() => { const sc = likertOf(sel, d);
+          const setPoints = n => { const pl = presetLabels(sc.preset, n, d); if (pl) u({ points: n, labels: pl, descs: presetDescs(sc.preset, n, d) }); else u({ points: n, preset: 'custom', labels: fit(sc.labels, n, i => 'Level ' + (i + 1)), descs: fit(sc.descs, n, () => '') }); };
+          const setPreset = p => { if (p === 'custom') { u({ preset: 'custom', labels: sc.labels, descs: sc.descs }); return; } const n = presetLabels(p, sc.points, d) ? sc.points : 5; u({ preset: p, points: n, scale: p === 'agree' ? 'agree' : p === 'importance' ? 'importance' : 'proficiency', labels: presetLabels(p, n, d), descs: presetDescs(p, n, d) }); };
+          return { ...sc, setPoints, setPreset, presetOptions: Object.entries(PRESETS).map(([k, v]) => [k, v.label]), pointOptions: POINTS,
+            setLabel: (k, v) => u({ preset: 'custom', labels: sc.labels.map((x, j) => j === k ? v : x), descs: sc.descs }),
+            setDesc: (k, v) => u({ labels: sc.labels, descs: sc.descs.map((x, j) => j === k ? v : x) }),
+            toggleNumbers: () => u({ showNumbers: !sc.showNumbers }) }; })() : null,
         isChoice: sel.type === 'single' || sel.type === 'multi',
         options: (sel.options || []).map((o, k) => ({ label: o.label, score: o.score,
           onLabel: e => u({ options: sel.options.map((x, j) => j === k ? { ...x, label: e.target.value } : x) }),
@@ -180,7 +247,7 @@ class SMFormBuilder extends React.Component {
         condQ: cond ? cond.qid : '', condOp: cond ? cond.op : '', condVal: cond ? String(cond.value) : '', condEffect: cond ? cond.effect : 'show',
         ops: choiceSrc ? ['is', 'is not'] : ['=', '≠', '≥', '≤', '>', '<'],
         condValSelect: !!cond && (choiceSrc || (src && src.type === 'likert')), condValInput: !!cond && src && src.type === 'numeric',
-        condVals: choiceSrc ? src.options.map(o => ({ value: o.label, label: o.label })) : [1, 2, 3, 4, 5].map(k => ({ value: String(k), label: k + ' · ' + (SCALES[src && src.scale] || SCALES.proficiency)[k - 1] })),
+        condVals: choiceSrc ? src.options.map(o => ({ value: o.label, label: o.label })) : (src && src.type === 'likert' ? likertOf(src, d).labels : SCALES.proficiency).map((l, k) => ({ value: String(k + 1), label: k + 1 + ' · ' + l })),
         onCondQ: e => { const ns = items.find(x => x.id === e.target.value); const ch = ns.type === 'single' || ns.type === 'multi'; u({ cond: { ...cond, qid: ns.id, op: ch ? 'is' : '≥', value: ch ? ns.options[0].label : '3' } }); },
         onCondOp: e => u({ cond: { ...cond, op: e.target.value } }), onCondVal: e => u({ cond: { ...cond, value: e.target.value } }), onCondEffect: e => u({ cond: { ...cond, effect: e.target.value } }),
       };
@@ -201,7 +268,7 @@ class SMFormBuilder extends React.Component {
       else if (q.type === 'text' && v && v.trim().length < q.minChars) err = s.tried ? 'Write at least ' + q.minChars + ' characters.' : '';
       if (!err && s.tried && q.required && !answered(q, v)) err = 'This question is required.';
       const r = { ...base, err, border: err ? '#fca5a5' : '#e5e7eb', isLikert: q.type === 'likert', isChoice: q.type === 'single' || q.type === 'multi', isNumeric: q.type === 'numeric', isText: q.type === 'text', isMatrix: q.type === 'matrix', isFile: q.type === 'file', isSig: q.type === 'signature', isGps: q.type === 'gps' };
-      if (r.isLikert) r.likert = (SCALES[q.scale] || SCALES.proficiency).map((l, k) => { const on = v === k + 1; return { n: k + 1, label: l, pick: () => this.setAns(q.id, k + 1), bg: on ? '#0d3b2a' : '#fff', fg: on ? '#fff' : '#374151', border: on ? '#0d3b2a' : '#e5e7eb' }; });
+      if (r.isLikert) Object.assign(r, { scale: likertOf(q, d), value: v, pick: n => this.setAns(q.id, n) });
       if (r.isChoice) { r.radius = q.type === 'multi' ? '5px' : '50%'; r.opts = q.options.map((o, k) => { const on = q.type === 'multi' ? (v || []).includes(k) : v === k;
         return { label: o.label, bg: on ? '#eef7f1' : '#fff', border: on ? '#0d3b2a' : '#e5e7eb', dot: on ? '#0d3b2a' : '#cbd2da', dotFill: on ? '#0d3b2a' : '#fff',
           pick: () => q.type === 'multi' ? this.setAns(q.id, on ? (v || []).filter(x => x !== k) : [...(v || []), k]) : this.setAns(q.id, k) }; }); }
@@ -242,10 +309,18 @@ class SMFormBuilder extends React.Component {
       palette: Object.entries(TYPES).map(([k, [label, icon]]) => ({ label, icon, add: () => { const at = sel ? items.indexOf(sel) + 1 : null; this.insert(blank(k), at); },
         onDragStart: e => { this._drag = { kind: 'new', type: k }; try { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', k); } catch (er) {} } })),
       dragEnd: () => { this._drag = null; this.setState({ over: null }); },
-      bank: d.comps.map(c => ({ name: c.name, major: c.major, add: () => this.insert(blank('likert', { text: 'How would you rate your current proficiency in ' + c.name + '?', comp: c.name, weight: c.importance >= 4 ? 2 : 1 }), sel ? items.indexOf(sel) + 1 : null) })),
+      bank: (() => { const at = sel ? items.indexOf(sel) + 1 : null, t = (s.bankQ || '').trim().toLowerCase();
+        const fw = Object.fromEntries(d.framework.map(c => [c.id, c]));
+        const list = [...(s.bankUp || []).map(q => ({ name: q.text, major: 'Uploaded · ' + TYPES[q.type][0] + (q.comp ? ' · ' + q.comp : ''), add: () => this.insert({ ...clone(q), id: nid() }, sel ? items.indexOf(sel) + 1 : null) })),
+        ...d.framework.map(c => ({ name: c.name, major: c.dept ? c.dept + ' · ' + c.group : 'General · ' + c.category, add: () => this.insert(blank('likert', { text: 'How would you rate your current proficiency in ' + c.name + '?', comp: c.name, weight: c.importance >= 4 ? 2 : 1 }), sel ? items.indexOf(sel) + 1 : null) })),
+          ...(d.BANKS || []).flatMap(b => b.items.map(([cid, area, text, opts, ans]) => ({ name: text, major: b.title + ' · ' + fw[cid].name,
+            add: () => this.insert(blank('single', { text, help: fw[cid].areas ? 'Skill area: ' + area : '', comp: fw[cid].name, options: opts.map((label, k) => ({ label, score: k === ans ? 1 : 0 })) }), at) })))];
+        const hit = t ? list.filter(x => (x.name + ' ' + x.major).toLowerCase().includes(t)) : list;
+        return hit.slice(0, 80); })(),
+      bankQ: s.bankQ || '', onBankQ: e => this.setState({ bankQ: e.target.value }), bankTotal: (s.bankUp || []).length + d.framework.length + (d.BANKS || []).reduce((a, b) => a + b.items.length, 0),
       canvas, endOver: e => { e.preventDefault(); if (this.state.over !== items.length) this.setState({ over: items.length }); }, endDrop: e => { e.preventDefault(); this.dropAt(items.length); },
       endBorder: s.over === items.length ? '#f2a516' : 'rgba(15,35,65,.14)', endBg: s.over === items.length ? '#fffbeb' : 'transparent',
-      noSel: !sel, hasSel: !!sel, insp, compOptions: d.comps.map(c => c.name),
+      noSel: !sel, hasSel: !!sel, insp, compOptions: d.framework.map(c => c.name),
       modes: [['weighted', 'Weighted'], ['equal', 'Equal weight']].map(([k, label]) => ({ label, onClick: () => setScoring({ mode: k }), bg: f.scoring.mode === k ? '#fff' : 'transparent', fg: f.scoring.mode === k ? '#111827' : '#4b5563' })),
       pass: f.scoring.pass, onPass: e => setScoring({ pass: +e.target.value }),
       maxPoints: +maxAll.toFixed(1), passPoints: +(maxAll * f.scoring.pass / 100).toFixed(1), manualCount: items.filter(q => q.type === 'text' && q.scoring === 'manual').length,
@@ -271,24 +346,19 @@ class SMFormBuilder extends React.Component {
     };
   }
   render() {
+    // Forms load from localStorage after mount; render once they are there so every input starts controlled.
+    if (!this.state.forms) return null;
     const __v = this.renderVals() || {};
     return (
       <>
-      <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(12px,2.2vw,28px) 48px", display: "flex", flexDirection: "column", gap: "18px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: "12px" }}>
-          <div>
-            <h1 style={{ margin: "0", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.5px" }}>Form Builder</h1>
-            <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "6px" }}>Build assessment forms and questions by dragging question types onto the canvas</div>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-            <select value={__v.selValue} onChange={__v.onPickForm} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
-              {(__v.formOptions || []).map((o, $index) => (<React.Fragment key={$index}>
-                <option value={o?.value}>{o?.label}</option>
-              </React.Fragment>))}
-            </select>
-            <button onClick={__v.newForm} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#0d3b2a", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-file-plus"} style={{ fontSize: "14px" }}></i>New form</button>
-          </div>
-        </div>
+      <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        <PageHeader title={"Form Builder"} description={"Build assessment forms by dragging question types onto the canvas. Each question shows exactly what staff will see."}
+          actions={<>
+            <Select value={__v.selValue} onChange={__v.onPickForm} aria-label={"Form"} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
+              {(__v.formOptions || []).map((o, $index) => (<option key={$index} value={o?.value}>{o?.label}</option>))}
+            </Select>
+            <Btn kind={"primary"} icon={"icon-file-plus"} onClick={__v.newForm}>New form</Btn>
+          </>} />
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", padding: "14px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
             <input className={__css.h0} value={__v.formName} onChange={__v.onFormName} style={{ flex: "1 1 260px", minWidth: "0", border: "1px solid transparent", borderRadius: "10px", padding: "6px 8px", font: "600 18px Inter,sans-serif", color: "#111827", background: "transparent" }} />
@@ -326,7 +396,8 @@ class SMFormBuilder extends React.Component {
               </div>
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "14px" }}>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280", marginBottom: "4px" }}>QUESTION BANK</div>
-                <div style={{ fontSize: "11.5px", color: "#6b7280", marginBottom: "10px" }}>Competencies from the library, as Likert questions</div>
+                <div style={{ fontSize: "11.5px", color: "#6b7280", marginBottom: "8px" }}>{__v.bankTotal} items: library competencies (as Likert) and the DVLA question banks</div>
+                <input value={__v.bankQ || ""} onChange={__v.onBankQ} placeholder="Search questions or competencies" aria-label="Search the question bank" style={{ width: "100%", height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "9px", padding: "0 10px", font: "400 12.5px Inter,sans-serif", marginBottom: "8px", background: "#fff", boxSizing: "border-box" }} />
                 <div style={{ display: "flex", flexDirection: "column", gap: "4px", maxHeight: "280px", overflowY: "auto" }}>
                   {(__v.bank || []).map((b, $index) => (<React.Fragment key={$index}>
                     <button className={__css.h2} onClick={b?.add} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 8px", border: "0", borderRadius: "7px", background: "transparent", cursor: "pointer", textAlign: "left" }}>
@@ -382,7 +453,27 @@ class SMFormBuilder extends React.Component {
                           </>) : null}
                         </div>
                         <div style={{ font: "500 14.5px/1.45 Inter,sans-serif", color: "#111827", marginTop: "8px", textWrap: "pretty" }}>{it?.text}</div>
-                        <div style={{ font: "400 12.5px Inter,sans-serif", color: "#6b7280", marginTop: "4px" }}>{it?.summary}</div>
+                        {(it?.help) ? (<div style={{ font: "400 12.5px Inter,sans-serif", color: "#6b7280", marginTop: "3px" }}>{it?.help}</div>) : null}
+                        <div style={{ marginTop: "10px", pointerEvents: "none" }} aria-hidden={"true"}>
+                          {it.type === 'likert' ? <LikertScale sc={it.scale} /> : null}
+                          {it.type === 'single' || it.type === 'multi' ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                              {it.options.map((o, k) => <div key={k} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 10px", borderRadius: "9px", border: "1.5px solid #e5e7eb", background: "#fff" }}>
+                                <span style={{ width: "16px", height: "16px", flex: "none", borderRadius: it.radius, border: "2px solid #cbd2da" }}></span>
+                                <span style={{ font: "500 13px Inter,sans-serif", color: "#111827" }}>{o.label}</span></div>)}
+                            </div>) : null}
+                          {it.type === 'matrix' ? (
+                            <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", width: "100%", minWidth: "380px", font: "400 12.5px Inter,sans-serif" }}>
+                              <thead><tr><th></th>{it.cols.map((c, k) => <th key={k} style={{ padding: "4px", font: "600 10.5px Inter,sans-serif", color: "#6b7280", textAlign: "center" }}>{c}</th>)}</tr></thead>
+                              <tbody>{it.rows.map((r, k) => <tr key={k}><td style={{ padding: "6px 8px 6px 0", borderTop: "1px solid rgba(15,35,65,.07)", color: "#111827" }}>{r}</td>{it.cols.map((c, j) => <td key={j} style={{ padding: "4px", borderTop: "1px solid rgba(15,35,65,.07)", textAlign: "center" }}><span style={{ display: "inline-block", width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #cbd2da" }}></span></td>)}</tr>)}</tbody>
+                            </table></div>) : null}
+                          {it.type === 'numeric' ? <div style={{ display: "flex", alignItems: "center", gap: "8px", maxWidth: "260px" }}><span style={{ flex: "1", height: "36px", border: "1.5px solid rgba(15,35,65,.14)", borderRadius: "9px", padding: "0 12px", display: "flex", alignItems: "center", font: "500 13px 'JetBrains Mono',monospace", color: "#9ca3af" }}>{it.range}</span><span style={{ fontSize: "13px", color: "#4b5563" }}>{it.unit}</span></div> : null}
+                          {it.type === 'text' ? <div style={{ height: "64px", border: "1.5px solid rgba(15,35,65,.14)", borderRadius: "9px", padding: "8px 12px", font: "400 13px Inter,sans-serif", color: "#9ca3af" }}>Type your answer… (at least {it.minChars} characters)</div> : null}
+                          {it.type === 'file' ? <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", border: "1.5px dashed #c7ccd4", borderRadius: "9px", font: "500 13px Inter,sans-serif", color: "#374151" }}><i className={"icon-paperclip"} style={{ fontSize: "15px", color: "#0d3b2a" }}></i>Choose a file (max {it.maxMB} MB)</div> : null}
+                          {it.type === 'signature' ? <div style={{ height: "64px", border: "1.5px solid rgba(15,35,65,.14)", borderRadius: "9px", background: "repeating-linear-gradient(0deg,#fff 0 63px,#e5e7eb 63px 64px)", display: "flex", alignItems: "flex-end", padding: "6px 10px", font: "400 11.5px Inter,sans-serif", color: "#9ca3af" }}>Sign inside the box</div> : null}
+                          {it.type === 'gps' ? <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", height: "32px", padding: "0 14px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "999px", font: "500 13px Inter,sans-serif", color: "#0d3b2a", background: "#fff" }}><i className={"icon-locate-fixed"} style={{ fontSize: "14px" }}></i>Capture location</span> : null}
+                        </div>
+                        <div style={{ font: "400 11.5px Inter,sans-serif", color: "#9ca3af", marginTop: "8px" }}>{it?.summary}</div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                         <button onClick={it?.up} title={"Move up"} style={{ background: "none", border: "0", color: "#9ca3af", cursor: "pointer", display: "flex", padding: "4px" }}>
@@ -426,25 +517,35 @@ class SMFormBuilder extends React.Component {
                         </span>Required</button>
                       <label style={{ flex: "1 1 90px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>WEIGHT<input type={"number"} min={"0"} max={"10"} step={"0.5"} value={__v.insp?.weight} onChange={__v.insp?.onWeight} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
                     </div>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>LINKED COMPETENCY<select value={__v.insp?.comp} onChange={__v.insp?.onComp} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>LINKED COMPETENCY<Select value={__v.insp?.comp} onChange={__v.insp?.onComp} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                         <option value={""}>None</option>
                         {(__v.compOptions || []).map((o, $index) => (<React.Fragment key={$index}>
                           <option value={o}>{o}</option>
                         </React.Fragment>))}
-                      </select></label>
+                      </Select></label>
                   </>) : null}
-                  {(__v.insp?.isLikert) ? (<>
-                    <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>SCALE<select value={__v.insp?.scale} onChange={__v.insp?.onScale} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
-                        <option value={"proficiency"}>Skill proficiency (1–5)</option>
-                        <option value={"importance"}>Skill importance (1–5)</option>
-                        <option value={"agree"}>Agreement (1–5)</option>
-                      </select></label>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                      {(__v.insp?.scaleLabels || []).map((l, $index) => (<React.Fragment key={$index}>
-                        <span style={{ fontSize: "12px", color: "#4b5563" }}><b style={{ color: "#111827" }}>{l?.n}</b> · {l?.label}</span>
-                      </React.Fragment>))}
+                  {(__v.insp?.isLikert) ? (() => { const L = __v.insp.likert; const lab = { display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }; const inp = { height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "8px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }; return (<>
+                    <div style={lab}>POINTS
+                      <div style={{ display: "flex", background: "rgba(118,118,128,.12)", borderRadius: "10px", padding: "3px", gap: "3px" }}>
+                        {L.pointOptions.map(n => <button key={n} type={"button"} onClick={() => L.setPoints(n)} style={{ flex: "1", height: "28px", border: "0", borderRadius: "7px", cursor: "pointer", font: "600 12.5px Inter,sans-serif", background: L.points === n ? "#fff" : "transparent", color: L.points === n ? "#111827" : "#4b5563", boxShadow: L.points === n ? "0 1px 2px rgba(0,0,0,.08)" : "none" }}>{n}</button>)}
+                      </div>
                     </div>
-                  </>) : null}
+                    <label style={lab}>PRESET<Select value={L.preset} onChange={e => L.setPreset(e.target.value)} style={{ ...inp, height: "34px", background: "#fff" }}>
+                        {L.presetOptions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                      </Select>{L.preset === 'proficiency' ? <span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: "#6b7280" }}>Labels and anchors come from Rating Scales. Proficiency is a 5-point scale; other point counts switch to custom labels.</span> : null}</label>
+                    <button type={"button"} onClick={L.toggleNumbers} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#374151" }}><span style={{ width: "34px", height: "20px", borderRadius: "999px", padding: "2px", display: "flex", justifyContent: L.showNumbers ? "flex-end" : "flex-start", background: L.showNumbers ? "#0d3b2a" : "#d1d5db" }}><span style={{ width: "16px", height: "16px", borderRadius: "50%", background: "#fff" }}></span></span>Show numbers</button>
+                    <div style={lab}>LABELS &amp; ANCHOR DESCRIPTIONS
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {L.labels.map((l, k) => <div key={k} style={{ display: "grid", gridTemplateColumns: "22px minmax(0,1fr)", gap: "6px", alignItems: "start" }}>
+                          <span style={{ font: "700 12px 'JetBrains Mono',monospace", color: "#0d3b2a", paddingTop: "8px", letterSpacing: "0" }}>{k + 1}</span>
+                          <span style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <input value={l} onChange={e => L.setLabel(k, e.target.value)} style={inp} aria-label={"Label for point " + (k + 1)} />
+                            <input value={L.descs[k] || ''} onChange={e => L.setDesc(k, e.target.value)} placeholder={"Anchor description (optional)"} style={{ ...inp, height: "30px", fontSize: "12px", color: "#4b5563" }} aria-label={"Anchor description for point " + (k + 1)} />
+                          </span>
+                        </div>)}
+                      </div>
+                    </div>
+                  </>); })() : null}
                   {(__v.insp?.isChoice) ? (<>
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", marginBottom: "6px" }}>
@@ -478,10 +579,10 @@ class SMFormBuilder extends React.Component {
                   {(__v.insp?.isText) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MIN CHARACTERS<input type={"number"} min={"0"} value={__v.insp?.minChars} onChange={__v.insp?.onMinChars} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>SCORING<select value={__v.insp?.scoring} onChange={__v.insp?.onScoring} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>SCORING<Select value={__v.insp?.scoring} onChange={__v.insp?.onScoring} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"manual"}>Manual review</option>
                           <option value={"none"}>Not scored</option>
-                        </select></label>
+                        </Select></label>
                     </div>
                   </>) : null}
                   {(__v.insp?.isMatrix) ? (<>
@@ -491,12 +592,12 @@ class SMFormBuilder extends React.Component {
                   </>) : null}
                   {(__v.insp?.isFile) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ALLOWED FILES<select value={__v.insp?.accept} onChange={__v.insp?.onAccept} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ALLOWED FILES<Select value={__v.insp?.accept} onChange={__v.insp?.onAccept} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"image/*"}>Images</option>
                           <option value={".pdf"}>PDF</option>
                           <option value={"image/*,.pdf"}>Images &amp; PDF</option>
                           <option value={""}>Any file</option>
-                        </select></label>
+                        </Select></label>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MAX SIZE (MB)<input type={"number"} min={"1"} max={"50"} value={__v.insp?.maxMB} onChange={__v.insp?.onMaxMB} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
                     </div>
                   </>) : null}
@@ -512,27 +613,27 @@ class SMFormBuilder extends React.Component {
                         <div style={{ fontSize: "11.5px", color: "#9ca3af" }}>Add a Likert, choice or numeric question above this one to use conditions.</div>
                       </>) : null}
                       {(__v.insp?.condOn) ? (<>
-                        <select value={__v.insp?.condEffect} onChange={__v.insp?.onCondEffect} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                        <Select value={__v.insp?.condEffect} onChange={__v.insp?.onCondEffect} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           <option value={"show"}>Only show this question if…</option>
                           <option value={"score"}>Only count this score if…</option>
-                        </select>
-                        <select value={__v.insp?.condQ} onChange={__v.insp?.onCondQ} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                        </Select>
+                        <Select value={__v.insp?.condQ} onChange={__v.insp?.onCondQ} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                           {(__v.insp?.sources || []).map((o, $index) => (<React.Fragment key={$index}>
                             <option value={o?.id}>{o?.label}</option>
                           </React.Fragment>))}
-                        </select>
+                        </Select>
                         <div style={{ display: "flex", gap: "6px" }}>
-                          <select value={__v.insp?.condOp} onChange={__v.insp?.onCondOp} style={{ width: "110px", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                          <Select value={__v.insp?.condOp} onChange={__v.insp?.onCondOp} style={{ width: "110px", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                             {(__v.insp?.ops || []).map((o, $index) => (<React.Fragment key={$index}>
                               <option value={o}>{o}</option>
                             </React.Fragment>))}
-                          </select>
+                          </Select>
                           {(__v.insp?.condValSelect) ? (<>
-                            <select value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
+                            <Select value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
                               {(__v.insp?.condVals || []).map((o, $index) => (<React.Fragment key={$index}>
                                 <option value={o?.value}>{o?.label}</option>
                               </React.Fragment>))}
-                            </select>
+                            </Select>
                           </>) : null}
                           {(__v.insp?.condValInput) ? (<>
                             <input type={"number"} value={__v.insp?.condVal} onChange={__v.insp?.onCondVal} style={{ flex: "1", minWidth: "0", height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif" }} />
@@ -660,16 +761,7 @@ class SMFormBuilder extends React.Component {
                         <div style={{ fontSize: "12.5px", color: "#6b7280", margin: "4px 0 0 22px" }}>{q?.help}</div>
                       </>) : null}
                       <div style={{ marginTop: "12px" }}>
-                        {(q?.isLikert) ? (<>
-                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(96px,1fr))", gap: "6px" }}>
-                            {(q?.likert || []).map((o, $index) => (<React.Fragment key={$index}>
-                              <button onClick={o?.pick} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", padding: "8px 4px", borderRadius: "9px", cursor: "pointer", background: o?.bg, color: o?.fg, border: `1.5px solid ${o?.border ?? ""}` }}>
-                                <span style={{ font: "700 15px Inter,sans-serif" }}>{o?.n}</span>
-                                <span style={{ font: "500 11px Inter,sans-serif" }}>{o?.label}</span>
-                              </button>
-                            </React.Fragment>))}
-                          </div>
-                        </>) : null}
+                        {(q?.isLikert) ? (<LikertScale sc={q.scale} value={q.value} onPick={q.pick} />) : null}
                         {(q?.isChoice) ? (<>
                           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                             {(q?.opts || []).map((o, $index) => (<React.Fragment key={$index}>

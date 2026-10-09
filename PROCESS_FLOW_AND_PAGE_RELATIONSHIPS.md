@@ -27,7 +27,7 @@ The application utilizes a **hybrid architecture**:
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    SkillMatrixApp.jsx (Application Shell)              │
 │       Role Guard · Header · Collapsible Sidebar · Notification Bell    │
-│              Quick Notes Drawer · Global AI Floating Button            │
+│        Quick Notes Drawer · Header Department Scope · Feature Flags    │
 └───────┬─────────┬──────────┬───────────┬──────────┬──────────┬─────────┘
         │         │          │           │          │          │
         ▼         ▼          ▼           ▼          ▼          ▼

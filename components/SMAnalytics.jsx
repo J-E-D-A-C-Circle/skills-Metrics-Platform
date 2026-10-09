@@ -1,406 +1,368 @@
 'use client';
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Badge, GapBadge, StatusBadge, EmptyState, DataTable, KpiTile, Toast, StaffDrawer, ScopeSelect, Toggle, CARD, INPUT, download, toCSV, slugify } from './smUI';
+import { ALL, CYCLES, CURRENT, PREVIOUS, STATUSES, inScope, staffRow, records, avg, round1, individualReport } from './smModel';
+import { IndividualReportView, reportExport } from './SMStaffReport';
 
+const QDATE = { 'Q1 2026': '2026-03-12', 'Q2 2026': '2026-06-02', 'Q3 2026': '2026-08-28' };
+const EVALUATORS = ['All', 'System', 'Manager-confirmed', 'Manager-adjusted', 'Previous cycle'];
+const RCOLS = ['Staff ID', 'Name', 'Department', 'Designation', 'Category', 'Competency', 'Target', 'Actual', 'Gap', 'Status', 'Evaluator', 'Date'];
+const SUMCOLS = ['Department', 'Category', 'Staff', 'Records', 'Avg target', 'Avg actual', 'Avg gap', 'Gaps ≥ 3'];
 
-const FIRST = ['Ama', 'Kofi', 'Efua', 'Yaw', 'Abena', 'Kwesi', 'Akosua', 'Kojo', 'Esi', 'Kwame', 'Adwoa', 'Nana', 'Afia', 'Fiifi'];
-const LAST = ['Owusu', 'Boateng', 'Asante', 'Darko', 'Frimpong', 'Mensah', 'Appiah', 'Agyeman', 'Ofori', 'Quaye', 'Sarpong', 'Addo'];
-const ROLES = ['Officer', 'Senior Officer', 'Assistant', 'Supervisor', 'Analyst'];
-const ALLCOLS = ['Staff ID', 'Name', 'Department', 'Designation', 'Category', 'Target', 'Actual', 'Gap', 'Evaluator', 'Date'];
-function rows(depts, cats) {
-  const out = []; let k = 0;
-  depts.forEach((d, di) => cats.forEach((c, ci) => { for (let i = 0; i < 3; i++) { k++;
-    const target = 3 + ((k + ci) % 3 === 0 ? 1 : 0) + (ci === 2 && i === 0 ? 1 : 0), gap = Math.max(0, Math.min(5, d.gaps[ci] + ((i + di) % 3) - 1)), actual = Math.max(1, target - gap);
-    out.push({ 'Staff ID': String(100000000 + k * 7919).slice(0, 9), Name: FIRST[(k * 3) % FIRST.length] + ' ' + LAST[(k * 5) % LAST.length], Department: d.name, Designation: ROLES[k % ROLES.length], Category: c,
-      Target: target, Actual: actual, Gap: target - actual, Evaluator: ['Self', 'Manager', '360°'][k % 3], Date: '2026-' + String(1 + (k % 9)).padStart(2, '0') + '-' + String(1 + (k % 27)).padStart(2, '0') }); } }));
-  return out;
+function useToast() {
+  const [t, setT] = useState('');
+  const ref = React.useRef();
+  return [t, msg => { setT(msg); clearTimeout(ref.current); ref.current = setTimeout(() => setT(''), 2600); }];
 }
-class SMAnalytics extends React.Component {
-  state = { dept: 'All', period: '3', cell: null, toast: '',
-    rtype: 'Individual', from: '2026-01-01', to: '2026-12-31', rDept: 'All', band: 'All', evaluator: 'All', cols: ['Staff ID', 'Name', 'Department', 'Category', 'Target', 'Actual', 'Gap'], fmt: 'CSV',
-    exports: [{ fmt: 'PDF', name: 'Q3 2026 organisation summary', when: '30 Sep 2026' }, { fmt: 'XLSX', name: 'IT Department gap register', when: '18 Sep 2026' }],
-    adding: false, sName: '', sFreq: 'Weekly', sFmt: 'PDF', sTo: '',
-    schedules: [{ id: 1, name: 'Weekly assessment completion', freq: 'Weekly', fmt: 'PDF', to: 'hr.director@dvla.gov.gh', next: 'Mon, 5 Oct · 07:00', on: true },
-      { id: 2, name: 'Monthly skills gap register', freq: 'Monthly', fmt: 'Excel', to: 'it.director@dvla.gov.gh, hr.director@dvla.gov.gh', next: '1 Nov · 07:00', on: true },
-      { id: 3, name: 'Daily integrity events digest', freq: 'Daily', fmt: 'CSV', to: 'audit@dvla.gov.gh', next: 'Tomorrow · 06:00', on: false }] };
-  flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2600); }
-  download(name, text, mime) { try { const b = new Blob([text], { type: mime }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} }
-  renderVals() {
-    const d = this.props.data, s = this.state, go = this.props.go || (() => {});
-    const rawView = this.props.view;
-    const view = (rawView === 'analytics' ? 'dashboard' : rawView) || 'dashboard', P = +s.period, QL = ['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'];
-    const sel = s.dept === 'All' ? d.depts : d.depts.filter(x => x.name === s.dept);
-    const staff = sel.reduce((a, x) => a + x.staff, 0), assessed = sel.reduce((a, x) => a + Math.round(x.assessed * (0.7 + P * 0.1)), 0);
-    const wavg = (list, p) => list.reduce((a, x) => a + x.trend[p] * x.staff, 0) / list.reduce((a, x) => a + x.staff, 0);
-    const avg = wavg(sel, P), prev = P > 0 ? wavg(sel, P - 1) : null;
-    const all = rows(d.depts, d.categories), selRows = all.filter(r => s.dept === 'All' || r.Department === s.dept);
-    const critical = selRows.filter(r => r.Gap >= 3).length;
-    const maxT = 5;
-    const bars = [...d.depts].sort((a, b) => b.trend[P] - a.trend[P]).map(x => ({ name: x.name, value: x.trend[P].toFixed(1), pct: (x.trend[P] / maxT * 100) + '%', color: x.trend[P] >= 3 ? '#0d3b2a' : '#f2a516',
-      opacity: s.dept === 'All' || s.dept === x.name ? 1 : 0.35, pick: () => this.setState({ dept: s.dept === x.name ? 'All' : x.name }) }));
-    const X = i => 60 + i * 90, Y = v => 170 - (v - 2) / 2 * 150;
-    const tl = [0, 1, 2, 3].map(i => wavg(sel, i)), org = [0, 1, 2, 3].map(i => wavg(d.depts, i));
-    const trend = { grid: [2, 2.5, 3, 3.5, 4].map(v => ({ y: Y(v), label: v.toFixed(1) })), line: tl.map((v, i) => X(i) + ',' + Y(v)).join(' '), org: org.map((v, i) => X(i) + ',' + Y(v)).join(' '),
-      pts: tl.map((v, i) => ({ x: X(i), y: Y(v), ly: Y(v) - 10, v: v.toFixed(1), q: QL[i].slice(0, 2) })) };
-    const dist = d.GAP.map(g => ({ ...g, count: selRows.filter(r => r.Gap === g.n).length })).filter(g => g.count).map(g => ({ ...g, pct: Math.round(g.count / selRows.length * 100) + '%' }));
-    const c = s.cell, drillRows = c ? all.filter(r => r.Department === c.dept && r.Category === c.cat) : [];
-    const rFiltered = all.filter(r => (s.rDept === 'All' || r.Department === s.rDept) && (s.evaluator === 'All' || r.Evaluator === s.evaluator) && r.Date >= s.from && r.Date <= s.to
-      && (s.band === 'All' || (s.band === '0' && r.Gap === 0) || (s.band === '1-2' && r.Gap >= 1 && r.Gap <= 2) || (s.band === '3+' && r.Gap >= 3)));
-    const cols = ALLCOLS.filter(x => s.cols.includes(x));
-    let reportRows = rFiltered;
-    if (s.rtype === 'Aggregated') {
-      const g = {}; rFiltered.forEach(r => { const k = r.Department + '|' + r.Category; (g[k] = g[k] || []).push(r); });
-      reportRows = Object.values(g).map(list => ({ Department: list[0].Department, Category: list[0].Category, Staff: list.length, 'Avg target': (list.reduce((a, r) => a + r.Target, 0) / list.length).toFixed(1), 'Avg actual': (list.reduce((a, r) => a + r.Actual, 0) / list.length).toFixed(1), 'Avg gap': (list.reduce((a, r) => a + r.Gap, 0) / list.length).toFixed(1) }));
-    }
-    const headers = s.rtype === 'Aggregated' ? ['Department', 'Category', 'Staff', 'Avg target', 'Avg actual', 'Avg gap'] : cols;
-    const canSave = s.sName.trim() && /@/.test(s.sTo);
-    return {
-      title: { dashboard: 'Executive Dashboard', heatmap: 'Skill Heatmap', reports: 'Report Builder', schedules: 'Scheduled Reports' }[view],
-      subtitle: { dashboard: 'Real-time KPIs across departments, time periods and assessors', heatmap: 'Spot capability gaps across the organisation and drill down to individual records', reports: 'Pick filters and columns, then export to PDF, CSV, Excel, JSON or XML', schedules: 'Reports sent automatically every day, week or month' }[view],
-      isDash: view === 'dashboard', isHeat: view === 'heatmap', isReports: view === 'reports', isSchedules: view === 'schedules', showFilters: view === 'dashboard',
-      dept: s.dept, period: s.period, onDept: e => this.setState({ dept: e.target.value }), onPeriod: e => this.setState({ period: e.target.value }), deptNames: d.depts.map(x => x.name),
-      periodLabel: QL[P], trendLabel: s.dept === 'All' ? 'Organisation' : s.dept, trendShort: s.dept === 'All' ? 'All departments' : s.dept,
-      kpis: [{ label: 'Staff in scope', value: staff, sub: sel.length + ' department' + (sel.length > 1 ? 's' : ''), subColor: '#6b7280' },
-        { label: 'Assessment completion', value: Math.min(100, Math.round(assessed / staff * 100)) + '%', sub: Math.min(assessed, staff) + ' of ' + staff + ' assessed', subColor: '#6b7280' },
-        { label: 'Average proficiency', value: avg.toFixed(2) + ' / 5', sub: prev ? (avg - prev >= 0 ? '▲ ' : '▼ ') + Math.abs(avg - prev).toFixed(2) + ' vs ' + QL[P - 1] : 'First cycle of the year', subColor: prev && avg - prev >= 0 ? '#15803d' : '#b91c1c' },
-        { label: 'Noticeable+ gaps (3–5)', value: critical, sub: 'Need targeted training', subColor: '#b45309' }],
-      bars, trend, dist, distTotal: selRows.length,
-      cats: d.categories, gapScale: d.GAP,
-      heatRows: d.depts.map(x => ({ name: x.name, staff: x.staff, cells: x.gaps.map((g, i) => { const on = c && c.dept === x.name && c.cat === d.categories[i];
-        return { label: g === 0 ? '✓' : g, bg: d.GAP[g].bg, fg: d.GAP[g].fg, border: on ? '3px solid #111827' : '0', title: x.name + ' · ' + d.categories[i] + ': ' + d.GAP[g].label, pick: () => this.setState({ cell: { dept: x.name, cat: d.categories[i] } }) }; }) })),
-      noDrill: !c, drillTitle: c ? c.dept : 'Drill-down', drillSub: c ? c.cat + ' · ' + drillRows.length + ' individual records' : 'Individual assessment records',
-      drill: drillRows.map(r => ({ name: r.Name, initials: r.Name.split(' ').map(x => x[0]).join(''), role: r.Designation, target: r.Target, actual: r.Actual, gap: r.Gap + ' · ' + d.GAP[r.Gap].label, bg: d.GAP[r.Gap].bg, fg: d.GAP[r.Gap].fg })),
-      rtypes: ['Individual', 'Aggregated'].map(t => ({ label: t === 'Individual' ? 'Individual records' : 'Group summary', onClick: () => this.setState({ rtype: t }), bg: s.rtype === t ? '#fff' : 'transparent', fg: s.rtype === t ? '#111827' : '#4b5563' })),
-      from: s.from, to: s.to, rDept: s.rDept, band: s.band, evaluator: s.evaluator,
-      onFrom: e => this.setState({ from: e.target.value }), onTo: e => this.setState({ to: e.target.value }), onRDept: e => this.setState({ rDept: e.target.value }), onBand: e => this.setState({ band: e.target.value }), onEval: e => this.setState({ evaluator: e.target.value }),
-      cols: ALLCOLS.map(x => { const on = s.cols.includes(x); return { label: x, bg: on ? '#0d3b2a' : '#fff', fg: on ? '#fff' : '#374151', border: on ? '#0d3b2a' : 'rgba(15,35,65,.14)',
-        toggle: () => this.setState({ cols: on ? s.cols.filter(y => y !== x) : [...s.cols, x] }) }; }),
-      formats: ['PDF', 'CSV', 'Excel', 'JSON', 'XML'].map(f => { const on = s.fmt === f; return { label: f, pick: () => this.setState({ fmt: f }), bg: on ? '#e6f2ea' : '#fff', fg: on ? '#0d3b2a' : '#4b5563', border: on ? '#0d3b2a' : 'rgba(15,35,65,.14)' }; }),
-      fmt: s.fmt, headers, previewCount: reportRows.length, preview: reportRows.slice(0, 8).map(r => headers.map(h => String(r[h]))),
-      generate: () => {
-        const name = 'skill-matrix-' + s.rtype.toLowerCase() + '-' + new Date().toISOString().slice(0, 10);
-        const data = reportRows.map(r => Object.fromEntries(headers.map(h => [h, r[h]])));
-        if (s.fmt === 'CSV' || s.fmt === 'Excel') this.download(name + '.csv', [headers.join(','), ...data.map(r => headers.map(h => '"' + String(r[h]).replace(/"/g, '""') + '"').join(','))].join('\n'), 'text/csv');
-        else if (s.fmt === 'JSON') this.download(name + '.json', JSON.stringify(data, null, 2), 'application/json');
-        else if (s.fmt === 'XML') this.download(name + '.xml', '<?xml version="1.0"?>\n<report>\n' + data.map(r => '  <row>' + headers.map(h => { const t = h.replace(/[^a-z]/gi, ''); return '<' + t + '>' + String(r[h]).replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</' + t + '>'; }).join('') + '</row>').join('\n') + '\n</report>', 'application/xml');
-        this.setState({ exports: [{ fmt: s.fmt === 'Excel' ? 'XLSX' : s.fmt, name: (s.rtype === 'Aggregated' ? 'Group summary' : 'Individual records') + ' · ' + reportRows.length + ' rows', when: 'Just now' }, ...s.exports].slice(0, 6) });
-        this.flash(s.fmt === 'PDF' ? 'PDF is being generated. It will appear in Recent exports.' : s.fmt + ' downloaded (' + reportRows.length + ' rows)'); },
-      exportsList: s.exports,
-      adding: s.adding, toggleAdd: () => this.setState({ adding: !s.adding }), sName: s.sName, sFreq: s.sFreq, sFmt: s.sFmt, sTo: s.sTo,
-      onSName: e => this.setState({ sName: e.target.value }), onSFreq: e => this.setState({ sFreq: e.target.value }), onSFmt: e => this.setState({ sFmt: e.target.value }), onSTo: e => this.setState({ sTo: e.target.value }),
-      sSaveBg: canSave ? '#15904c' : '#a3acb9',
-      saveSchedule: () => { if (!canSave) { this.flash('Add a name and at least one email address'); return; }
-        this.setState({ schedules: [...s.schedules, { id: Date.now(), name: s.sName.trim(), freq: s.sFreq, fmt: s.sFmt, to: s.sTo.trim(), next: { Daily: 'Tomorrow · 06:00', Weekly: 'Mon · 07:00', Monthly: '1st · 07:00' }[s.sFreq], on: true }], adding: false, sName: '', sTo: '' }); this.flash('Schedule created'); },
-      schedules: s.schedules.map(r => ({ ...r, justify: r.on ? 'flex-end' : 'flex-start', bg: r.on ? '#0d3b2a' : '#d1d5db',
-        toggle: () => this.setState({ schedules: this.state.schedules.map(x => x.id === r.id ? { ...x, on: !x.on } : x) }),
-        remove: () => this.setState({ schedules: this.state.schedules.filter(x => x.id !== r.id) }) })),
-      toast: s.toast,
-    };
-  }
-  render() {
-    const __v = this.renderVals() || {};
+function xmlEscape(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const tag = h => h.replace(/[^a-z0-9]/gi, '') || 'field';
+
+function GapLegend({ D, counts, onPick }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: '11.5px', color: '#4b5563' }}>
+      {D.GAP.map(g => (
+        <button key={g.n} type="button" onClick={onPick ? () => onPick(g.n) : undefined} disabled={!onPick} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: '0', padding: '2px 0', cursor: onPick ? 'pointer' : 'default', font: 'inherit', color: 'inherit' }}>
+          <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: g.bg }}></span>{g.n} · {g.label}{counts ? ' (' + (counts[g.n] || 0) + ')' : ''}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function SMAnalytics(props) {
+  const { data: D, model, go, view = 'dashboard', role, scope, myDept } = props;
+  const [local, setLocal] = useState(null);
+  const locked = role === 'manager';
+  const dept = locked ? myDept : (local ?? scope);
+  const [drawer, setDrawer] = useState(null);
+  const [toast, flash] = useToast();
+  const staff = useMemo(() => inScope(model, dept), [model, dept]);
+  const scopeLabel = dept === ALL ? 'All departments' : dept;
+  const deptFilter = <ScopeSelect depts={D.depts} value={dept} globalValue={scope} onChange={setLocal} locked={locked} />;
+
+  // drawer helpers
+  const openStaff = (title, list, sub) => setDrawer({ title, sub: sub || scopeLabel, rows: list.map(staffRow), aggregated: true });
+  const openRecords = (title, list, pred, sub) => setDrawer({ title, sub: sub || scopeLabel, rows: records(list, pred), aggregated: false });
+
+  const title = { dashboard: 'Executive Dashboard', heatmap: 'Skill Heatmap', reports: 'Report Builder', schedules: 'Scheduled Reports' }[view];
+  const desc = { dashboard: 'Organisation-wide KPIs for the ' + CURRENT + ' cycle. Click any tile, bar, cell or band to see the staff behind it.', heatmap: 'Average gap by department and skill category. Pick a department to see each person by competency.', reports: 'Build an individual record or an aggregated report, preview it, then export exactly what you see', schedules: 'Reports sent automatically every day, week or month' }[view];
+
+  return (
+    <Page>
+      {view === 'dashboard' ? <Dashboard {...{ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }} /> : null}
+      {view === 'heatmap' ? <Heatmap {...{ D, model, staff, dept, scopeLabel, openRecords, go, title, desc, deptFilter, setLocal: locked ? null : setLocal }} /> : null}
+      {view === 'reports' ? <Reports {...{ D, model, dept, go, title, desc, deptFilter, flash }} /> : null}
+      {view === 'schedules' ? <Schedules {...{ title, desc, flash }} /> : null}
+      <StaffDrawer ctx={drawer} D={D} go={go} onClose={() => setDrawer(null)} />
+      <Toast text={toast} />
+    </Page>
+  );
+}
+
+function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }) {
+  const assessed = staff.filter(s => s.scored), outstanding = staff.filter(s => !s.scored), review = staff.filter(s => s.status === 'Submitted' || s.status === 'Auto-scored');
+  const recs = staff.flatMap(s => s.comps.map(c => ({ s, c })));
+  const avgGap = avg(recs.map(r => r.c.gap)), severe = recs.filter(r => r.c.gap >= 4);
+  const pct = staff.length ? Math.round(assessed.length / staff.length * 100) : 0;
+  const counts = {}; recs.forEach(r => { counts[r.c.gap] = (counts[r.c.gap] || 0) + 1; });
+  const deptRows = D.depts.map(dp => { const ss = model.staff.filter(s => s.dept === dp.name); return { name: dp.name, ss, actual: avg(ss.map(s => s.avgActual)), gap: avg(ss.map(s => s.avgGap)), done: ss.filter(s => s.scored).length }; }).sort((a, b) => b.actual - a.actual);
+  const compAgg = {};
+  recs.forEach(({ c }) => { const a = compAgg[c.id] || (compAgg[c.id] = { id: c.id, name: c.name, short: c.short, gaps: [], dept: model.compById[c.id].dept }); a.gaps.push(c.gap); });
+  const compRows = Object.values(compAgg).map(a => ({ ...a, avg: avg(a.gaps), n: a.gaps.length, severe: a.gaps.filter(g => g >= 3).length })).sort((a, b) => b.avg - a.avg).slice(0, 10);
+  const maxComp = Math.max(1, ...compRows.map(c => c.avg));
+  // trend
+  const tl = CYCLES.map(q => { const l = staff.filter(s => s.hist[q] != null); return l.length ? avg(l.map(s => s.hist[q])) : null; });
+  const org = CYCLES.map(q => { const l = model.staff.filter(s => s.hist[q] != null); return avg(l.map(s => s.hist[q])); });
+  const vals = [...tl, ...org].filter(v => v != null), lo = Math.floor(Math.min(...vals) * 2) / 2 - 0.5, hi = Math.ceil(Math.max(...vals) * 2) / 2 + 0.5;
+  const X = i => 60 + i * 90, Y = v => 170 - (v - lo) / (hi - lo) * 150;
+  const grid = []; for (let v = lo; v <= hi + 0.001; v += 0.5) grid.push(v);
+  const prevAvg = tl[2], curAvg = tl[3];
+  return (
+    <>
+      <PageHeader title={title} description={desc} actions={<Btn icon="icon-file-spreadsheet" onClick={() => go('reports')}>Build a report</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{D.cycle.name} · actual = latest scored result</span></>} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '12px' }}>
+        <KpiTile label="Staff in scope" value={staff.length} sub={(dept === ALL ? D.depts.length + ' departments' : dept)} onClick={() => openStaff('Staff in scope', staff)} />
+        <KpiTile label="Assessed" value={assessed.length} sub={review.length + ' awaiting review'} onClick={() => openStaff('Assessed · ' + CURRENT, assessed)} />
+        <KpiTile label="Completion" value={pct + '%'} sub={outstanding.length + ' not yet submitted'} subColor={outstanding.length ? '#b45309' : '#15803d'} onClick={() => openStaff('Outstanding assessments · ' + CURRENT, outstanding)} />
+        <KpiTile label="Average proficiency" value={curAvg == null ? '—' : curAvg.toFixed(2) + ' / 5'} sub={curAvg != null && prevAvg != null ? (curAvg - prevAvg >= 0 ? '▲ ' : '▼ ') + Math.abs(curAvg - prevAvg).toFixed(2) + ' vs ' + PREVIOUS : ''} subColor={curAvg >= prevAvg ? '#15803d' : '#b91c1c'} onClick={() => openStaff('Average proficiency · ' + CURRENT, assessed)} />
+        <KpiTile label="Average gap" value={avgGap.toFixed(2)} sub={D.GAP[Math.round(avgGap)].label + ' on average'} onClick={() => openStaff('Average gap', [...staff].sort((a, b) => b.avgGap - a.avgGap))} />
+        <KpiTile label="Significant + critical gaps" value={severe.length} sub={new Set(severe.map(r => r.s.id)).size + ' staff need intensive training'} subColor="#b91c1c" onClick={() => openRecords('Significant & critical gaps (4–5)', staff, c => c.gap >= 4)} />
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
+        <Card title="Proficiency by department" sub="Average actual level · click a department to see its staff" style={{ flex: '3 1 460px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {deptRows.map(r => (
+              <button key={r.name} type="button" onClick={() => openStaff(r.name, r.ss, r.done + ' of ' + r.ss.length + ' assessed')} style={{ display: 'grid', gridTemplateColumns: 'minmax(110px,170px) minmax(0,1fr) 44px 92px', gap: '12px', alignItems: 'center', background: 'none', border: '0', padding: '5px 0', cursor: 'pointer', textAlign: 'left', opacity: dept === ALL || dept === r.name ? 1 : 0.4 }}>
+                <span style={{ font: '500 13px Inter,sans-serif', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+                <span style={{ position: 'relative', height: '14px', background: 'rgba(118,118,128,.12)', borderRadius: '4px', overflow: 'hidden' }}><span style={{ position: 'absolute', left: '0', top: '0', bottom: '0', borderRadius: '4px', background: r.actual >= 3 ? '#0d3b2a' : '#f2a516', width: (r.actual / 5 * 100) + '%' }}></span></span>
+                <span style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: '#374151', textAlign: 'right' }}>{r.actual.toFixed(1)}</span>
+                <span style={{ fontSize: '11.5px', color: '#6b7280', textAlign: 'right' }}>gap {r.gap.toFixed(1)} · {Math.round(r.done / r.ss.length * 100)}%</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title="Trend over time" sub={scopeLabel + ' · average proficiency per cycle'} style={{ flex: '2 1 340px', display: 'flex', flexDirection: 'column' }}>
+          <svg viewBox="0 0 360 200" width="100%" style={{ display: 'block' }}>
+            {grid.map(v => <g key={v}><line x1="36" x2="350" y1={Y(v)} y2={Y(v)} stroke="#eef0f3" /><text x="28" y={Y(v)} textAnchor="end" dominantBaseline="middle" style={{ font: '500 10px Inter,sans-serif', fill: '#9ca3af' }}>{v.toFixed(1)}</text></g>)}
+            <polyline points={org.map((v, i) => X(i) + ',' + Y(v)).join(' ')} fill="none" stroke="#cbd2da" strokeWidth="2" strokeDasharray="4 4" />
+            <polyline points={tl.map((v, i) => v == null ? null : X(i) + ',' + Y(v)).filter(Boolean).join(' ')} fill="none" stroke="#0d3b2a" strokeWidth="2.5" />
+            {tl.map((v, i) => <g key={i}>{v != null ? <><circle cx={X(i)} cy={Y(v)} r="4.5" fill="#fff" stroke="#0d3b2a" strokeWidth="2" /><text x={X(i)} y={Y(v) - 10} textAnchor="middle" style={{ font: '600 10.5px Inter,sans-serif', fill: '#111827' }}>{v.toFixed(1)}</text></> : null}<text x={X(i)} y="194" textAnchor="middle" style={{ font: '500 10px Inter,sans-serif', fill: '#6b7280' }}>{CYCLES[i].slice(0, 2)}</text></g>)}
+          </svg>
+          <div style={{ display: 'flex', gap: '16px', fontSize: '11.5px', color: '#4b5563', marginTop: '8px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '16px', height: '3px', background: '#0d3b2a' }}></span>{scopeLabel}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '16px', borderTop: '2px dashed #cbd2da' }}></span>Organisation</span>
+          </div>
+        </Card>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
+        <Card title="Largest gaps by competency" sub={'Top 10 in ' + scopeLabel + ' · click a competency to see who needs it'} style={{ flex: '3 1 460px' }}>
+          {compRows.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {compRows.map(c => (
+              <button key={c.id} type="button" onClick={() => openRecords(c.name, staff, x => x.id === c.id, c.n + ' staff assessed on it')} style={{ display: 'grid', gridTemplateColumns: 'minmax(120px,200px) minmax(0,1fr) 40px 110px', gap: '12px', alignItems: 'center', background: 'none', border: '0', padding: '4px 0', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ minWidth: '0' }}><span style={{ display: 'block', font: '500 13px Inter,sans-serif', color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span><span style={{ fontSize: '11px', color: '#9ca3af' }}>{c.dept || 'All departments'}</span></span>
+                <span style={{ position: 'relative', height: '12px', background: 'rgba(118,118,128,.12)', borderRadius: '4px', overflow: 'hidden' }}><span style={{ position: 'absolute', left: '0', top: '0', bottom: '0', borderRadius: '4px', background: D.GAP[Math.round(c.avg)].bg, width: (c.avg / maxComp * 100) + '%' }}></span></span>
+                <span style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: '#374151', textAlign: 'right' }}>{c.avg.toFixed(1)}</span>
+                <span style={{ fontSize: '11.5px', color: '#6b7280', textAlign: 'right' }}>{c.severe} of {c.n} at gap ≥ 3</span>
+              </button>
+            ))}
+          </div> : <EmptyState title="No competency records" />}
+        </Card>
+        <Card title="Gap distribution" sub={recs.length + ' competency ratings · click a band'} style={{ flex: '2 1 340px' }}>
+          <div style={{ display: 'flex', height: '26px', borderRadius: '6px', overflow: 'hidden', gap: '2px' }}>
+            {D.GAP.filter(g => counts[g.n]).map(g => (
+              <button key={g.n} type="button" title={g.label + ': ' + counts[g.n]} onClick={() => openRecords('Gap ' + g.n + ' · ' + g.label, staff, c => c.gap === g.n)} style={{ flex: counts[g.n], background: g.bg, color: g.fg, border: '0', cursor: 'pointer', font: '600 10.5px Inter,sans-serif', overflow: 'hidden', padding: '0' }}>{Math.round(counts[g.n] / recs.length * 100)}%</button>
+            ))}
+          </div>
+          <div style={{ marginTop: '12px' }}><GapLegend D={D} counts={counts} onPick={n => openRecords('Gap ' + n + ' · ' + D.GAP[n].label, staff, c => c.gap === n)} /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '16px' }}>
+            {D.GAP.slice(1).map(g => { const ppl = new Set(recs.filter(r => r.c.gap === g.n).map(r => r.s.id)).size; return (
+              <button key={g.n} type="button" onClick={() => openRecords('Gap ' + g.n + ' · ' + g.label, staff, c => c.gap === g.n)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,.5)', border: '1px solid rgba(15,35,65,.07)', borderRadius: '10px', padding: '7px 10px', cursor: 'pointer', font: '500 12.5px Inter,sans-serif', color: '#374151' }}>
+                <GapBadge gap={g.n} GAP={D.GAP} /><span>{ppl} staff · {counts[g.n] || 0} records</span>
+              </button>); })}
+          </div>
+        </Card>
+      </div>
+      <Card title="Heatmap · department × skill category" sub="Average gap · click a cell" flush>
+        <HeatGrid D={D} rows={D.depts.filter(dp => dept === ALL || dp.name === dept).map(dp => ({ key: dp.name, label: dp.name, sub: model.staff.filter(s => s.dept === dp.name).length + ' staff', list: model.staff.filter(s => s.dept === dp.name) }))} cols={D.categories.map(c => ({ key: c, label: c, pred: x => x.category === c }))} onCell={(r, c) => openRecords(c.label + ' · ' + r.label, r.list, c.pred, 'Average gap in this category')} />
+      </Card>
+    </>
+  );
+}
+
+function HeatGrid({ D, rows, cols, onCell, onRow, onCol, labelW = 190 }) {
+  if (!rows.length) return <EmptyState title="No data in scope" />;
+  return (
+    <div style={{ padding: '16px 20px 20px', overflowX: 'auto' }}>
+      <div style={{ minWidth: Math.max(560, labelW + cols.length * 70) + 'px', display: 'grid', gridTemplateColumns: labelW + 'px repeat(' + cols.length + ',minmax(54px,1fr))', gap: '4px' }}>
+        <span></span>
+        {cols.map(c => onCol ? <button key={c.key} type="button" onClick={() => onCol(c)} title={c.title || c.label} style={{ background: 'none', border: '0', cursor: 'pointer', font: '600 10px Inter,sans-serif', letterSpacing: '.3px', color: '#127a42', padding: '0 2px 6px', textTransform: 'uppercase', textAlign: 'left', alignSelf: 'end' }}>{c.label}</button>
+          : <span key={c.key} style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', padding: '0 4px 6px', textTransform: 'uppercase', alignSelf: 'end' }}>{c.label}</span>)}
+        {rows.map(r => (
+          <React.Fragment key={r.key}>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: '8px', minWidth: '0' }}>
+              {onRow ? <button type="button" onClick={() => onRow(r)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', textAlign: 'left', font: '500 13px Inter,sans-serif', color: '#127a42', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</button>
+                : <span style={{ fontSize: '13px', fontWeight: '500' }}>{r.label}</span>}
+              <span style={{ fontSize: '11.5px', color: '#6b7280' }}>{r.sub}</span>
+            </div>
+            {cols.map(c => {
+              const gaps = r.list.flatMap(s => s.comps.filter(c.pred).map(x => x.gap));
+              if (!gaps.length) return <div key={c.key} style={{ height: '44px', borderRadius: '6px', background: 'repeating-linear-gradient(135deg,#f3f4f6 0 6px,#fff 6px 12px)' }} title="Not assessed on this"></div>;
+              const v = avg(gaps), g = D.GAP[Math.round(v)];
+              return <button key={c.key} type="button" onClick={() => onCell(r, c)} title={r.label + ' · ' + c.label + ': average gap ' + v.toFixed(1) + ' (' + g.label + ')'} style={{ height: '44px', borderRadius: '6px', cursor: 'pointer', font: '600 12px Inter,sans-serif', background: g.bg, color: g.fg, border: '0' }}>{gaps.length === 1 ? v : v.toFixed(1)}</button>;
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ marginTop: '14px' }}><GapLegend D={D} /></div>
+    </div>
+  );
+}
+
+function Heatmap({ D, model, staff, dept, scopeLabel, openRecords, go, title, desc, deptFilter, setLocal }) {
+  const [catFilter, setCat] = useState(ALL);
+  if (dept === ALL) {
     return (
       <>
-      <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: "12px" }}>
-          <div>
-            <h1 style={{ margin: "0", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.5px" }}>{__v.title}</h1>
-            <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "6px" }}>{__v.subtitle}</div>
-          </div>
-          {(__v.showFilters) ? (<>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              <select value={__v.dept} onChange={__v.onDept} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
-                <option value={"All"}>All departments</option>
-                {(__v.deptNames || []).map((n, $index) => (<React.Fragment key={$index}>
-                  <option value={n}>{n}</option>
-                </React.Fragment>))}
-              </select>
-              <select value={__v.period} onChange={__v.onPeriod} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
-                <option value={"3"}>Q4 2026</option>
-                <option value={"2"}>Q3 2026</option>
-                <option value={"1"}>Q2 2026</option>
-                <option value={"0"}>Q1 2026</option>
-              </select>
-            </div>
-          </>) : null}
-        </div>
-        {(__v.isDash) ? (<>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "12px" }}>
-            {(__v.kpis || []).map((k, $index) => (<React.Fragment key={$index}>
-              <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "18px" }}>
-                <div style={{ fontSize: "13px", color: "#374151" }}>{k?.label}</div>
-                <div style={{ fontSize: "24px", fontWeight: "700", marginTop: "8px", letterSpacing: "-0.3px" }}>{k?.value}</div>
-                <div style={{ fontSize: "12px", color: k?.subColor, marginTop: "4px" }}>{k?.sub}</div>
-              </div>
-            </React.Fragment>))}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "stretch" }}>
-            <div style={{ flex: "3 1 460px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-              <div style={{ padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Average proficiency by department</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>{__v.periodLabel} · click a department to drill down</div>
-              </div>
-              <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                {(__v.bars || []).map((b, $index) => (<React.Fragment key={$index}>
-                  <button onClick={b?.pick} style={{ display: "grid", gridTemplateColumns: "minmax(110px,170px) minmax(0,1fr) 44px", gap: "12px", alignItems: "center", background: "none", border: "0", padding: "4px 0", cursor: "pointer", textAlign: "left", opacity: b?.opacity }}>
-                    <span style={{ font: "500 13px Inter,sans-serif", color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b?.name}</span>
-                    <span style={{ position: "relative", height: "14px", background: "rgba(118,118,128,.12)", borderRadius: "4px", overflow: "hidden" }}>
-                      <span style={{ position: "absolute", left: "0", top: "0", bottom: "0", borderRadius: "4px", background: b?.color, width: b?.pct }}></span>
-                    </span>
-                    <span style={{ font: "600 12.5px 'JetBrains Mono',monospace", color: "#374151", textAlign: "right" }}>{b?.value}</span>
-                  </button>
-                </React.Fragment>))}
-              </div>
-            </div>
-            <div style={{ flex: "2 1 340px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Trend over time</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>{__v.trendLabel} · average proficiency</div>
-              </div>
-              <div style={{ padding: "14px 16px 10px", flex: "1", display: "flex", alignItems: "center" }}>
-                <svg viewBox={"0 0 360 200"} width={"100%"} style={{ display: "block" }}>
-                  <g>
-                    {(__v.trend?.grid || []).map((g, $index) => (<React.Fragment key={$index}>
-                      <line x1={"36"} x2={"350"} y1={g?.y} y2={g?.y} stroke={"#eef0f3"}></line>
-                    </React.Fragment>))}
-                  </g>
-                  <g>
-                    {(__v.trend?.grid || []).map((g, $index) => (<React.Fragment key={$index}>
-                      <text x={"28"} y={g?.y} textAnchor={"end"} dominantBaseline={"middle"} style={{ font: "500 10px Inter,sans-serif", fill: "#9ca3af" }}>{g?.label}</text>
-                    </React.Fragment>))}
-                  </g>
-                  <polyline points={__v.trend?.org} fill={"none"} stroke={"#cbd2da"} strokeWidth={"2"} strokeDasharray={"4 4"}></polyline>
-                  <polyline points={__v.trend?.line} fill={"none"} stroke={"#0d3b2a"} strokeWidth={"2.5"}></polyline>
-                  <g>
-                    {(__v.trend?.pts || []).map((p, $index) => (<React.Fragment key={$index}>
-                      <circle cx={p?.x} cy={p?.y} r={"4.5"} fill={"#fff"} stroke={"#0d3b2a"} strokeWidth={"2"}></circle>
-                      <text x={p?.x} y={p?.ly} textAnchor={"middle"} style={{ font: "600 10.5px Inter,sans-serif", fill: "#111827" }}>{p?.v}</text>
-                      <text x={p?.x} y={"192"} textAnchor={"middle"} style={{ font: "500 10px Inter,sans-serif", fill: "#6b7280" }}>{p?.q}</text>
-                    </React.Fragment>))}
-                  </g>
-                </svg>
-              </div>
-              <div style={{ display: "flex", gap: "16px", padding: "0 20px 16px", fontSize: "11.5px", color: "#4b5563" }}>
-                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "16px", height: "3px", background: "#0d3b2a" }}></span>{__v.trendShort}</span>
-                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "16px", borderTop: "2px dashed #cbd2da" }}></span>Organisation</span>
-              </div>
-            </div>
-          </div>
-          <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "18px 20px" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "10px" }}>
-              <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Gap distribution</div>
-              <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{__v.distTotal} competency ratings · {__v.periodLabel}</span>
-            </div>
-            <div style={{ display: "flex", height: "22px", borderRadius: "6px", overflow: "hidden", marginTop: "14px", gap: "2px" }}>
-              {(__v.dist || []).map((g, $index) => (<React.Fragment key={$index}>
-                <div style={{ flex: g?.count, background: g?.bg, color: g?.fg, font: "600 10.5px Inter,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{g?.pct}</div>
-              </React.Fragment>))}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", marginTop: "12px", fontSize: "11.5px", color: "#4b5563" }}>
-              {(__v.dist || []).map((g, $index) => (<React.Fragment key={$index}>
-                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "3px", background: g?.bg }}></span>{g?.n} · {g?.label} ({g?.count})</span>
-              </React.Fragment>))}
-            </div>
-          </div>
-        </>) : null}
-        {(__v.isHeat) ? (<>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
-            <div style={{ flex: "3 1 560px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-              <div style={{ padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Average gap by department and skill category</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>Click a cell to see individual assessment records</div>
-              </div>
-              <div style={{ padding: "16px 20px 20px", overflowX: "auto" }}>
-                <div style={{ minWidth: "640px", display: "grid", gridTemplateColumns: "180px repeat(5,minmax(0,1fr))", gap: "4px" }}>
-                  <span></span>
-                  {(__v.cats || []).map((c, $index) => (<React.Fragment key={$index}>
-                    <span style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", padding: "0 4px 6px", textTransform: "uppercase" }}>{c}</span>
-                  </React.Fragment>))}
-                  {(__v.heatRows || []).map((r, $index) => (<React.Fragment key={$index}>
-                    <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", paddingRight: "8px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: "500" }}>{r?.name}</span>
-                      <span style={{ fontSize: "11.5px", color: "#6b7280" }}>{r?.staff} staff</span>
-                    </div>
-                    {(r?.cells || []).map((cell, $index) => (<React.Fragment key={$index}>
-                      <button onClick={cell?.pick} title={cell?.title} style={{ height: "46px", borderRadius: "6px", cursor: "pointer", font: "600 12.5px Inter,sans-serif", background: cell?.bg, color: cell?.fg, border: cell?.border }}>{cell?.label}</button>
-                    </React.Fragment>))}
-                  </React.Fragment>))}
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", marginTop: "16px", fontSize: "11.5px", color: "#4b5563" }}>
-                  {(__v.gapScale || []).map((g, $index) => (<React.Fragment key={$index}>
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "12px", height: "12px", borderRadius: "3px", background: g?.bg }}></span>{g?.n} · {g?.label}</span>
-                  </React.Fragment>))}
-                </div>
-              </div>
-            </div>
-            <div style={{ flex: "2 1 320px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-              <div style={{ padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <div style={{ fontSize: "16.5px", fontWeight: "600" }}>{__v.drillTitle}</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>{__v.drillSub}</div>
-              </div>
-              {(__v.noDrill) ? (<>
-                <div style={{ padding: "36px 20px", textAlign: "center", fontSize: "13.5px", color: "#6b7280" }}>Select a cell in the heatmap.</div>
-              </>) : null}
-              {(__v.drill || []).map((p, $index) => (<React.Fragment key={$index}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                  <span style={{ width: "34px", height: "34px", borderRadius: "50%", background: "#e6f2ea", color: "#0d3b2a", display: "flex", alignItems: "center", justifyContent: "center", font: "600 12px Inter,sans-serif", flex: "none" }}>{p?.initials}</span>
-                  <div style={{ flex: "1", minWidth: "0" }}>
-                    <div style={{ fontSize: "13.5px", fontWeight: "500" }}>{p?.name}</div>
-                    <div style={{ fontSize: "12px", color: "#6b7280" }}>{p?.role} · target {p?.target}, actual {p?.actual}</div>
-                  </div>
-                  <span style={{ font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "3px 9px", background: p?.bg, color: p?.fg }}>{p?.gap}</span>
-                </div>
-              </React.Fragment>))}
-            </div>
-          </div>
-        </>) : null}
-        {(__v.isReports) ? (<>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
-            <div style={{ flex: "1 1 320px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Build a report</div>
-              <div style={{ display: "flex", background: "rgba(118,118,128,.12)", borderRadius: "10px", padding: "3px", gap: "3px" }}>
-                {(__v.rtypes || []).map((t, $index) => (<React.Fragment key={$index}>
-                  <button onClick={t?.onClick} style={{ flex: "1", height: "30px", border: "0", borderRadius: "6px", cursor: "pointer", font: "500 12.5px Inter,sans-serif", background: t?.bg, color: t?.fg }}>{t?.label}</button>
-                </React.Fragment>))}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FROM<input type={"date"} value={__v.from} onChange={__v.onFrom} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
-                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>TO<input type={"date"} value={__v.to} onChange={__v.onTo} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
-              </div>
-              <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DEPARTMENT<select value={__v.rDept} onChange={__v.onRDept} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
-                  <option value={"All"}>All departments</option>
-                  {(__v.deptNames || []).map((n, $index) => (<React.Fragment key={$index}>
-                    <option value={n}>{n}</option>
-                  </React.Fragment>))}
-                </select></label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>GAP BAND<select value={__v.band} onChange={__v.onBand} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
-                    <option value={"All"}>All gaps</option>
-                    <option value={"0"}>0 · No gap</option>
-                    <option value={"1-2"}>1–2 · Minimal/Moderate</option>
-                    <option value={"3+"}>3+ · Noticeable or worse</option>
-                  </select></label>
-                <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EVALUATOR<select value={__v.evaluator} onChange={__v.onEval} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
-                    <option value={"All"}>All</option>
-                    <option value={"Self"}>Self</option>
-                    <option value={"Manager"}>Manager</option>
-                    <option value={"360°"}>360°</option>
-                  </select></label>
-              </div>
-              <div>
-                <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", marginBottom: "8px" }}>COLUMNS</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {(__v.cols || []).map((c, $index) => (<React.Fragment key={$index}>
-                    <button onClick={c?.toggle} style={{ height: "28px", padding: "0 10px", borderRadius: "999px", cursor: "pointer", font: "500 12px Inter,sans-serif", background: c?.bg, color: c?.fg, border: `1px solid ${c?.border ?? ""}` }}>{c?.label}</button>
-                  </React.Fragment>))}
-                </div>
-              </div>
-              <div>
-                <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", marginBottom: "8px" }}>FORMAT</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {(__v.formats || []).map((f, $index) => (<React.Fragment key={$index}>
-                    <button onClick={f?.pick} style={{ height: "30px", padding: "0 12px", borderRadius: "10px", cursor: "pointer", font: "600 12px Inter,sans-serif", background: f?.bg, color: f?.fg, border: `1px solid ${f?.border ?? ""}` }}>{f?.label}</button>
-                  </React.Fragment>))}
-                </div>
-              </div>
-              <button onClick={__v.generate} style={{ height: "40px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13.5px Inter,sans-serif", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}><i className={"icon-download"} style={{ fontSize: "15px" }}></i>Generate {__v.fmt}</button>
-            </div>
-            <div style={{ flex: "2 1 520px", minWidth: "0", display: "flex", flexDirection: "column", gap: "20px" }}>
-              <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(15,35,65,.07)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "8px" }}>
-                  <span style={{ fontSize: "16.5px", fontWeight: "600" }}>Preview</span>
-                  <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{__v.previewCount} rows</span>
-                </div>
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", font: "400 13px Inter,sans-serif", minWidth: "560px" }}>
-                    <thead>
-                      <tr>
-                        {(__v.headers || []).map((h, $index) => (<React.Fragment key={$index}>
-                          <th style={{ textAlign: "left", padding: "10px 14px", font: "600 10px Inter,sans-serif", letterSpacing: ".5px", color: "#6b7280", borderBottom: "1px solid rgba(15,35,65,.07)", whiteSpace: "nowrap" }}>{h}</th>
-                        </React.Fragment>))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(__v.preview || []).map((r, $index) => (<React.Fragment key={$index}>
-                        <tr>
-                          {(r || []).map((cell, $index) => (<React.Fragment key={$index}>
-                            <td style={{ padding: "10px 14px", borderBottom: "1px solid rgba(15,35,65,.07)", color: "#111827", whiteSpace: "nowrap" }}>{cell}</td>
-                          </React.Fragment>))}
-                        </tr>
-                      </React.Fragment>))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Recent exports</div>
-                {(__v.exportsList || []).map((e, $index) => (<React.Fragment key={$index}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                    <span style={{ font: "700 10px 'JetBrains Mono',monospace", background: "#e6f2ea", color: "#0d3b2a", borderRadius: "6px", padding: "4px 7px" }}>{e?.fmt}</span>
-                    <span style={{ flex: "1", fontSize: "13.5px", minWidth: "0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e?.name}</span>
-                    <span style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "nowrap" }}>{e?.when}</span>
-                  </div>
-                </React.Fragment>))}
-              </div>
-            </div>
-          </div>
-        </>) : null}
-        {(__v.isSchedules) ? (<>
-          <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-              <div>
-                <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Scheduled reports</div>
-                <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>Sent automatically by email</div>
-              </div>
-              <button onClick={__v.toggleAdd} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-plus"} style={{ fontSize: "14px" }}></i>New schedule</button>
-            </div>
-            {(__v.adding) ? (<>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-end", padding: "16px 20px", background: "rgba(255,255,255,.4)", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <label style={{ flex: "2 1 220px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>REPORT NAME<input value={__v.sName} onChange={__v.onSName} placeholder={"e.g. Weekly completion summary"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif" }} /></label>
-                <label style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FREQUENCY<select value={__v.sFreq} onChange={__v.onSFreq} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff" }}>
-                    <option value={"Daily"}>Daily</option>
-                    <option value={"Weekly"}>Weekly</option>
-                    <option value={"Monthly"}>Monthly</option>
-                  </select></label>
-                <label style={{ flex: "1 1 110px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FORMAT<select value={__v.sFmt} onChange={__v.onSFmt} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13.5px Inter,sans-serif", background: "#fff" }}>
-                    <option value={"PDF"}>PDF</option>
-                    <option value={"Excel"}>Excel</option>
-                    <option value={"CSV"}>CSV</option>
-                  </select></label>
-                <label style={{ flex: "2 1 240px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>RECIPIENTS<input value={__v.sTo} onChange={__v.onSTo} placeholder={"name@dvla.gov.gh, …"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif" }} /></label>
-                <button onClick={__v.saveSchedule} style={{ height: "36px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.sSaveBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>Save</button>
-              </div>
-            </>) : null}
-            {(__v.schedules || []).map((r, $index) => (<React.Fragment key={$index}>
-              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px", padding: "14px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
-                <span style={{ width: "38px", height: "38px", borderRadius: "9px", background: "#e6f2ea", color: "#0d3b2a", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
-                  <i className={"icon-calendar-clock"} style={{ fontSize: "17px" }}></i>
-                </span>
-                <div style={{ flex: "2 1 220px", minWidth: "0" }}>
-                  <div style={{ fontSize: "14.5px", fontWeight: "500" }}>{r?.name}</div>
-                  <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "2px", overflowWrap: "anywhere" }}>{r?.freq} · {r?.fmt} · {r?.to}</div>
-                </div>
-                <div style={{ flex: "0 0 130px" }}>
-                  <div style={{ font: "600 10px Inter,sans-serif", letterSpacing: ".5px", color: "#6b7280" }}>NEXT RUN</div>
-                  <div style={{ fontSize: "13px", marginTop: "3px" }}>{r?.next}</div>
-                </div>
-                <button onClick={r?.toggle} title={"Active"} style={{ width: "40px", height: "22px", borderRadius: "999px", border: "0", cursor: "pointer", padding: "2px", display: "flex", justifyContent: r?.justify, background: r?.bg }}>
-                  <span style={{ width: "18px", height: "18px", borderRadius: "50%", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }}></span>
-                </button>
-                <button onClick={r?.remove} style={{ background: "none", border: "0", cursor: "pointer", color: "#9ca3af", display: "flex", padding: "4px" }}>
-                  <i className={"icon-trash-2"} style={{ fontSize: "15px" }}></i>
-                </button>
-              </div>
-            </React.Fragment>))}
-          </div>
-        </>) : null}
-        {(__v.toast) ? (<>
-          <div style={{ position: "fixed", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: "80", background: "#111827", color: "#fff", font: "500 13px Inter,sans-serif", padding: "10px 16px", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,.25)", display: "flex", alignItems: "center", gap: "8px" }}><i className={"icon-circle-check"} style={{ fontSize: "15px", color: "#4ade80" }}></i>{__v.toast}</div>
-        </>) : null}
-      </div>
-    </>
+        <PageHeader title={title} description={desc} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff · click a department name to open its competency view</span></>} />
+        <Card title="Average gap by department and skill category" sub="Click a cell to see the staff and competencies behind it" flush>
+          <HeatGrid D={D} rows={D.depts.map(dp => { const list = model.staff.filter(s => s.dept === dp.name); return { key: dp.name, label: dp.name, sub: list.length + ' staff', list }; })}
+            cols={D.categories.map(c => ({ key: c, label: c, pred: x => x.category === c }))}
+            onCell={(r, c) => openRecords(c.label + ' · ' + r.label, r.list, c.pred, 'Average gap in this category')}
+            onRow={setLocal ? r => setLocal(r.key) : null} />
+        </Card>
+      </>
     );
   }
+  const comps = D.framework.filter(c => (!c.dept || c.dept === dept) && (catFilter === ALL || c.category === catFilter));
+  return (
+    <>
+      <PageHeader title={title} description={desc} filters={<>{deptFilter}<Sel value={catFilter} onChange={setCat} options={[[ALL, 'All categories'], ...D.categories.map(c => [c, c])]} /><span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff × {comps.length} competencies</span></>} />
+      <Card title={dept + ' · gap per person and competency'} sub="Click a name for the individual report, a column for everyone on that competency, or a cell for that record" flush>
+        <HeatGrid D={D} labelW={200} rows={[...staff].sort((a, b) => b.avgGap - a.avgGap).map(s => ({ key: s.id, label: s.name, sub: s.designation, list: [s] }))}
+          cols={comps.map(c => ({ key: c.id, label: c.short, title: c.name, pred: x => x.id === c.id, name: c.name }))}
+          onRow={r => go('report', null, r.key)}
+          onCol={c => openRecords(c.name + ' · ' + dept, staff, c.pred)}
+          onCell={(r, c) => openRecords(c.name + ' · ' + r.label, r.list, c.pred, dept)} />
+      </Card>
+    </>
+  );
 }
 
+function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
+  const [rtype, setRtype] = useState('individual');
+  const [pid, setPid] = useState(null);
+  const [pq, setPq] = useState('');
+  const [from, setFrom] = useState('2026-01-01');
+  const [to, setTo] = useState('2026-12-31');
+  const [band, setBand] = useState('All');
+  const [evaluator, setEvaluator] = useState('All');
+  const [status, setStatus] = useState('All');
+  const [cols, setCols] = useState(['Staff ID', 'Name', 'Department', 'Competency', 'Target', 'Actual', 'Gap', 'Status']);
+  const [fmt, setFmt] = useState('CSV');
+  const [exportsList, setExports] = useState([{ fmt: 'PDF', name: 'Q3 2026 organisation summary', when: '30 Sep 2026' }, { fmt: 'XLSX', name: 'IT Department gap register', when: '18 Sep 2026' }]);
+  const staff = inScope(model, dept);
+  const picks = staff.filter(s => !pq.trim() || (s.name + ' ' + s.staffNo + ' ' + s.designation).toLowerCase().includes(pq.trim().toLowerCase()));
+  const person = pid && staff.find(s => s.id === pid) ? pid : null;
+  const rep = rtype === 'individual' && person ? individualReport(D, model, person) : null;
+  const inBand = g => band === 'All' || (band === '0' && g === 0) || (band === '1-2' && g >= 1 && g <= 2) || (band === '3+' && g >= 3) || (band === '4+' && g >= 4);
+  const rows = [];
+  staff.forEach(s => {
+    if (status !== 'All' && s.status !== status) return;
+    s.comps.forEach(c => {
+      const ev = c.source !== CURRENT ? 'Previous cycle' : c.adjusted ? 'Manager-adjusted' : s.status === 'Confirmed' ? 'Manager-confirmed' : 'System';
+      const date = c.source === CURRENT ? s.submittedIso : QDATE[c.source];
+      if (!inBand(c.gap) || (evaluator !== 'All' && ev !== evaluator) || date < from || date > to) return;
+      rows.push({ 'Staff ID': s.staffNo, Name: s.name, Department: s.dept, Designation: s.designation, Category: c.category, Competency: c.name, Target: c.target, Actual: c.actual, Gap: c.gap, Status: s.status, Evaluator: ev, Date: date, _gap: c.gap });
+    });
+  });
+  let headers = RCOLS.filter(c => cols.includes(c)), out = rows;
+  if (rtype === 'summary') {
+    const g = {};
+    rows.forEach(r => { const k = r.Department + '|' + r.Category; (g[k] = g[k] || []).push(r); });
+    out = Object.values(g).map(l => ({ Department: l[0].Department, Category: l[0].Category, Staff: new Set(l.map(r => r['Staff ID'])).size, Records: l.length, 'Avg target': avg(l.map(r => r.Target)).toFixed(1), 'Avg actual': avg(l.map(r => r.Actual)).toFixed(1), 'Avg gap': avg(l.map(r => r.Gap)).toFixed(1), 'Gaps ≥ 3': l.filter(r => r.Gap >= 3).length, _gap: Math.round(avg(l.map(r => r.Gap))) }))
+      .sort((a, b) => a.Department.localeCompare(b.Department) || a.Category.localeCompare(b.Category));
+    headers = SUMCOLS;
+  }
+  const label = rtype === 'individual' ? (rep ? 'Individual record · ' + rep.s.name : 'Individual record') : rtype === 'summary' ? 'Group summary' : 'Staff records';
+  const generate = () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (rtype === 'individual') {
+      if (!rep) { flash('Pick a staff member first'); return; }
+      if (fmt === 'PDF') { flash('PDF is being generated. It will appear in Recent exports.'); }
+      else reportExport(rep, fmt, 'individual-record-' + slugify(rep.s.name) + '-' + stamp);
+      setExports(e => [{ fmt: fmt === 'Excel' ? 'XLSX' : fmt, name: label, when: 'Just now' }, ...e].slice(0, 6));
+      if (fmt !== 'PDF') flash(fmt + ' downloaded for ' + rep.s.name);
+      return;
+    }
+    const name = 'skill-matrix-' + slugify(label) + '-' + slugify(dept) + '-' + stamp;
+    const data = out.map(r => Object.fromEntries(headers.map(h => [h, r[h]])));
+    if (fmt === 'CSV') download(name + '.csv', toCSV(headers, data), 'text/csv');
+    else if (fmt === 'JSON') download(name + '.json', JSON.stringify({ report: label, department: dept === ALL ? 'All departments' : dept, generated: new Date().toISOString(), filters: { from, to, band, evaluator, status }, rows: data }, null, 2), 'application/json');
+    else if (fmt === 'XML') download(name + '.xml', '<?xml version="1.0" encoding="UTF-8"?>\n<report name="' + xmlEscape(label) + '" department="' + xmlEscape(dept === ALL ? 'All departments' : dept) + '">\n' + data.map(r => '  <row>' + headers.map(h => '<' + tag(h) + '>' + xmlEscape(r[h]) + '</' + tag(h) + '>').join('') + '</row>').join('\n') + '\n</report>', 'application/xml');
+    else if (fmt === 'Excel') import('xlsx').then(X => { const ws = X.utils.json_to_sheet(data, { header: headers }); const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Report'); X.writeFile(wb, name + '.xlsx'); });
+    setExports(e => [{ fmt: fmt === 'Excel' ? 'XLSX' : fmt, name: label + ' · ' + out.length + ' rows', when: 'Just now' }, ...e].slice(0, 6));
+    flash(fmt === 'PDF' ? 'PDF is being generated. It will appear in Recent exports.' : fmt + ' downloaded (' + out.length + ' rows)');
+  };
+  const seg = (v, l) => <button key={v} type="button" onClick={() => setRtype(v)} style={{ flex: '1', height: '30px', border: '0', borderRadius: '6px', cursor: 'pointer', font: '500 12.5px Inter,sans-serif', background: rtype === v ? '#fff' : 'transparent', color: rtype === v ? '#111827' : '#4b5563', whiteSpace: 'nowrap' }}>{l}</button>;
+  const tableCols = headers.map(h => ({ key: h, label: h, render: h === 'Gap' || h === 'Avg gap' ? r => <GapBadge gap={r._gap} GAP={D.GAP} /> : h === 'Status' ? r => <StatusBadge status={r.Status} /> : h === 'Name' && rtype === 'records' ? r => <span>{r.Name}</span> : undefined }));
+  return (
+    <>
+      <PageHeader title={title} description={desc} actions={<Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff in scope</span></>} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
+        <Card title="Build a report" style={{ flex: '1 1 320px', maxWidth: '420px' }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', background: 'rgba(118,118,128,.12)', borderRadius: '10px', padding: '3px', gap: '3px' }}>{seg('individual', 'Individual record')}{seg('records', 'Staff records')}{seg('summary', 'Group summary')}</div>
+          {rtype === 'individual' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280' }}>STAFF MEMBER</div>
+              <Search value={pq} onChange={setPq} placeholder={'Search ' + staff.length + ' staff by name or ID'} style={{ flex: 'none' }} />
+              <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid rgba(15,35,65,.08)', borderRadius: '12px', background: 'rgba(255,255,255,.6)' }}>
+                {picks.length ? picks.map(s => (
+                  <button key={s.id} type="button" onClick={() => setPid(s.id)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px 12px', border: '0', borderBottom: '1px solid rgba(15,35,65,.05)', background: person === s.id ? '#e6f2ea' : 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ minWidth: '0' }}><span style={{ display: 'block', font: '500 13px Inter,sans-serif', color: '#111827' }}>{s.name}</span><span style={{ fontSize: '11.5px', color: '#6b7280' }}>{s.designation} · {s.dept}</span></span>
+                    {person === s.id ? <i className="icon-check" style={{ color: '#15904c' }}></i> : null}
+                  </button>)) : <EmptyState icon="icon-user-search" title="No staff match" />}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <Field label="FROM"><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={INPUT} /></Field>
+                <Field label="TO"><input type="date" value={to} onChange={e => setTo(e.target.value)} style={INPUT} /></Field>
+                <Field label="GAP BAND"><Sel value={band} onChange={setBand} options={[['All', 'All gaps'], ['0', '0 · No gap'], ['1-2', '1–2 · Minimal/Moderate'], ['3+', '3+ · Noticeable or worse'], ['4+', '4+ · Significant or critical']]} /></Field>
+                <Field label="RESULT SOURCE"><Sel value={evaluator} onChange={setEvaluator} options={EVALUATORS} /></Field>
+                <Field label="STATUS" style={{ gridColumn: 'span 2' }}><Sel value={status} onChange={setStatus} options={[['All', 'All statuses'], ...STATUSES]} /></Field>
+              </div>
+              {rtype === 'records' ? <div>
+                <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', marginBottom: '8px' }}>COLUMNS</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {RCOLS.map(x => { const on = cols.includes(x); return <button key={x} type="button" onClick={() => setCols(on ? cols.filter(y => y !== x) : RCOLS.filter(y => y === x || cols.includes(y)))} style={{ height: '28px', padding: '0 10px', borderRadius: '999px', cursor: 'pointer', font: '500 12px Inter,sans-serif', background: on ? '#0d3b2a' : '#fff', color: on ? '#fff' : '#374151', border: '1px solid ' + (on ? '#0d3b2a' : 'rgba(15,35,65,.14)') }}>{x}</button>; })}
+                </div>
+              </div> : null}
+            </>
+          )}
+          <div>
+            <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', marginBottom: '8px' }}>FORMAT</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {['CSV', 'Excel', 'JSON', 'XML', 'PDF'].map(f => <button key={f} type="button" onClick={() => setFmt(f)} style={{ height: '30px', padding: '0 12px', borderRadius: '10px', cursor: 'pointer', font: '600 12px Inter,sans-serif', background: fmt === f ? '#e6f2ea' : '#fff', color: fmt === f ? '#0d3b2a' : '#4b5563', border: '1px solid ' + (fmt === f ? '#0d3b2a' : 'rgba(15,35,65,.14)') }}>{f}</button>)}
+            </div>
+          </div>
+          <Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>
+        </Card>
+        <div style={{ flex: '2 1 520px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {rtype === 'individual' ? (rep ? <IndividualReportView D={D} rep={rep} go={go} compact />
+            : <Card title="Preview"><EmptyState icon="icon-user-search" title="Pick a staff member" text="The report covers only that person: their details, target profile, each competency's target, actual and gap, history across cycles and recommended trainings." /></Card>)
+            : <Card title="Preview" sub={label + ' · exactly what will be exported'} actions={<span style={{ fontSize: '12.5px', color: '#6b7280' }}>{out.length} rows</span>} flush>
+              <DataTable columns={tableCols} rows={out} maxHeight="560px" minWidth={Math.max(560, headers.length * 110)} empty={<EmptyState icon="icon-filter" title="No rows match" text="Widen the date range or clear a filter." />} />
+            </Card>}
+          <Card title="Recent exports" flush>
+            {exportsList.map((e, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
+                <span style={{ font: "700 10px 'JetBrains Mono',monospace", background: '#e6f2ea', color: '#0d3b2a', borderRadius: '6px', padding: '4px 7px' }}>{e.fmt}</span>
+                <span style={{ flex: '1', fontSize: '13.5px', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
+                <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>{e.when}</span>
+              </div>))}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
 
-export default SMAnalytics;
+function Schedules({ title, desc, flash }) {
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({ name: '', freq: 'Weekly', fmt: 'PDF', to: '' });
+  const [list, setList] = useState([
+    { id: 1, name: 'Weekly assessment completion', freq: 'Weekly', fmt: 'PDF', to: 'hr.director@dvla.gov.gh', next: 'Mon · 07:00', on: true },
+    { id: 2, name: 'Monthly skills gap register', freq: 'Monthly', fmt: 'Excel', to: 'it.director@dvla.gov.gh, hr.director@dvla.gov.gh', next: '1st · 07:00', on: true },
+    { id: 3, name: 'Daily training needs digest', freq: 'Daily', fmt: 'CSV', to: 'training.unit@dvla.gov.gh', next: 'Tomorrow · 06:00', on: false }]);
+  const canSave = f.name.trim() && /@/.test(f.to);
+  const save = () => { if (!canSave) { flash('Add a name and at least one email address'); return; }
+    setList([...list, { id: Date.now(), name: f.name.trim(), freq: f.freq, fmt: f.fmt, to: f.to.trim(), next: { Daily: 'Tomorrow · 06:00', Weekly: 'Mon · 07:00', Monthly: '1st · 07:00' }[f.freq], on: true }]);
+    setAdding(false); setF({ name: '', freq: 'Weekly', fmt: 'PDF', to: '' }); flash('Schedule created'); };
+  return (
+    <>
+      <PageHeader title={title} description={desc} actions={<Btn kind="primary" icon="icon-plus" onClick={() => setAdding(!adding)}>New schedule</Btn>} />
+      <Card title="Scheduled reports" sub={list.filter(x => x.on).length + ' of ' + list.length + ' active · sent by email'} flush>
+        {adding ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', padding: '16px 20px', background: 'rgba(255,255,255,.4)', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
+            <Field label="REPORT NAME" style={{ flex: '2 1 220px' }}><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Weekly completion summary" style={INPUT} /></Field>
+            <Field label="FREQUENCY" style={{ flex: '1 1 140px' }}><Sel value={f.freq} onChange={v => setF({ ...f, freq: v })} options={['Daily', 'Weekly', 'Monthly']} /></Field>
+            <Field label="FORMAT" style={{ flex: '1 1 110px' }}><Sel value={f.fmt} onChange={v => setF({ ...f, fmt: v })} options={['PDF', 'Excel', 'CSV']} /></Field>
+            <Field label="RECIPIENTS" style={{ flex: '2 1 240px' }}><input value={f.to} onChange={e => setF({ ...f, to: e.target.value })} placeholder="name@dvla.gov.gh, …" style={INPUT} /></Field>
+            <Btn kind="primary" onClick={save} disabled={!canSave}>Save</Btn>
+          </div>) : null}
+        {list.length ? list.map(r => (
+          <div key={r.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', padding: '14px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
+            <span style={{ width: '38px', height: '38px', borderRadius: '9px', background: '#e6f2ea', color: '#0d3b2a', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}><i className="icon-calendar-clock" style={{ fontSize: '17px' }}></i></span>
+            <div style={{ flex: '2 1 220px', minWidth: '0' }}>
+              <div style={{ fontSize: '14.5px', fontWeight: '500' }}>{r.name}</div>
+              <div style={{ fontSize: '12.5px', color: '#6b7280', marginTop: '2px', overflowWrap: 'anywhere' }}>{r.freq} · {r.fmt} · {r.to}</div>
+            </div>
+            <div style={{ flex: '0 0 130px' }}><div style={{ font: '600 10px Inter,sans-serif', letterSpacing: '.5px', color: '#6b7280' }}>NEXT RUN</div><div style={{ fontSize: '13px', marginTop: '3px' }}>{r.on ? r.next : 'Paused'}</div></div>
+            <Toggle on={r.on} onClick={() => setList(list.map(x => x.id === r.id ? { ...x, on: !x.on } : x))} label="" />
+            <button type="button" onClick={() => setList(list.filter(x => x.id !== r.id))} title="Delete" style={{ background: 'none', border: '0', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: '4px' }}><i className="icon-trash-2" style={{ fontSize: '15px' }}></i></button>
+          </div>)) : <EmptyState icon="icon-calendar-clock" title="No scheduled reports" text="Create one to email a report automatically." />}
+      </Card>
+    </>
+  );
+}

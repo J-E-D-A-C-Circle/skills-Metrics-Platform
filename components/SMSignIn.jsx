@@ -69,7 +69,7 @@ class SMSignIn extends React.Component {
             </div>
             <div style={{ position: "relative", maxWidth: "460px" }}>
               <div style={{ fontSize: "clamp(28px,3vw,40px)", fontWeight: "700", letterSpacing: "-0.6px", lineHeight: "1.15" }}>Know your skills.<br />Close the gaps.</div>
-              <div style={{ fontSize: "15px", color: "#cfe6d8", marginTop: "14px", lineHeight: "1.6" }}>Timed assessments, manager evaluations and development plans in one place.</div>
+              <div style={{ fontSize: "15px", color: "#cfe6d8", marginTop: "14px", lineHeight: "1.6" }}>Timed assessments, automatic scoring, manager review and training needs in one place.</div>
             </div>
             <div style={{ position: "relative", fontSize: "12.5px", color: "#a9cdb9" }}>© 2026 Skill Matrix &amp; Assessment Platform</div>
           </div>

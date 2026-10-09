@@ -1,9 +1,10 @@
 'use client';
 import React from 'react';
 import __css from './SMHome.module.css';
+import AdminHome from './SMAdminHome';
 
 
-class SMHome extends React.Component {
+class PersonalHome extends React.Component {
   state = { heatOpen: true, alert: true, ym: null, avatar: null };
 
   componentDidMount() {
@@ -29,7 +30,7 @@ class SMHome extends React.Component {
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
-    const st = this.props.status || 'not_started', role = this.props.role || 'staff', C = d.cycle;
+    const st = this.props.status || 'not_started', role = this.props.role || 'staff', C = d.cycle, ft = this.props.features || {};
     const comps = d.comps.map(c => ({ ...c, gapLabel: d.GAP[c.gap].label, gapBg: d.GAP[c.gap].bg, gapFg: d.GAP[c.gap].fg,
       impLabel: c.importance + ' · ' + d.IMP[c.importance].short, impBg: d.IMP[c.importance].bg }));
     const total = comps.length, avg = comps.reduce((a, c) => a + c.actual, 0) / total, maxGap = Math.max(...comps.map(c => c.gap));
@@ -43,7 +44,7 @@ class SMHome extends React.Component {
     const same = (a, y, m, dd) => a.getFullYear() === y && a.getMonth() === m && a.getDate() === dd;
     for (let i = 0; i < first; i++) days.push({ label: '', bg: 'transparent', fg: '#374151', weight: 400, dot: 'transparent', title: '' });
     for (let dd = 1; dd <= dim; dd++) {
-      const isA = same(C.day, ym[0], ym[1], dd), isR = same(C.results, ym[0], ym[1], dd), isM = same(C.mgrClose, ym[0], ym[1], dd), isP = same(C.plans, ym[0], ym[1], dd);
+      const isA = same(C.day, ym[0], ym[1], dd), isR = same(C.results, ym[0], ym[1], dd), isM = same(C.mgrClose, ym[0], ym[1], dd), isP = !!ft.developmentPlan && same(C.plans, ym[0], ym[1], dd);
       days.push({ label: String(dd).padStart(2, '0'), bg: isA ? '#0d3b2a' : 'transparent', fg: isA ? '#fff' : '#374151', weight: isA ? 700 : 400,
         dot: isA ? '#ea7a12' : (isR || isM || isP) ? '#111827' : 'transparent', title: isA ? 'Assessment day' : isR ? 'Results released' : isM ? 'Manager evaluations close' : isP ? 'Development plans due' : '' });
     }
@@ -57,7 +58,8 @@ class SMHome extends React.Component {
       gapDist: d.GAP.map((g, i) => ({ count: comps.filter(c => c.gap === i).length, bg: g.bg, title: i + ' · ' + g.label })).filter(g => g.count),
       showAlert: s.alert, hideAlert: () => this.setState({ alert: false }),
       topGaps: [...comps].sort((a, b) => b.gap * b.importance - a.gap * a.importance).slice(0, 5),
-      quick: [{ icon: 'icon-upload', title: 'Upload Evidence', sub: 'Attach certificates to back up your ratings', onClick: () => go('evidence') }, { icon: 'icon-target', title: 'Development Plan', sub: '1 action is waiting for manager approval', onClick: () => go('plan') }],
+      quick: [ft.evidence ? { icon: 'icon-upload', title: 'Upload Evidence', sub: 'Attach certificates to back up your ratings', onClick: () => go('evidence') } : null, ft.developmentPlan ? { icon: 'icon-target', title: 'Development Plan', sub: '1 action is waiting for manager approval', onClick: () => go('plan') } : null,
+        { icon: 'icon-clipboard-list', title: 'My Assessments', sub: 'Your cycles, results and reports', onClick: () => go('assessments') }, { icon: 'icon-radar', title: 'Skill Profile', sub: 'Target vs actual for each competency', onClick: () => go('profile', 'skills') }].filter(Boolean),
       majors: d.majors.map(m => ({ ...m, targetPct: (m.t / 5 * 100) + '%', actualPct: (m.a / 5 * 100) + '%' })),
       showTeam: role === 'manager' || role === 'admin', heatOpen: s.heatOpen, heatChev: s.heatOpen ? 'icon-chevron-up' : 'icon-chevron-down', toggleHeat: () => this.setState({ heatOpen: !s.heatOpen }),
       heat: d.team.map(t => ({ name: t.name, role: t.role, cells: t.gaps.map((g, i) => ({ label: g === 0 ? '✓' : g, bg: d.GAP[g].bg, fg: d.GAP[g].fg, title: d.majors[i].name + ': ' + d.GAP[g].label })) })),
@@ -69,7 +71,7 @@ class SMHome extends React.Component {
         { name: 'ASSESSMENT DAY (TIMED)', when: C.dayLabel, ring: '#ea7a12', fill: st === 'submitted' ? '#ea7a12' : '#fff' },
         { name: 'MANAGER EVALUATIONS CLOSE', when: C.mgrCloseLabel, ring: '#111827', fill: '#fff' },
         { name: 'RESULTS RELEASED', when: C.resultsLabel, ring: '#111827', fill: '#fff' },
-        { name: 'DEVELOPMENT PLANS DUE', when: C.plansLabel, ring: '#2fb36b', fill: '#fff' }],
+        ft.developmentPlan ? { name: 'DEVELOPMENT PLANS DUE', when: C.plansLabel, ring: '#2fb36b', fill: '#fff' } : null].filter(Boolean),
     };
   }
   render() {
@@ -180,7 +182,7 @@ class SMHome extends React.Component {
               <div>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>DESIGNATION</div>
                 <div style={{ fontSize: "18px", fontWeight: "600", marginTop: "6px" }}>IT OFFICER</div>
-                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>Target: IT Officer · Grade 10</div>
+                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>Target: {this.props.data?.user?.target}</div>
               </div>
               <div>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>ASSESSMENT DAY</div>
@@ -427,4 +429,6 @@ class SMHome extends React.Component {
 }
 
 
-export default SMHome;
+export default function SMHome(props) {
+  return props.role === 'admin' ? <AdminHome {...props} /> : <PersonalHome {...props} />;
+}
