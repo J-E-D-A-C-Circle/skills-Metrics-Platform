@@ -1,10 +1,20 @@
 'use client';
+// =============================================================================
+// SMTraining.jsx · Training Needs: who needs which training, by competency or by staff
+// Screen / URL: /training (tab "All Needs"; the "Top Training Needs" tab is drawn by SMAnalytics.jsx)
+// Who sees it: admin (all departments); manager (own department only)
+// Used by: SkillMatrixApp.jsx (training page, view "training")   Depends on: ./smUI, ./smModel (inScope)
+// Sections (search for these markers): TRAINING · All Needs page (/training), TRAINING · State & filters, TRAINING · Grouping needs (by competency / by staff), TRAINING · CSV export, TRAINING · Small UI helpers (name link, mode switch), TRAINING · Render, TRAINING · Page header (scope, mode switch, min gap, search), TRAINING · KPI tiles, TRAINING · By competency list or By staff table, TRAINING · Competency rows (click to expand), TRAINING · Expanded list of staff for a competency, TRAINING · By staff table, TRAINING · Toast
+// =============================================================================
 import React, { useMemo, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Badge, GapBadge, StatusBadge, EmptyState, DataTable, KpiTile, Toast, ScopeSelect, download, toCSV, slugify } from './smUI';
 import { ALL, inScope } from './smModel';
 
+// ===== TRAINING · All Needs page (/training) =====
 // Who needs which training, grouped by competency or by person.
 export default function SMTraining({ data: D, model, go, role, scope, myDept }) {
+  // ===== TRAINING · State & filters =====
+  // Managers are locked to their own department; admins pick one here (defaults to the global scope).
   const [local, setLocal] = useState(null);
   const locked = role === 'manager';
   const dept = locked ? myDept : (local ?? scope);
@@ -14,6 +24,8 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
   const [open, setOpen] = useState({});
   const [toast, setToast] = useState('');
   const staff = useMemo(() => inScope(model, dept), [model, dept]);
+  // ===== TRAINING · Grouping needs (by competency / by staff) =====
+  // A need = any competency with gap >= the chosen minimum. Priority = gap x importance; competencies rank by total priority.
   const mg = +minGap, t = q.trim().toLowerCase();
   const recs = [];
   staff.forEach(s => s.comps.forEach(c => { if (c.gap >= mg) recs.push({ s, c }); }));
@@ -26,6 +38,7 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
     .filter(x => x.needs.length && (!t || (x.s.name + ' ' + x.s.designation + ' ' + x.needs.map(n => n.training.name + ' ' + n.name).join(' ')).toLowerCase().includes(t)))
     .sort((a, b) => b.needs[0].priority - a.needs[0].priority || b.needs.length - a.needs.length);
   const people = new Set(recs.map(r => r.s.id)).size, intensive = recs.filter(r => r.c.gap >= 3).length, programmes = new Set(recs.map(r => r.c.training.name)).size;
+  // ===== TRAINING · CSV export =====
   const flash = m => { setToast(m); setTimeout(() => setToast(''), 2400); };
   const exportCsv = () => {
     const H = ['Competency', 'Category', 'Staff', 'Staff ID', 'Department', 'Role', 'Target', 'Actual', 'Gap', 'Gap band', 'Importance', 'Priority', 'Recommended training', 'Provider', 'Mode'];
@@ -34,10 +47,13 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
     download('training-needs-' + (mode === 'comp' ? 'by-competency' : 'by-staff') + '-' + slugify(dept) + '.csv', toCSV(H, rows), 'text/csv');
     flash('CSV downloaded (' + rows.length + ' rows)');
   };
+  // ===== TRAINING · Small UI helpers (name link, mode switch) =====
   const nameBtn = s => <button type="button" onClick={() => go('report', null, s.id)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', color: '#127a42', font: '600 13px Inter,sans-serif', textAlign: 'left' }}>{s.name}</button>;
   const seg = (v, l, icon) => <button key={v} type="button" onClick={() => setMode(v)} style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 12px', border: '0', borderRadius: '7px', cursor: 'pointer', font: '500 12.5px Inter,sans-serif', background: mode === v ? '#fff' : 'transparent', color: mode === v ? '#111827' : '#4b5563' }}><i className={icon} style={{ fontSize: '13px' }}></i>{l}</button>;
+  // ===== TRAINING · Render =====
   return (
     <Page>
+      {/* ===== TRAINING · Page header (scope, mode switch, min gap, search) ===== */}
       <PageHeader title="Training Needs" description="Who needs which training, ranked by gap severity × how important the skill is to the role"
         actions={<Btn kind="primary" icon="icon-download" onClick={exportCsv}>Export CSV</Btn>}
         filters={<>
@@ -46,14 +62,17 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
           <Sel value={minGap} onChange={setMinGap} options={[['1', 'Any gap (1–5)'], ['2', 'Gap 2 or more'], ['3', 'Gap 3 or more'], ['4', 'Gap 4 or more']]} />
           <Search value={q} onChange={setQ} placeholder={mode === 'comp' ? 'Search competency or programme' : 'Search staff or training'} />
         </>} />
+      {/* ===== TRAINING · KPI tiles ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '12px' }}>
         <KpiTile label="Staff needing training" value={people} sub={'of ' + staff.length + ' in scope'} />
         <KpiTile label="Training needs" value={recs.length} sub="person × competency" />
         <KpiTile label="Intensive programmes" value={intensive} sub="gap 3 or more" subColor="#b45309" />
         <KpiTile label="Distinct programmes" value={programmes} sub="across the catalogue" />
       </div>
+      {/* ===== TRAINING · By competency list or By staff table ===== */}
       {mode === 'comp' ? (
         <Card title="By competency" sub="Click a competency to see exactly who needs it" flush>
+          {/* ===== TRAINING · Competency rows (click to expand) ===== */}
           {compRows.length ? compRows.map(g => { const on = !!open[g.id], total = g.list.length; return (
             <div key={g.id} style={{ borderBottom: '1px solid rgba(15,35,65,.07)' }}>
               <button type="button" onClick={() => setOpen({ ...open, [g.id]: !on })} style={{ width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', padding: '14px 20px', background: on ? 'rgba(230,242,234,.5)' : 'transparent', border: '0', cursor: 'pointer', textAlign: 'left' }}>
@@ -72,6 +91,7 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
                   <div style={{ fontSize: '11.5px', color: '#6b7280', marginTop: '2px' }}>{g.tr.primary.provider}{g.tr.primary.days ? ' · ' + g.tr.primary.days + ' days' : ''} · {g.tr.primary.mode} · for gap ≥ 3 (noticeable or worse). Smaller gaps: coached practice.</div>
                 </div>
               </button>
+              {/* ===== TRAINING · Expanded list of staff for a competency ===== */}
               {on ? <div style={{ padding: '0 0 6px' }}>
                 <DataTable minWidth={760} rows={[...g.list].sort((a, b) => b.c.gap - a.c.gap)} rowKey={r => r.s.id} columns={[
                   { key: 'name', label: 'Staff', render: r => nameBtn(r.s) }, { key: 'dept', label: 'Department', render: r => r.s.dept }, { key: 'role', label: 'Role', render: r => r.s.designation },
@@ -83,6 +103,7 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
         </Card>
       ) : (
         <Card title="By staff" sub="Each person's trainings, most urgent first (gap × importance)" flush>
+          {/* ===== TRAINING · By staff table ===== */}
           <DataTable minWidth={900} rows={staffRows} rowKey={x => x.s.id} empty={<EmptyState icon="icon-users" title="No staff need training at this level" />} columns={[
             { key: 'name', label: 'Staff', render: x => <div>{nameBtn(x.s)}<div style={{ fontSize: '11.5px', color: '#6b7280' }}>{x.s.designation}</div></div> },
             { key: 'dept', label: 'Department', render: x => x.s.dept },
@@ -93,6 +114,7 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept }) 
           ]} />
         </Card>
       )}
+      {/* ===== TRAINING · Toast ===== */}
       <Toast text={toast} />
     </Page>
   );

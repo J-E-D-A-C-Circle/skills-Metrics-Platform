@@ -1,18 +1,54 @@
 'use client';
+// =============================================================================
+// smUI.jsx · Shared UI kit: page header and tabs, cards, buttons, inputs, badges, tables, KPI tiles, drawers, CSV export
+// Screen / URL: used on every page inside the shell (Home, Analytics, Training, Staff Evaluations, Framework, Cycles, Forms, Settings, Profile...)
+// Who sees it: admin / manager / creator / staff (participant)
+// Used by: SkillMatrixApp.jsx and nearly every SM*.jsx page   Depends on: smModel.js (STATUS_C, STATUS_HINT, ALL), ui/select.jsx
+// Sections (search for these markers): UI KIT
+// =============================================================================
 // Shared building blocks so every admin page uses the same header, cards, tables, badges and drawers.
 import React, { useMemo, useState } from 'react';
 import { STATUS_C, STATUS_HINT, ALL } from './smModel';
 import { Select } from './ui/select';
 
+// ===== UI KIT · Style constants =====
 export const CARD = { background: 'rgba(255,255,255,.62)', backdropFilter: 'blur(28px) saturate(180%)', WebkitBackdropFilter: 'blur(28px) saturate(180%)', border: '1px solid rgba(255,255,255,.85)', borderRadius: '22px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)' };
 export const PAGE = { padding: 'clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px', display: 'flex', flexDirection: 'column', gap: '20px' };
 export const INPUT = { height: '36px', border: '1px solid rgba(15,35,65,.14)', borderRadius: '10px', padding: '0 10px', font: '400 13px Inter,sans-serif', background: '#fff', color: '#111827', minWidth: '0' };
 export const LABEL = { display: 'flex', flexDirection: 'column', gap: '5px', font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280' };
 export const GREEN = 'linear-gradient(180deg,#2fb36b,#15904c)';
 
+// ===== UI KIT · Page wrapper =====
 export function Page({ children }) { return <div style={PAGE}>{children}</div>; }
 
+// ===== UI KIT · Page tabs =====
+// Pages whose sub-pages are tabs (Dashboard, Reports, Skill Framework, Settings, Staff Evaluations).
+// The shell provides { title, items, active, onSelect }; PageHeader then shows the page title and the tab bar.
+export const TabsContext = React.createContext(null);
+export function PageTabs() {
+  const t = React.useContext(TabsContext);
+  if (!t || !t.items || t.items.length < 2) return null;
+  return (
+    <div role="tablist" aria-label={t.title} style={{ background: 'rgba(118,118,128,.12)', borderRadius: '12px', padding: '4px', display: 'flex', gap: '6px', overflowX: 'auto' }}>
+      {t.items.map(i => { const on = i.key === t.active; return (
+        <button key={i.key} type="button" role="tab" aria-selected={on} onClick={() => { if (!on) t.onSelect(i.key); }}
+          style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: '9px', height: '36px', padding: '0 14px', border: '0', borderRadius: '7px', cursor: 'pointer', whiteSpace: 'nowrap', font: '500 14.5px Inter,sans-serif',
+            color: on ? '#111827' : '#4b5563', background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none' }}>
+          <i className={i.icon} style={{ fontSize: '16px' }}></i>{i.label}</button>); })}
+    </div>
+  );
+}
+
+// ===== UI KIT · Avatar key =====
+// localStorage key for the signed-in person's profile photo. The seeded administrator keeps the original key.
+export function avatarKey() {
+  try { const me = localStorage.getItem('skm-me'); return me && me !== 'denzilasiam.adjei' ? 'skm-user-avatar:' + me : 'skm-user-avatar'; } catch (e) { return 'skm-user-avatar'; }
+}
+
+// ===== UI KIT · Page header =====
 export function PageHeader({ title, description, actions, filters }) {
+  const tabs = React.useContext(TabsContext);
+  if (tabs && tabs.title) title = tabs.title;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px' }}>
@@ -22,11 +58,13 @@ export function PageHeader({ title, description, actions, filters }) {
         </div>
         {actions ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>{actions}</div> : null}
       </div>
+      <PageTabs />
       {filters ? <div style={{ ...CARD, borderRadius: '16px', padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>{filters}</div> : null}
     </div>
   );
 }
 
+// ===== UI KIT · Card =====
 export function Card({ title, sub, actions, children, style, bodyStyle, flush }) {
   return (
     <div style={{ ...CARD, minWidth: '0', ...(style || {}) }}>
@@ -44,6 +82,7 @@ export function Card({ title, sub, actions, children, style, bodyStyle, flush })
   );
 }
 
+// ===== UI KIT · Buttons =====
 export function Btn({ kind = 'secondary', icon, children, onClick, disabled, title, small, type }) {
   const h = small ? '30px' : '36px';
   const base = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: h, padding: small ? '0 10px' : '0 14px', cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', font: (kind === 'primary' ? '600 ' : '500 ') + (small ? '12px' : '13px') + ' Inter,sans-serif', opacity: disabled ? 0.55 : 1 };
@@ -56,6 +95,7 @@ export function Btn({ kind = 'secondary', icon, children, onClick, disabled, tit
   return <button type={type || 'button'} title={title} aria-label={title} disabled={disabled} onClick={disabled ? undefined : onClick} style={{ ...base, ...k }}>{icon ? <i className={icon} style={{ fontSize: small ? '13px' : '14px' }}></i> : null}{children}</button>;
 }
 
+// ===== UI KIT · Form controls (select, search, field, toggle) =====
 export function Sel({ value, onChange, options, style, disabled, title }) {
   return (
     <Select title={title} disabled={disabled} value={value} onValueChange={onChange} options={options} style={{ ...INPUT, padding: '0 10px', ...(style || {}) }} />
@@ -89,6 +129,7 @@ export function Toggle({ on, onClick, label, desc, disabled }) {
   );
 }
 
+// ===== UI KIT · Badges (gap, status, scope) =====
 export function Badge({ bg, fg, children, title, style }) {
   return <span title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', font: '600 11px Inter,sans-serif', borderRadius: '999px', padding: '3px 9px', background: bg || '#f3f4f6', color: fg || '#374151', whiteSpace: 'nowrap', ...(style || {}) }}>{children}</span>;
 }
@@ -105,6 +146,7 @@ export function ScopeBadge({ override }) {
     : <Badge bg="#e6f2ea" fg="#0d3b2a"><i className="icon-globe" style={{ fontSize: '11px' }}></i>Org-wide</Badge>;
 }
 
+// ===== UI KIT · Empty state =====
 export function EmptyState({ icon = 'icon-inbox', title, text, action }) {
   return (
     <div style={{ padding: '40px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -116,6 +158,7 @@ export function EmptyState({ icon = 'icon-inbox', title, text, action }) {
   );
 }
 
+// ===== UI KIT · Data table =====
 export const TH = { textAlign: 'left', padding: '10px 14px', font: '600 10px Inter,sans-serif', letterSpacing: '.5px', color: '#6b7280', borderBottom: '1px solid rgba(15,35,65,.07)', whiteSpace: 'nowrap', textTransform: 'uppercase', background: 'rgba(255,255,255,.92)', position: 'sticky', top: '0', zIndex: '1' };
 export const TD = { padding: '10px 14px', borderBottom: '1px solid rgba(15,35,65,.07)', color: '#111827', verticalAlign: 'middle' };
 
@@ -140,6 +183,7 @@ export function DataTable({ columns, rows, empty, minWidth = 640, maxHeight, sor
   );
 }
 
+// ===== UI KIT · KPI tile =====
 export function KpiTile({ label, value, sub, subColor, onClick, icon }) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick} style={{ ...CARD, padding: '18px', textAlign: 'left', cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: '6px', font: 'inherit', color: 'inherit' }}>
@@ -150,11 +194,13 @@ export function KpiTile({ label, value, sub, subColor, onClick, icon }) {
   );
 }
 
+// ===== UI KIT · Toast =====
 export function Toast({ text }) {
   if (!text) return null;
   return <div style={{ position: 'fixed', left: '50%', bottom: '28px', transform: 'translateX(-50%)', zIndex: '90', background: '#111827', color: '#fff', font: '500 13px Inter,sans-serif', padding: '10px 16px', borderRadius: '12px', boxShadow: '0 10px 30px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', gap: '8px', maxWidth: 'calc(100vw - 32px)' }}><i className="icon-circle-check" style={{ fontSize: '15px', color: '#4ade80' }}></i>{text}</div>;
 }
 
+// ===== UI KIT · Drawer =====
 export function Drawer({ open, title, sub, onClose, children, footer, width = 780 }) {
   if (!open) return null;
   return (
@@ -174,6 +220,7 @@ export function Drawer({ open, title, sub, onClose, children, footer, width = 78
   );
 }
 
+// ===== UI KIT · Export helpers (CSV download) =====
 export function download(name, text, mime) {
   try { const b = new Blob([text], { type: mime || 'text/plain' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {}
 }
@@ -181,6 +228,7 @@ const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
 export function toCSV(headers, rows) { return [headers.map(cell).join(','), ...rows.map(r => headers.map(h => cell(r[h])).join(','))].join('\n'); }
 export const slugify = t => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+// ===== UI KIT · Staff drawer =====
 // Staff drawer: opened from every dashboard tile, bar, heatmap cell and gap band.
 // ctx = { title, sub, rows, aggregated }
 export function StaffDrawer({ ctx, D, go, onClose }) {
@@ -215,21 +263,24 @@ export function StaffDrawer({ ctx, D, go, onClose }) {
   ];
   return (
     <Drawer open title={ctx.title} sub={(ctx.sub ? ctx.sub + ' · ' : '') + people + ' staff' + (agg ? '' : ' · ' + ctx.rows.length + ' competency records')} onClose={onClose} width={1040}>
+      {/* ===== UI KIT · Staff drawer toolbar (search, sort, export) ===== */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px 22px', borderBottom: '1px solid rgba(15,35,65,.07)', alignItems: 'center' }}>
         <Search value={q} onChange={setQ} placeholder="Search name, department, role or training" />
         <Sel value={sort.key + ':' + sort.dir} onChange={v => { const [key, dir] = v.split(':'); setSort({ key, dir }); }}
           options={[['gap:desc', 'Largest gap first'], ['gap:asc', 'Smallest gap first'], ['name:asc', 'Name A–Z'], ['dept:asc', 'Department'], ['actual:asc', 'Lowest actual'], ['status:asc', 'Status']]} />
         <Btn icon="icon-download" onClick={exportCsv}>Export CSV</Btn>
       </div>
+      {/* ===== UI KIT · Staff drawer table ===== */}
       <DataTable columns={cols} rows={rows} sort={sort} onSort={onSort} minWidth={agg ? 900 : 1000} rowKey={(r, i) => r.id + (r.comp || '') + i}
         empty={<EmptyState icon="icon-users" title="No staff in this selection" text={q ? 'Try a different search.' : 'Nobody in scope matches what you clicked.'} />} />
     </Drawer>
   );
 }
 
+// ===== UI KIT · Department filter =====
 // Department filter used on scoped pages: shows the global scope until the page overrides it.
 export function ScopeSelect({ depts, value, globalValue, onChange, locked }) {
-  const overridden = !locked && value !== globalValue;
+  const overridden = false; // no header department selector any more, so there is nothing to reset to
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
       <Sel value={value} onChange={onChange} disabled={locked} title={locked ? 'Managers see their own department only' : 'Department'} options={[[ALL, 'All departments'], ...depts.map(d => [d.name, d.name])]} />

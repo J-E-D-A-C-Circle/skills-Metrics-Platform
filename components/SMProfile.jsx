@@ -1,9 +1,23 @@
 'use client';
+// =============================================================================
+// SMProfile · My Profile page: header card with photo, then tabs Account, Skills, History, Development Plan, Evidence
+// Screen / URL: "/profile?tab=account|skills|history|plan|evidence" (old "/plan" and "/evidence" URLs land here too)
+// Who sees it: everyone (staff, manager, creator, admin); admins get no Skills / History tabs
+// Used by: components/SkillMatrixApp.jsx   Depends on: smUI (PageHeader, avatarKey), ui/select, SMAssessments (Evidence tab)
+// Sections (search for these markers): PROFILE · Photo resize helper, Component & initial state, Profile photo sync,
+//   Photo upload & remove, Toast helper, State & helpers, Values for render, Render, Page title, Profile header card,
+//   Profile photo, Name & chips, Overall proficiency, Tabs bar, Account tab (Personal information, Role & target profile,
+//   Security), Skills tab (Target vs actual radar, Gap scale, Competency matrix), History tab, Evidence tab,
+//   Development plan tab (Add action form, Plan actions), Toast
+// =============================================================================
 import React from 'react';
-import { PageHeader } from './smUI';
+import { PageHeader, avatarKey } from './smUI';
 import { Select } from './ui/select';
+import SMAssessments from './SMAssessments';
 
 
+// ===== PROFILE · Photo resize helper =====
+// Shrinks an uploaded image to at most 400px and returns a JPEG data URL (saved in localStorage).
 function processAvatarFile(file, callback) {
   if (!file || !file.type.startsWith('image/')) return;
   const reader = new FileReader();
@@ -35,6 +49,8 @@ function processAvatarFile(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// ===== PROFILE · Component & initial state =====
+// Devices and development plan are demo data held in component state only (not saved anywhere).
 class SMProfile extends React.Component {
   state = {
     avatar: null,
@@ -58,14 +74,16 @@ class SMProfile extends React.Component {
     ]
   };
 
+  // ===== PROFILE · Profile photo sync =====
+  // Photo lives in localStorage under avatarKey() (skm-user-avatar or skm-user-avatar:<username>).
   componentDidMount() {
     try {
-      const av = localStorage.getItem('skm-user-avatar');
+      const av = localStorage.getItem(avatarKey());
       if (av) this.setState({ avatar: av });
     } catch (e) {}
     this.onAvatarStorage = () => {
       try {
-        const av = localStorage.getItem('skm-user-avatar');
+        const av = localStorage.getItem(avatarKey());
         this.setState({ avatar: av || null });
       } catch (e) {}
     };
@@ -78,6 +96,8 @@ class SMProfile extends React.Component {
     window.removeEventListener('storage', this.onAvatarStorage);
   }
 
+  // ===== PROFILE · Photo upload & remove =====
+  // Image only, max 10MB. Saves under avatarKey() and fires 'skm-avatar-changed' so the header and Home update.
   handleAvatarUpload = e => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -91,7 +111,7 @@ class SMProfile extends React.Component {
     }
     processAvatarFile(file, dataUrl => {
       try {
-        localStorage.setItem('skm-user-avatar', dataUrl);
+        localStorage.setItem(avatarKey(), dataUrl);
         window.dispatchEvent(new Event('skm-avatar-changed'));
         this.setState({ avatar: dataUrl });
         this.flash('Profile picture updated successfully!');
@@ -104,7 +124,7 @@ class SMProfile extends React.Component {
 
   handleAvatarRemove = () => {
     try {
-      localStorage.removeItem('skm-user-avatar');
+      localStorage.removeItem(avatarKey());
       window.dispatchEvent(new Event('skm-avatar-changed'));
       this.setState({ avatar: null });
       this.flash('Profile picture removed');
@@ -115,22 +135,32 @@ class SMProfile extends React.Component {
     if (this.fileInput) this.fileInput.click();
   };
 
+  // ===== PROFILE · Toast helper =====
+  // Shows a short message at the bottom of the screen for 2.4 seconds.
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  // ===== PROFILE · State & helpers (renderVals) =====
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
     const ft = this.props.features || {};
-    const tab = this.props.tab === 'plan' && !ft.developmentPlan ? 'account' : (this.props.tab || 'account'), setTab = this.props.onTab || (() => {});
+    // Tab comes from the URL (?tab=). Plan / Evidence need their feature flags and admins have no Skills / History,
+    // so those fall back to Account.
+    const tab0 = this.props.tab || 'account', setTab = this.props.onTab || (() => {});
+    const isAdmin = this.props.role === 'admin';
+    const tab = (tab0 === 'plan' && !ft.developmentPlan) || (tab0 === 'evidence' && !ft.evidence) || (isAdmin && (tab0 === 'skills' || tab0 === 'history')) ? 'account' : tab0;
     const comps = d.comps.map(c => ({ ...c, gapLabel: d.GAP[c.gap].label, gapBg: d.GAP[c.gap].bg, gapFg: d.GAP[c.gap].fg,
       impShort: d.IMP[c.importance].short, impBg: d.IMP[c.importance].bg, impFg: d.IMP[c.importance].fg,
       levelLabel: d.LEVEL[c.actual] + ' → ' + d.LEVEL[c.target],
       segs: [0, 1, 2, 3, 4].map(i => ({ bg: i < c.actual ? '#0d3b2a' : i < c.target ? '#f2c46b' : '#eef0f3' })) }));
     const avg = comps.reduce((a, c) => a + c.actual, 0) / comps.length;
+    // Radar chart geometry: one spoke per competency, centre (180,170), radius 120 = level 5.
     const N = comps.length, cx = 180, cy = 170, R = 120;
     const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return [cx + Math.cos(a) * R * v / 5, cy + Math.sin(a) * R * v / 5]; };
     const poly = f => comps.map((c, i) => pt(i, f(c)).map(n => n.toFixed(1)).join(',')).join(' ');
-    const T0 = [['account', 'Account Profile', 'icon-user'], ['skills', 'Skill Profile', 'icon-radar', N], ['history', 'Assessment History', 'icon-history', 0], ['plan', 'Development Plan', 'icon-target', s.plan.length]];
+    // Tab list rows: [key, label, icon, count badge].
+    const T0 = [['account', 'Account Profile', 'icon-user'], ['skills', 'Skill Profile', 'icon-radar', N], ['history', 'Assessment History', 'icon-history', 0], ['plan', 'Development Plan', 'icon-target', s.plan.length], ['evidence', 'Evidence', 'icon-award']];
     const ST = { done: ['Completed', '#dcfce7', '#15803d'], draft: ['Draft · auto-saved', '#fef3c7', '#92400e'] };
+    // Assessment history rows (demo data); 360° rows only when the feedback360 feature is on.
     const history = [
       ['Q3 2026', 'Manager Evaluation', 'icon-user-round-check', 'Joseph Ahor Abandoh-Sam, HOD', '12 Sep 2026', '3.1'],
       ['Q3 2026', 'Self-Assessment', 'icon-user-check', 'Self (timed, 45 min)', '28 Aug 2026', '3.4'],
@@ -138,10 +168,11 @@ class SMProfile extends React.Component {
       ['Q2 2026', 'Manager Evaluation', 'icon-user-round-check', 'Joseph Ahor Abandoh-Sam, HOD', '14 Jun 2026', '2.9'],
       ['Q2 2026', 'Self-Assessment', 'icon-user-check', 'Self (timed, 45 min)', '02 Jun 2026', '3.2'],
     ].filter(h => ft.feedback360 || h[1] !== '360° Feedback').map(([cycle, type, icon, assessor, date, score]) => ({ cycle, type, icon, assessor, date, score, report: 'PDF', status: 'Completed', sBg: '#dcfce7', sFg: '#15803d', onReport: () => this.flash('Downloading ' + cycle + ' ' + type + ' report (PDF)…') }));
-    const T = T0.filter(t => t[0] !== 'plan' || ft.developmentPlan).map(t => t[0] === 'history' ? [...t.slice(0, 3), history.length] : t);
+    const T = T0.filter(t => (t[0] !== 'plan' || ft.developmentPlan) && (t[0] !== 'evidence' || ft.evidence) && (!isAdmin || (t[0] !== 'skills' && t[0] !== 'history'))).map(t => t[0] === 'history' ? [...t.slice(0, 3), history.length] : t);
     const gapComps = comps.filter(c => c.gap > 0).map(c => ({ id: String(c.id), label: c.name + ' (gap ' + c.gap + ')' }));
     const newComp = s.newComp || (gapComps[0] && gapComps[0].id);
     const canSave = s.newAction.trim().length > 3;
+    // ===== PROFILE · Values for render =====
     return {
       avatar: s.avatar,
       avatarHover: s.avatarHover,
@@ -150,11 +181,12 @@ class SMProfile extends React.Component {
       onAvatarUpload: this.handleAvatarUpload,
       onAvatarRemove: this.handleAvatarRemove,
       fileRef: el => { this.fileInput = el; },
+      // Role chip text shown under the name.
       roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', creator: 'Assessment Creator', admin: 'Administrator' }[this.props.role || 'staff'],
       avgText: d.fmt(avg) + ' / 5', avgLabel: d.LEVEL[Math.round(avg)], openGaps: comps.filter(c => c.gap > 0).length,
       tabs: T.map(([k, label, icon, count]) => ({ label, icon, count: count || '', onClick: () => setTab(k),
         bg: tab === k ? '#fff' : 'transparent', color: tab === k ? '#111827' : '#4b5563', shadow: tab === k ? '0 1px 2px rgba(0,0,0,.08)' : 'none' })),
-      tabAccount: tab === 'account', tabSkills: tab === 'skills', tabHistory: tab === 'history', tabPlan: tab === 'plan',
+      tabAccount: tab === 'account', tabSkills: tab === 'skills', tabHistory: tab === 'history', tabPlan: tab === 'plan', tabEvidence: tab === 'evidence', assessProps: this.props,
       personal: [
         { label: 'FIRST NAME', value: d.user.first, icon: 'icon-circle-small' }, { label: 'LAST NAME', value: d.user.last, icon: 'icon-circle-small' },
         { label: 'OTHER NAME', value: d.user.other, icon: 'icon-circle-small' }, { label: 'EMAIL', value: d.user.email, icon: 'icon-mail-open' },
@@ -169,11 +201,12 @@ class SMProfile extends React.Component {
         labels: comps.map((c, i) => { const [x, y] = pt(i, 5.9); return { x, y, text: c.short, anchor: Math.abs(x - cx) < 8 ? 'middle' : x > cx ? 'start' : 'end' }; }) },
       gapScale: d.GAP,
       matrix: d.majors.map(m => { const open = !s.closed[m.name]; return { ...m, open, chev: open ? 'icon-chevron-down' : 'icon-chevron-right', items: comps.filter(c => c.major === m.name), toggle: () => this.setState({ closed: { ...s.closed, [m.name]: open } }) }; }),
-      exportCsv: () => this.flash('CSV export started'), goEvidence: () => go('evidence'), showEvidence: !!ft.evidence, historySub: ft.feedback360 ? 'Self, manager and 360° assessments from every cycle' : 'Self-assessments and manager evaluations from every cycle',
+      exportCsv: () => this.flash('CSV export started'), goEvidence: () => setTab('evidence'), showEvidence: !!ft.evidence, historySub: ft.feedback360 ? 'Self, manager and 360° assessments from every cycle' : 'Self-assessments and manager evaluations from every cycle',
       history,
       adding: s.adding, toggleAdd: () => this.setState({ adding: !s.adding }), newAction: s.newAction, newComp, newDue: s.newDue, gapComps,
       onNewAction: e => this.setState({ newAction: e.target.value }), onNewComp: e => this.setState({ newComp: e.target.value }), onNewDue: e => this.setState({ newDue: e.target.value }),
       saveBg: canSave ? '#15904c' : '#a3acb9',
+      // Add plan action: due month becomes "Mon YYYY"; new actions start at 0% and wait for manager approval.
       saveAction: () => { if (!canSave) return; const due = s.newDue ? new Date(s.newDue + '-01').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'TBC';
         this.setState({ plan: [...s.plan, { id: Date.now(), action: s.newAction.trim(), comp: +newComp, due, pct: 0, ok: false }], adding: false, newAction: '', newDue: '' }); this.flash('Sent to Joseph Ahor Abandoh-Sam for approval'); },
       plan: s.plan.map(p => { const c = d.comps.find(x => x.id === p.comp) || d.comps[0];
@@ -183,13 +216,17 @@ class SMProfile extends React.Component {
       toast: s.toast,
     };
   }
+  // ===== PROFILE · Render =====
   render() {
     const __v = this.renderVals() || {};
     return (
       <>
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px" }}>
+        {/* ===== PROFILE · Page title ===== */}
         <div style={{ marginBottom: "20px" }}><PageHeader title={"My Profile"} description={"Your account details, skill profile and assessment history"} /></div>
+        {/* ===== PROFILE · Profile header card ===== */}
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", minHeight: "190px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: "20px", padding: "24px clamp(18px,2.6vw,34px)" }}>
+          {/* ===== PROFILE · Profile photo (click to change, Upload / Remove buttons) ===== */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", flex: "none" }}>
             <div
               style={{ position: "relative", width: "128px", height: "128px" }}
@@ -321,20 +358,23 @@ class SMProfile extends React.Component {
               ) : null}
             </div>
           </div>
+          {/* ===== PROFILE · Name & chips (staff ID, designation, role, target) ===== */}
           <div style={{ flex: "1 1 320px", textAlign: "center", minWidth: "0" }}>
-            <div style={{ fontSize: "clamp(20px,2.2vw,25px)", fontWeight: "700", letterSpacing: "-0.2px" }}>ADJEI DENZIL ASIAM</div>
-            <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}><span style={{ color: "#374151", fontWeight: "500" }}>123456789</span> · IT OFFICER · IT DEPARTMENT · HEAD OFFICE</div>
+            <div style={{ fontSize: "clamp(20px,2.2vw,25px)", fontWeight: "700", letterSpacing: "-0.2px" }}>{this.props.data?.user?.name}</div>
+            <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "8px" }}><span style={{ color: "#374151", fontWeight: "500" }}>{this.props.data?.user?.id}</span> · {this.props.data?.user?.designation} · {this.props.data?.user?.dept} · {this.props.data?.user?.location}</div>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px", marginTop: "10px" }}>
               <span style={{ fontSize: "12px", color: "#374151", background: "#f3f4f6", borderRadius: "999px", padding: "3px 10px" }}>{__v.roleLabel}</span>
               <span style={{ fontSize: "12px", color: "#374151", background: "#f3f4f6", borderRadius: "999px", padding: "3px 10px" }}>Target: {this.props.data?.user?.target}</span>
             </div>
           </div>
+          {/* ===== PROFILE · Overall proficiency ===== */}
           <div style={{ flex: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", minWidth: "150px" }}>
             <span style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>OVERALL PROFICIENCY</span>
             <span style={{ fontSize: "30px", fontWeight: "700", letterSpacing: "-0.5px" }}>{__v.avgText}</span>
             <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{__v.avgLabel} · {__v.openGaps} open gaps</span>
           </div>
         </div>
+        {/* ===== PROFILE · Tabs bar ===== */}
         <div style={{ marginTop: "24px", background: "rgba(118,118,128,.12)", borderRadius: "12px", padding: "4px", display: "flex", gap: "6px", overflowX: "auto" }}>
           {(__v.tabs || []).map((t, $index) => (<React.Fragment key={$index}>
             <button onClick={t?.onClick} style={{ flex: "none", display: "flex", alignItems: "center", gap: "9px", height: "36px", padding: "0 14px", border: "0", borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap", font: "500 14.5px Inter,sans-serif", color: t?.color, background: t?.bg, boxShadow: t?.shadow }}><i className={t?.icon} style={{ fontSize: "15px" }}></i>{t?.label}{(t?.count) ? (<>
@@ -342,8 +382,10 @@ class SMProfile extends React.Component {
               </>) : null}</button>
           </React.Fragment>))}
         </div>
+        {/* ===== PROFILE · Account tab ===== */}
         {(__v.tabAccount) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "24px", marginTop: "28px", alignItems: "flex-start" }}>
+            {/* ===== PROFILE · Account tab · Personal information ===== */}
             <div style={{ flex: "2 1 520px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", padding: "20px 24px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div>
@@ -367,6 +409,7 @@ class SMProfile extends React.Component {
               </div>
             </div>
             <div style={{ flex: "1 1 340px", minWidth: "0", display: "flex", flexDirection: "column", gap: "24px" }}>
+              {/* ===== PROFILE · Account tab · Role & target profile ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Role &amp; Target Profile</div>
                 <div style={{ padding: "16px 24px 22px", display: "flex", flexDirection: "column", gap: "18px" }}>
@@ -378,6 +421,7 @@ class SMProfile extends React.Component {
                   </React.Fragment>))}
                 </div>
               </div>
+              {/* ===== PROFILE · Account tab · Security (active devices, offline data) ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Security</div>
                 <div style={{ padding: "14px 24px 8px", display: "flex", alignItems: "center", gap: "13px" }}>
@@ -414,9 +458,11 @@ class SMProfile extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== PROFILE · Skills tab ===== */}
         {(__v.tabSkills) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "24px", marginTop: "28px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 360px", maxWidth: __v.radarMax, minWidth: "0", display: "flex", flexDirection: "column", gap: "24px" }}>
+              {/* ===== PROFILE · Skills tab · Target vs actual radar chart ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "20px 24px 14px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                   <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Target vs Actual</div>
@@ -448,6 +494,7 @@ class SMProfile extends React.Component {
                   <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "16px", borderTop: "2px dashed #e0a63a" }}></span>Target</span>
                 </div>
               </div>
+              {/* ===== PROFILE · Skills tab · Gap scale ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Gap Scale</div>
                 <div style={{ padding: "14px 18px 18px", display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -460,6 +507,7 @@ class SMProfile extends React.Component {
                 </div>
               </div>
             </div>
+            {/* ===== PROFILE · Skills tab · Competency matrix ===== */}
             <div style={{ flex: "2 1 560px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", padding: "20px 24px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div>
@@ -510,6 +558,7 @@ class SMProfile extends React.Component {
                   </React.Fragment>))}
                 </div>
               </div>
+              {/* ===== PROFILE · Skills tab · Matrix legend ===== */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", padding: "14px 24px 18px", fontSize: "11.5px", color: "#4b5563" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "14px", height: "8px", borderRadius: "2px", background: "#0d3b2a" }}></span>Current level</span>
                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "14px", height: "8px", borderRadius: "2px", background: "#f2c46b" }}></span>Shortfall to target</span>
@@ -518,6 +567,7 @@ class SMProfile extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== PROFILE · History tab ===== */}
         {(__v.tabHistory) ? (<>
           <div style={{ marginTop: "28px", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "20px 24px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
@@ -553,6 +603,9 @@ class SMProfile extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== PROFILE · Evidence tab (reuses the SMAssessments evidence view) ===== */}
+        {(__v.tabEvidence) ? (<SMAssessments {...__v.assessProps} view="evidence" embedded />) : null}
+        {/* ===== PROFILE · Development plan tab ===== */}
         {(__v.tabPlan) ? (<>
           <div style={{ marginTop: "28px", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "20px 24px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
@@ -562,6 +615,7 @@ class SMProfile extends React.Component {
               </div>
               <button onClick={__v.toggleAdd} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-plus"} style={{ fontSize: "14px" }}></i>Add action</button>
             </div>
+            {/* ===== PROFILE · Development plan tab · Add action form ===== */}
             {(__v.adding) ? (<>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-end", padding: "16px 24px", background: "rgba(255,255,255,.4)", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <label style={{ flex: "2 1 260px", display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ACTION<input value={__v.newAction} onChange={__v.onNewAction} placeholder={"e.g. Shadow the network team for two weeks"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", color: "#111827" }} /></label>
@@ -574,6 +628,7 @@ class SMProfile extends React.Component {
                 <button onClick={__v.saveAction} style={{ height: "36px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.saveBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>Submit for approval</button>
               </div>
             </>) : null}
+            {/* ===== PROFILE · Development plan tab · Plan actions ===== */}
             {(__v.plan || []).map((p, $index) => (<React.Fragment key={$index}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center", padding: "16px 24px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div style={{ flex: "2 1 300px", display: "flex", gap: "14px", alignItems: "center", minWidth: "0" }}>
@@ -599,6 +654,7 @@ class SMProfile extends React.Component {
             </React.Fragment>))}
           </div>
         </>) : null}
+        {/* ===== PROFILE · Toast ===== */}
         {(__v.toast) ? (<>
           <div style={{ position: "fixed", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: "80", background: "#111827", color: "#fff", font: "500 13px Inter,sans-serif", padding: "10px 16px", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,.25)", display: "flex", alignItems: "center", gap: "8px" }}><i className={"icon-circle-check"} style={{ fontSize: "15px", color: "#4ade80" }}></i>{__v.toast}</div>
         </>) : null}

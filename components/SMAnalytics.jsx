@@ -1,14 +1,24 @@
 'use client';
+// =============================================================================
+// SMAnalytics.jsx · analytics dashboards, top training needs, report builder and scheduled reports
+// Screen / URL: /analytics (Overview), /analytics?tab=departments, /analytics?tab=heatmap, /training?tab=top-needs, /reports (Report Builder), /reports?tab=scheduled
+// Who sees it: admin (all); manager (Analytics + Training, own department only); Reports is admin only
+// Used by: SkillMatrixApp.jsx (analytics + training pages)   Depends on: ./smUI, ./smModel, ./SMStaffReport (IndividualReportView, reportExport), xlsx
+// Sections (search for these markers): ANALYTICS · Constants, ANALYTICS · Helpers (toast, XML escape), ANALYTICS · Gap legend, ANALYTICS · Main component (view switcher), ANALYTICS · Page titles & descriptions, ANALYTICS · Render, ANALYTICS · Selected view (only one renders), ANALYTICS · Staff drawer & toast, ANALYTICS · Overview dashboard (/analytics), ANALYTICS · Overview render, ANALYTICS · Overview page header, ANALYTICS · KPI tiles, ANALYTICS · Proficiency by department card, ANALYTICS · Trend over time chart, ANALYTICS · Largest gaps by competency card, ANALYTICS · Gap distribution card, ANALYTICS · Departments tab (/analytics?tab=departments), ANALYTICS · Departments page header, ANALYTICS · Departments table, TRAINING · Top Training Needs (/training?tab=top-needs), TRAINING · Top needs page header, TRAINING · Top needs table, ANALYTICS · Heat grid (shared coloured grid), ANALYTICS · Heat grid column headers, ANALYTICS · Heat grid rows, ANALYTICS · Heat grid legend, ANALYTICS · Heatmap tab (/analytics?tab=heatmap), ANALYTICS · Heatmap · all departments view, ANALYTICS · Heatmap page header, ANALYTICS · Department x category grid, ANALYTICS · Heatmap · single department view, ANALYTICS · Heatmap page header + category filter, ANALYTICS · Person x competency grid, REPORTS · Report builder (/reports), REPORTS · Builder state, REPORTS · Rows from filters, REPORTS · Export, REPORTS · Type switch & preview columns, REPORTS · Render, REPORTS · Report builder page header, REPORTS · Build a report panel, REPORTS · Report type switch, REPORTS · Staff picker (individual) or filters (records / summary), REPORTS · Filters (date, gap band, source, status), REPORTS · Column picker (staff records only), REPORTS · Format picker & export button, REPORTS · Preview + recent exports column, REPORTS · Preview, REPORTS · Recent exports, REPORTS · Scheduled reports (/reports?tab=scheduled), REPORTS · Scheduled reports page header, REPORTS · Scheduled reports list card, REPORTS · New schedule form, REPORTS · Schedule rows (toggle / delete)
+// =============================================================================
 import React, { useMemo, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Field, Badge, GapBadge, StatusBadge, EmptyState, DataTable, KpiTile, Toast, StaffDrawer, ScopeSelect, Toggle, CARD, INPUT, download, toCSV, slugify } from './smUI';
 import { ALL, CYCLES, CURRENT, PREVIOUS, STATUSES, inScope, staffRow, records, avg, round1, individualReport } from './smModel';
 import { IndividualReportView, reportExport } from './SMStaffReport';
 
+// ===== ANALYTICS · Constants =====
+// QDATE = the date a result from an earlier cycle is stamped with in reports; RCOLS / SUMCOLS = report columns.
 const QDATE = { 'Q1 2026': '2026-03-12', 'Q2 2026': '2026-06-02', 'Q3 2026': '2026-08-28' };
 const EVALUATORS = ['All', 'System', 'Manager-confirmed', 'Manager-adjusted', 'Previous cycle'];
 const RCOLS = ['Staff ID', 'Name', 'Department', 'Designation', 'Category', 'Competency', 'Target', 'Actual', 'Gap', 'Status', 'Evaluator', 'Date'];
 const SUMCOLS = ['Department', 'Category', 'Staff', 'Records', 'Avg target', 'Avg actual', 'Avg gap', 'Gaps ≥ 3'];
 
+// ===== ANALYTICS · Helpers (toast, XML escape) =====
 function useToast() {
   const [t, setT] = useState('');
   const ref = React.useRef();
@@ -17,6 +27,8 @@ function useToast() {
 function xmlEscape(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 const tag = h => h.replace(/[^a-z0-9]/gi, '') || 'field';
 
+// ===== ANALYTICS · Gap legend =====
+// Coloured key for gaps 0-5; when onPick is given each band is clickable and opens the staff drawer.
 function GapLegend({ D, counts, onPick }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', fontSize: '11.5px', color: '#4b5563' }}>
@@ -29,6 +41,9 @@ function GapLegend({ D, counts, onPick }) {
   );
 }
 
+// ===== ANALYTICS · Main component (view switcher) =====
+// `view` comes from the URL tab (dashboard, departments, topneeds, heatmap, reports, schedules).
+// Managers are locked to their own department; admins can pick one here (defaults to the global scope).
 export default function SMAnalytics(props) {
   const { data: D, model, go, view = 'dashboard', role, scope, myDept } = props;
   const [local, setLocal] = useState(null);
@@ -44,27 +59,35 @@ export default function SMAnalytics(props) {
   const openStaff = (title, list, sub) => setDrawer({ title, sub: sub || scopeLabel, rows: list.map(staffRow), aggregated: true });
   const openRecords = (title, list, pred, sub) => setDrawer({ title, sub: sub || scopeLabel, rows: records(list, pred), aggregated: false });
 
-  const title = { dashboard: 'Executive Dashboard', heatmap: 'Skill Heatmap', reports: 'Report Builder', schedules: 'Scheduled Reports' }[view];
-  const desc = { dashboard: 'Organisation-wide KPIs for the ' + CURRENT + ' cycle. Click any tile, bar, cell or band to see the staff behind it.', heatmap: 'Average gap by department and skill category. Pick a department to see each person by competency.', reports: 'Build an individual record or an aggregated report, preview it, then export exactly what you see', schedules: 'Reports sent automatically every day, week or month' }[view];
+  // ===== ANALYTICS · Page titles & descriptions =====
+  const title = { dashboard: 'Executive Dashboard', departments: 'Departments at a Glance', topneeds: 'Top Training Needs', heatmap: 'Skill Heatmap', reports: 'Report Builder', schedules: 'Scheduled Reports' }[view];
+  const desc = { dashboard: 'Organisation-wide KPIs for the ' + CURRENT + ' cycle. Click any tile, bar or band to see the staff behind it.', departments: 'Completion, average gap and reviews outstanding for each department in the ' + CURRENT + ' cycle. Click a department to see its staff.', topneeds: 'Competencies where staff have a gap of 3 or more, ranked by how many people need training. Click a row to see who.', heatmap: 'Average gap by department and skill category. Pick a department to see each person by competency.', reports: 'Build an individual record or an aggregated report, preview it, then export exactly what you see', schedules: 'Reports sent automatically every day, week or month' }[view];
 
+  // ===== ANALYTICS · Render =====
   return (
     <Page>
+      {/* ===== ANALYTICS · Selected view (only one renders) ===== */}
       {view === 'dashboard' ? <Dashboard {...{ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }} /> : null}
+      {view === 'departments' ? <Departments {...{ D, model, staff, dept, openStaff, title, desc, deptFilter }} /> : null}
+      {view === 'topneeds' ? <TopNeeds {...{ D, staff, scopeLabel, openRecords, go, title, desc, deptFilter }} /> : null}
       {view === 'heatmap' ? <Heatmap {...{ D, model, staff, dept, scopeLabel, openRecords, go, title, desc, deptFilter, setLocal: locked ? null : setLocal }} /> : null}
       {view === 'reports' ? <Reports {...{ D, model, dept, go, title, desc, deptFilter, flash }} /> : null}
       {view === 'schedules' ? <Schedules {...{ title, desc, flash }} /> : null}
+      {/* ===== ANALYTICS · Staff drawer & toast ===== */}
       <StaffDrawer ctx={drawer} D={D} go={go} onClose={() => setDrawer(null)} />
       <Toast text={toast} />
     </Page>
   );
 }
 
+// ===== ANALYTICS · Overview dashboard (/analytics) =====
 function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }) {
   const assessed = staff.filter(s => s.scored), outstanding = staff.filter(s => !s.scored), review = staff.filter(s => s.status === 'Submitted' || s.status === 'Auto-scored');
   const recs = staff.flatMap(s => s.comps.map(c => ({ s, c })));
   const avgGap = avg(recs.map(r => r.c.gap)), severe = recs.filter(r => r.c.gap >= 4);
   const pct = staff.length ? Math.round(assessed.length / staff.length * 100) : 0;
   const counts = {}; recs.forEach(r => { counts[r.c.gap] = (counts[r.c.gap] || 0) + 1; });
+  // Department bars always use every department; ones outside the chosen scope are dimmed.
   const deptRows = D.depts.map(dp => { const ss = model.staff.filter(s => s.dept === dp.name); return { name: dp.name, ss, actual: avg(ss.map(s => s.avgActual)), gap: avg(ss.map(s => s.avgGap)), done: ss.filter(s => s.scored).length }; }).sort((a, b) => b.actual - a.actual);
   const compAgg = {};
   recs.forEach(({ c }) => { const a = compAgg[c.id] || (compAgg[c.id] = { id: c.id, name: c.name, short: c.short, gaps: [], dept: model.compById[c.id].dept }); a.gaps.push(c.gap); });
@@ -77,9 +100,12 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
   const X = i => 60 + i * 90, Y = v => 170 - (v - lo) / (hi - lo) * 150;
   const grid = []; for (let v = lo; v <= hi + 0.001; v += 0.5) grid.push(v);
   const prevAvg = tl[2], curAvg = tl[3];
+  // ===== ANALYTICS · Overview render =====
   return (
     <>
+      {/* ===== ANALYTICS · Overview page header ===== */}
       <PageHeader title={title} description={desc} actions={<Btn icon="icon-file-spreadsheet" onClick={() => go('reports')}>Build a report</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{D.cycle.name} · actual = latest scored result</span></>} />
+      {/* ===== ANALYTICS · KPI tiles ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '12px' }}>
         <KpiTile label="Staff in scope" value={staff.length} sub={(dept === ALL ? D.depts.length + ' departments' : dept)} onClick={() => openStaff('Staff in scope', staff)} />
         <KpiTile label="Assessed" value={assessed.length} sub={review.length + ' awaiting review'} onClick={() => openStaff('Assessed · ' + CURRENT, assessed)} />
@@ -89,6 +115,7 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
         <KpiTile label="Significant + critical gaps" value={severe.length} sub={new Set(severe.map(r => r.s.id)).size + ' staff need intensive training'} subColor="#b91c1c" onClick={() => openRecords('Significant & critical gaps (4–5)', staff, c => c.gap >= 4)} />
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
+        {/* ===== ANALYTICS · Proficiency by department card ===== */}
         <Card title="Proficiency by department" sub="Average actual level · click a department to see its staff" style={{ flex: '3 1 460px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {deptRows.map(r => (
@@ -101,6 +128,7 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
             ))}
           </div>
         </Card>
+        {/* ===== ANALYTICS · Trend over time chart ===== */}
         <Card title="Trend over time" sub={scopeLabel + ' · average proficiency per cycle'} style={{ flex: '2 1 340px', display: 'flex', flexDirection: 'column' }}>
           <svg viewBox="0 0 360 200" width="100%" style={{ display: 'block' }}>
             {grid.map(v => <g key={v}><line x1="36" x2="350" y1={Y(v)} y2={Y(v)} stroke="#eef0f3" /><text x="28" y={Y(v)} textAnchor="end" dominantBaseline="middle" style={{ font: '500 10px Inter,sans-serif', fill: '#9ca3af' }}>{v.toFixed(1)}</text></g>)}
@@ -115,6 +143,7 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
         </Card>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'stretch' }}>
+        {/* ===== ANALYTICS · Largest gaps by competency card ===== */}
         <Card title="Largest gaps by competency" sub={'Top 10 in ' + scopeLabel + ' · click a competency to see who needs it'} style={{ flex: '3 1 460px' }}>
           {compRows.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {compRows.map(c => (
@@ -127,6 +156,7 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
             ))}
           </div> : <EmptyState title="No competency records" />}
         </Card>
+        {/* ===== ANALYTICS · Gap distribution card ===== */}
         <Card title="Gap distribution" sub={recs.length + ' competency ratings · click a band'} style={{ flex: '2 1 340px' }}>
           <div style={{ display: 'flex', height: '26px', borderRadius: '6px', overflow: 'hidden', gap: '2px' }}>
             {D.GAP.filter(g => counts[g.n]).map(g => (
@@ -142,21 +172,73 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
           </div>
         </Card>
       </div>
-      <Card title="Heatmap · department × skill category" sub="Average gap · click a cell" flush>
-        <HeatGrid D={D} rows={D.depts.filter(dp => dept === ALL || dp.name === dept).map(dp => ({ key: dp.name, label: dp.name, sub: model.staff.filter(s => s.dept === dp.name).length + ' staff', list: model.staff.filter(s => s.dept === dp.name) }))} cols={D.categories.map(c => ({ key: c, label: c, pred: x => x.category === c }))} onCell={(r, c) => openRecords(c.label + ' · ' + r.label, r.list, c.pred, 'Average gap in this category')} />
+    </>
+  );
+}
+
+// ===== ANALYTICS · Departments tab (/analytics?tab=departments) =====
+function Departments({ D, model, staff, dept, openStaff, title, desc, deptFilter }) {
+  const rows = D.depts.filter(d => dept === ALL || d.name === dept).map(d => {
+    const l = model.staff.filter(s => s.dept === d.name), done = l.filter(s => s.scored).length;
+    return { name: d.name, hod: d.hod, list: l, staff: l.length, done, pct: l.length ? Math.round(done / l.length * 100) : 0, gap: avg(l.map(s => s.avgGap)), review: l.filter(s => s.status === 'Submitted' || s.status === 'Auto-scored').length };
+  });
+  return (
+    <>
+      {/* ===== ANALYTICS · Departments page header ===== */}
+      <PageHeader title={title} description={desc} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{rows.length} department{rows.length === 1 ? '' : 's'} · {staff.length} staff</span></>} />
+      {/* ===== ANALYTICS · Departments table ===== */}
+      <Card title="Departments at a glance" sub={CURRENT + ' · click a department to see its staff'} flush>
+        <DataTable minWidth={720} rows={rows} rowKey={r => r.name} columns={[
+          { key: 'name', label: 'Department', render: r => <button type="button" onClick={() => openStaff(r.name, r.list, r.hod ? 'HOD: ' + r.hod : undefined)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', textAlign: 'left', font: '500 13px Inter,sans-serif', color: '#127a42' }}>{r.name}</button> },
+          { key: 'hod', label: 'Head of department', render: r => <span style={{ color: '#4b5563' }}>{r.hod || '—'}</span> },
+          { key: 'staff', label: 'Staff', align: 'center' },
+          { key: 'pct', label: 'Completion', render: r => <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ width: '80px', height: '6px', borderRadius: '999px', background: '#eef0f3', overflow: 'hidden' }}><span style={{ display: 'block', height: '100%', width: r.pct + '%', background: '#0d3b2a' }}></span></span>{r.pct}% <span style={{ color: '#9ca3af' }}>({r.done}/{r.staff})</span></span> },
+          { key: 'gap', label: 'Avg gap', render: r => <GapBadge gap={Math.round(r.gap)} GAP={D.GAP} note={r.gap.toFixed(1)} /> },
+          { key: 'review', label: 'To review', align: 'center', render: r => r.review ? <Badge bg="#ffedd5" fg="#9a3412">{r.review}</Badge> : <span style={{ color: '#9ca3af' }}>0</span> }]} />
       </Card>
     </>
   );
 }
 
+// ===== TRAINING · Top Training Needs (/training?tab=top-needs) =====
+// Only gaps of 3 or more count; rows ranked by number of staff, then by the largest gap.
+function TopNeeds({ D, staff, scopeLabel, openRecords, go, title, desc, deptFilter }) {
+  const byComp = {};
+  staff.forEach(s => s.comps.filter(c => c.gap >= 3).forEach(c => {
+    const e = byComp[c.id] = byComp[c.id] || { id: c.id, name: c.name, category: c.category, n: 0, depts: new Set(), worst: 0, tr: c.training };
+    e.n++; e.depts.add(s.dept); e.worst = Math.max(e.worst, c.gap);
+  }));
+  const rows = Object.values(byComp).sort((a, b) => b.n - a.n || b.worst - a.worst);
+  const people = new Set(staff.filter(s => s.comps.some(c => c.gap >= 3)).map(s => s.id)).size;
+  return (
+    <>
+      {/* ===== TRAINING · Top needs page header ===== */}
+      <PageHeader title={title} description={desc} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{rows.length} competencies · {people} staff with a gap of 3 or more</span></>} />
+      {/* ===== TRAINING · Top needs table ===== */}
+      <Card title="Top training needs" sub={scopeLabel + ' · staff with a gap of 3 or more'} flush>
+        <DataTable minWidth={720} rows={rows} rowKey={r => r.id} empty={<EmptyState icon="icon-graduation-cap" title="No intensive training needs" text="Nobody in scope has a gap of 3 or more." />} columns={[
+          { key: 'name', label: 'Competency', render: r => <button type="button" onClick={() => openRecords(r.name, staff, x => x.id === r.id && x.gap >= 3, r.n + ' staff with a gap of 3 or more')} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', textAlign: 'left', font: '500 13px Inter,sans-serif', color: '#127a42' }}>{r.name}</button> },
+          { key: 'tr', label: 'Recommended training', render: r => <span style={{ color: '#4b5563' }}>{r.tr ? r.tr.name : '—'}</span> },
+          { key: 'depts', label: 'Departments', align: 'center', render: r => r.depts.size },
+          { key: 'worst', label: 'Largest gap', render: r => <GapBadge gap={r.worst} GAP={D.GAP} /> },
+          { key: 'n', label: 'Staff', align: 'center', render: r => <b style={{ font: "700 14px 'JetBrains Mono',monospace" }}>{r.n}</b> }]} />
+      </Card>
+    </>
+  );
+}
+
+// ===== ANALYTICS · Heat grid (shared coloured grid) =====
+// Each cell = average gap of the row's staff on the column's competencies; a striped cell means not assessed.
 function HeatGrid({ D, rows, cols, onCell, onRow, onCol, labelW = 190 }) {
   if (!rows.length) return <EmptyState title="No data in scope" />;
   return (
     <div style={{ padding: '16px 20px 20px', overflowX: 'auto' }}>
       <div style={{ minWidth: Math.max(560, labelW + cols.length * 70) + 'px', display: 'grid', gridTemplateColumns: labelW + 'px repeat(' + cols.length + ',minmax(54px,1fr))', gap: '4px' }}>
+        {/* ===== ANALYTICS · Heat grid column headers ===== */}
         <span></span>
         {cols.map(c => onCol ? <button key={c.key} type="button" onClick={() => onCol(c)} title={c.title || c.label} style={{ background: 'none', border: '0', cursor: 'pointer', font: '600 10px Inter,sans-serif', letterSpacing: '.3px', color: '#127a42', padding: '0 2px 6px', textTransform: 'uppercase', textAlign: 'left', alignSelf: 'end' }}>{c.label}</button>
           : <span key={c.key} style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', padding: '0 4px 6px', textTransform: 'uppercase', alignSelf: 'end' }}>{c.label}</span>)}
+        {/* ===== ANALYTICS · Heat grid rows ===== */}
         {rows.map(r => (
           <React.Fragment key={r.key}>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingRight: '8px', minWidth: '0' }}>
@@ -173,17 +255,23 @@ function HeatGrid({ D, rows, cols, onCell, onRow, onCol, labelW = 190 }) {
           </React.Fragment>
         ))}
       </div>
+      {/* ===== ANALYTICS · Heat grid legend ===== */}
       <div style={{ marginTop: '14px' }}><GapLegend D={D} /></div>
     </div>
   );
 }
 
+// ===== ANALYTICS · Heatmap tab (/analytics?tab=heatmap) =====
+// All departments: department x category grid. One department chosen: person x competency grid.
 function Heatmap({ D, model, staff, dept, scopeLabel, openRecords, go, title, desc, deptFilter, setLocal }) {
   const [catFilter, setCat] = useState(ALL);
   if (dept === ALL) {
+    // ===== ANALYTICS · Heatmap · all departments view =====
     return (
       <>
+        {/* ===== ANALYTICS · Heatmap page header ===== */}
         <PageHeader title={title} description={desc} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff · click a department name to open its competency view</span></>} />
+        {/* ===== ANALYTICS · Department x category grid ===== */}
         <Card title="Average gap by department and skill category" sub="Click a cell to see the staff and competencies behind it" flush>
           <HeatGrid D={D} rows={D.depts.map(dp => { const list = model.staff.filter(s => s.dept === dp.name); return { key: dp.name, label: dp.name, sub: list.length + ' staff', list }; })}
             cols={D.categories.map(c => ({ key: c, label: c, pred: x => x.category === c }))}
@@ -193,10 +281,13 @@ function Heatmap({ D, model, staff, dept, scopeLabel, openRecords, go, title, de
       </>
     );
   }
+  // ===== ANALYTICS · Heatmap · single department view =====
   const comps = D.framework.filter(c => (!c.dept || c.dept === dept) && (catFilter === ALL || c.category === catFilter));
   return (
     <>
+      {/* ===== ANALYTICS · Heatmap page header + category filter ===== */}
       <PageHeader title={title} description={desc} filters={<>{deptFilter}<Sel value={catFilter} onChange={setCat} options={[[ALL, 'All categories'], ...D.categories.map(c => [c, c])]} /><span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff × {comps.length} competencies</span></>} />
+      {/* ===== ANALYTICS · Person x competency grid ===== */}
       <Card title={dept + ' · gap per person and competency'} sub="Click a name for the individual report, a column for everyone on that competency, or a cell for that record" flush>
         <HeatGrid D={D} labelW={200} rows={[...staff].sort((a, b) => b.avgGap - a.avgGap).map(s => ({ key: s.id, label: s.name, sub: s.designation, list: [s] }))}
           cols={comps.map(c => ({ key: c.id, label: c.short, title: c.name, pred: x => x.id === c.id, name: c.name }))}
@@ -208,7 +299,9 @@ function Heatmap({ D, model, staff, dept, scopeLabel, openRecords, go, title, de
   );
 }
 
+// ===== REPORTS · Report builder (/reports) =====
 function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
+  // ===== REPORTS · Builder state =====
   const [rtype, setRtype] = useState('individual');
   const [pid, setPid] = useState(null);
   const [pq, setPq] = useState('');
@@ -220,6 +313,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
   const [cols, setCols] = useState(['Staff ID', 'Name', 'Department', 'Competency', 'Target', 'Actual', 'Gap', 'Status']);
   const [fmt, setFmt] = useState('CSV');
   const [exportsList, setExports] = useState([{ fmt: 'PDF', name: 'Q3 2026 organisation summary', when: '30 Sep 2026' }, { fmt: 'XLSX', name: 'IT Department gap register', when: '18 Sep 2026' }]);
+  // ===== REPORTS · Rows from filters =====
   const staff = inScope(model, dept);
   const picks = staff.filter(s => !pq.trim() || (s.name + ' ' + s.staffNo + ' ' + s.designation).toLowerCase().includes(pq.trim().toLowerCase()));
   const person = pid && staff.find(s => s.id === pid) ? pid : null;
@@ -229,6 +323,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
   staff.forEach(s => {
     if (status !== 'All' && s.status !== status) return;
     s.comps.forEach(c => {
+      // Result source: earlier cycle -> "Previous cycle"; adjusted by reviewer -> "Manager-adjusted"; confirmed -> "Manager-confirmed"; else "System".
       const ev = c.source !== CURRENT ? 'Previous cycle' : c.adjusted ? 'Manager-adjusted' : s.status === 'Confirmed' ? 'Manager-confirmed' : 'System';
       const date = c.source === CURRENT ? s.submittedIso : QDATE[c.source];
       if (!inBand(c.gap) || (evaluator !== 'All' && ev !== evaluator) || date < from || date > to) return;
@@ -236,6 +331,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
     });
   });
   let headers = RCOLS.filter(c => cols.includes(c)), out = rows;
+  // Group summary: rows grouped by department + category with averages.
   if (rtype === 'summary') {
     const g = {};
     rows.forEach(r => { const k = r.Department + '|' + r.Category; (g[k] = g[k] || []).push(r); });
@@ -244,6 +340,8 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
     headers = SUMCOLS;
   }
   const label = rtype === 'individual' ? (rep ? 'Individual record · ' + rep.s.name : 'Individual record') : rtype === 'summary' ? 'Group summary' : 'Staff records';
+  // ===== REPORTS · Export =====
+  // CSV / Excel / JSON / XML download in the browser; PDF only shows a message (no file is made).
   const generate = () => {
     const stamp = new Date().toISOString().slice(0, 10);
     if (rtype === 'individual') {
@@ -263,14 +361,20 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
     setExports(e => [{ fmt: fmt === 'Excel' ? 'XLSX' : fmt, name: label + ' · ' + out.length + ' rows', when: 'Just now' }, ...e].slice(0, 6));
     flash(fmt === 'PDF' ? 'PDF is being generated. It will appear in Recent exports.' : fmt + ' downloaded (' + out.length + ' rows)');
   };
+  // ===== REPORTS · Type switch & preview columns =====
   const seg = (v, l) => <button key={v} type="button" onClick={() => setRtype(v)} style={{ flex: '1', height: '30px', border: '0', borderRadius: '6px', cursor: 'pointer', font: '500 12.5px Inter,sans-serif', background: rtype === v ? '#fff' : 'transparent', color: rtype === v ? '#111827' : '#4b5563', whiteSpace: 'nowrap' }}>{l}</button>;
   const tableCols = headers.map(h => ({ key: h, label: h, render: h === 'Gap' || h === 'Avg gap' ? r => <GapBadge gap={r._gap} GAP={D.GAP} /> : h === 'Status' ? r => <StatusBadge status={r.Status} /> : h === 'Name' && rtype === 'records' ? r => <span>{r.Name}</span> : undefined }));
+  // ===== REPORTS · Render =====
   return (
     <>
+      {/* ===== REPORTS · Report builder page header ===== */}
       <PageHeader title={title} description={desc} actions={<Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff in scope</span></>} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
+        {/* ===== REPORTS · Build a report panel ===== */}
         <Card title="Build a report" style={{ flex: '1 1 320px', maxWidth: '420px' }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {/* ===== REPORTS · Report type switch ===== */}
           <div style={{ display: 'flex', background: 'rgba(118,118,128,.12)', borderRadius: '10px', padding: '3px', gap: '3px' }}>{seg('individual', 'Individual record')}{seg('records', 'Staff records')}{seg('summary', 'Group summary')}</div>
+          {/* ===== REPORTS · Staff picker (individual) or filters (records / summary) ===== */}
           {rtype === 'individual' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280' }}>STAFF MEMBER</div>
@@ -285,6 +389,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
             </div>
           ) : (
             <>
+              {/* ===== REPORTS · Filters (date, gap band, source, status) ===== */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <Field label="FROM"><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={INPUT} /></Field>
                 <Field label="TO"><input type="date" value={to} onChange={e => setTo(e.target.value)} style={INPUT} /></Field>
@@ -292,6 +397,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
                 <Field label="RESULT SOURCE"><Sel value={evaluator} onChange={setEvaluator} options={EVALUATORS} /></Field>
                 <Field label="STATUS" style={{ gridColumn: 'span 2' }}><Sel value={status} onChange={setStatus} options={[['All', 'All statuses'], ...STATUSES]} /></Field>
               </div>
+              {/* ===== REPORTS · Column picker (staff records only) ===== */}
               {rtype === 'records' ? <div>
                 <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', marginBottom: '8px' }}>COLUMNS</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -300,6 +406,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
               </div> : null}
             </>
           )}
+          {/* ===== REPORTS · Format picker & export button ===== */}
           <div>
             <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', marginBottom: '8px' }}>FORMAT</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -308,12 +415,15 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
           </div>
           <Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>
         </Card>
+        {/* ===== REPORTS · Preview + recent exports column ===== */}
         <div style={{ flex: '2 1 520px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* ===== REPORTS · Preview ===== */}
           {rtype === 'individual' ? (rep ? <IndividualReportView D={D} rep={rep} go={go} compact />
             : <Card title="Preview"><EmptyState icon="icon-user-search" title="Pick a staff member" text="The report covers only that person: their details, target profile, each competency's target, actual and gap, history across cycles and recommended trainings." /></Card>)
             : <Card title="Preview" sub={label + ' · exactly what will be exported'} actions={<span style={{ fontSize: '12.5px', color: '#6b7280' }}>{out.length} rows</span>} flush>
               <DataTable columns={tableCols} rows={out} maxHeight="560px" minWidth={Math.max(560, headers.length * 110)} empty={<EmptyState icon="icon-filter" title="No rows match" text="Widen the date range or clear a filter." />} />
             </Card>}
+          {/* ===== REPORTS · Recent exports ===== */}
           <Card title="Recent exports" flush>
             {exportsList.map((e, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
@@ -328,6 +438,8 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
   );
 }
 
+// ===== REPORTS · Scheduled reports (/reports?tab=scheduled) =====
+// Demo only: schedules live in component state; nothing is saved or emailed.
 function Schedules({ title, desc, flash }) {
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ name: '', freq: 'Weekly', fmt: 'PDF', to: '' });
@@ -341,8 +453,11 @@ function Schedules({ title, desc, flash }) {
     setAdding(false); setF({ name: '', freq: 'Weekly', fmt: 'PDF', to: '' }); flash('Schedule created'); };
   return (
     <>
+      {/* ===== REPORTS · Scheduled reports page header ===== */}
       <PageHeader title={title} description={desc} actions={<Btn kind="primary" icon="icon-plus" onClick={() => setAdding(!adding)}>New schedule</Btn>} />
+      {/* ===== REPORTS · Scheduled reports list card ===== */}
       <Card title="Scheduled reports" sub={list.filter(x => x.on).length + ' of ' + list.length + ' active · sent by email'} flush>
+        {/* ===== REPORTS · New schedule form ===== */}
         {adding ? (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', padding: '16px 20px', background: 'rgba(255,255,255,.4)', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
             <Field label="REPORT NAME" style={{ flex: '2 1 220px' }}><input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="e.g. Weekly completion summary" style={INPUT} /></Field>
@@ -351,6 +466,7 @@ function Schedules({ title, desc, flash }) {
             <Field label="RECIPIENTS" style={{ flex: '2 1 240px' }}><input value={f.to} onChange={e => setF({ ...f, to: e.target.value })} placeholder="name@dvla.gov.gh, …" style={INPUT} /></Field>
             <Btn kind="primary" onClick={save} disabled={!canSave}>Save</Btn>
           </div>) : null}
+        {/* ===== REPORTS · Schedule rows (toggle / delete) ===== */}
         {list.length ? list.map(r => (
           <div key={r.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', padding: '14px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
             <span style={{ width: '38px', height: '38px', borderRadius: '9px', background: '#e6f2ea', color: '#0d3b2a', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}><i className="icon-calendar-clock" style={{ fontSize: '17px' }}></i></span>

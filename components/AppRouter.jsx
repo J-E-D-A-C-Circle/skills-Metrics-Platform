@@ -1,10 +1,19 @@
 'use client';
+// =============================================================================
+// AppRouter.jsx · Client-side router: reads the URL (path, ?tab=, ?id=) and keeps it in sync with the app
+// Screen / URL: all pages (/, /analytics?tab=..., /report?id=..., etc.); draws nothing itself
+// Who sees it: everyone (admin / manager / creator / staff)
+// Used by: every app/<route>/page.jsx   Depends on: SkillMatrixApp.jsx (loaded client-only via next/dynamic)
+// Sections (search for these markers): ROUTER
+// =============================================================================
 import { useEffect, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 
+// ===== ROUTER · Client-only app =====
 // The app relies on window/localStorage, so it renders on the client only.
 const SkillMatrixApp = dynamic(() => import('./SkillMatrixApp'), { ssr: false });
 
+// ===== ROUTER · Read URL =====
 // Each app/<route>/page.jsx passes its own page as the fallback; the URL wins when it has a path.
 function readLocation(fallback = 'home', fallbackTab = undefined) {
   if (typeof window === 'undefined') return { page: fallback, tab: fallbackTab, id: undefined };
@@ -13,6 +22,7 @@ function readLocation(fallback = 'home', fallbackTab = undefined) {
   return { page: raw || fallback, tab: sp.get('tab') || fallbackTab, id: sp.get('id') || undefined };
 }
 
+// ===== ROUTER · AppRouter component =====
 export default function AppRouter({ initialPage = 'home', initialTab = undefined }) {
   const [loc, setLoc] = useState(() => readLocation(initialPage, initialTab));
   useEffect(() => {
@@ -21,8 +31,10 @@ export default function AppRouter({ initialPage = 'home', initialTab = undefined
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [initialPage, initialTab]);
+  // ===== ROUTER · Navigate (update URL) =====
   // opts.replace swaps the current history entry (used when a hidden or aliased URL is redirected).
   const onNavigate = useCallback((p, t, opts) => {
+    // Home is '/'; Profile's default 'account' tab is never written to ?tab=.
     const o = opts || {}, tab = t && t !== 'account' ? t : undefined;
     const qs = new URLSearchParams();
     if (tab) qs.set('tab', tab);
@@ -31,5 +43,6 @@ export default function AppRouter({ initialPage = 'home', initialTab = undefined
     if (url !== window.location.pathname + window.location.search) window.history[o.replace ? 'replaceState' : 'pushState']({}, '', url);
     setLoc({ page: p, tab, id: o.id || undefined });
   }, []);
+  // Starting role comes from NEXT_PUBLIC_DEMO_ROLE (default admin); a signed-in user (skm-me) overrides it inside SkillMatrixApp.
   return <SkillMatrixApp routePage={loc.page} routeTab={loc.tab} routeId={loc.id} onNavigate={onNavigate} role={process.env.NEXT_PUBLIC_DEMO_ROLE || 'admin'} />;
 }

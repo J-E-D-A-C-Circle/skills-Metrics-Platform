@@ -1,16 +1,30 @@
 'use client';
+// =============================================================================
+// SMTeam.jsx · Staff Evaluations host: Reviews tab plus legacy 360 Feedback and Plan Approvals
+// Screen / URL: /staff-evals (Reviews), /staff-evals?tab=feedback, /staff-evals?tab=approvals (last two only when FEATURES.feedback360 / planApprovals are on; /team, /team-evals, /feedback, /approvals redirect here)
+// Who sees it: admin, manager
+// Used by: SkillMatrixApp.jsx (team group pages)   Depends on: ./SMStaffEvals, ./smUI (PageTabs, TabsContext)
+// Sections (search for these markers): STAFF EVALS · Legacy 360 feedback & plan approvals, STAFF EVALS · Sample state, STAFF EVALS · Toast helper, STAFF EVALS · View values (renderVals), STAFF EVALS · Render (legacy views), STAFF EVALS · Page title, STAFF EVALS · Tabs, STAFF EVALS · Old team evaluations view (team-evals), STAFF EVALS · KPI tiles, STAFF EVALS · Direct reports list, STAFF EVALS · 360 Feedback tab, STAFF EVALS · Feedback requested from you, STAFF EVALS · Your 360 assessors, STAFF EVALS · Plan Approvals tab, STAFF EVALS · Approvals header & Pending / Approved / Returned switch, STAFF EVALS · Empty approvals message, STAFF EVALS · Approval rows (Return / Approve), STAFF EVALS · Evaluate / feedback side panel, STAFF EVALS · Side panel header, STAFF EVALS · Rating rows & comments, STAFF EVALS · Side panel footer (Submit), STAFF EVALS · Toast, STAFF EVALS · Entry point
+// =============================================================================
 import React from 'react';
 import StaffEvaluations from './SMStaffEvals';
+import { PageTabs, TabsContext } from './smUI';
 
 
+// ===== STAFF EVALS · Legacy 360 feedback & plan approvals =====
 // 360° Feedback and Plan Approvals (hidden by FEATURES). Kept so they can be switched back on.
 class TeamLegacy extends React.Component {
+  // ===== STAFF EVALS · Sample state =====
+  static contextType = TabsContext;
   state = { evals: {}, modal: null, ratings: {}, comment: '', toast: '', done360: {}, apTab: 'Pending',
     approvals: [
       { id: 1, member: 'Adjei Denzil Asiam', action: 'Run a DR drill alongside the infrastructure team', comp: 'Backup & Disaster Recovery', gap: 3, due: 'Nov 2026', state: 'Pending' },
       { id: 2, member: 'Yaw Darko', action: 'Security+ bootcamp (5 days)', comp: 'Incident Response', gap: 4, due: 'Dec 2026', state: 'Pending' },
       { id: 3, member: 'Kofi Boateng', action: 'Advanced PostgreSQL administration course', comp: 'Database Administration', gap: 2, due: 'Jan 2027', state: 'Approved' }] };
+  // ===== STAFF EVALS · Toast helper =====
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  // ===== STAFF EVALS · View values (renderVals) =====
+  // Builds every value the JSX below needs. All data is demo data held in state; nothing is saved.
   renderVals() {
     const d = this.props.data, s = this.state;
     if (!d) return {};
@@ -26,7 +40,9 @@ class TeamLegacy extends React.Component {
         btnBg: can ? '#0d3b2a' : '#fff', btnFg: can ? '#fff' : '#9ca3af', btnBorder: can ? '0' : '1px solid #e5e7eb',
         action: () => can && this.setState({ modal: { kind: 'eval', id: t.id, name: t.name, role: t.role }, ratings: {}, comment: '' }) };
     });
+    // Hard-coded 360 feedback requests for the demo.
     const reqs = [{ id: 'r1', name: 'Ama Owusu', role: 'Network Engineer', relation: 'Peer' }, { id: 'r2', name: 'Esi Mensah', role: 'HR Officer', relation: 'Cross-department' }, { id: 'r3', name: 'Joseph Ahor Abandoh-Sam', role: 'HOD', relation: 'Upward feedback' }];
+    // Side panel rating rows: an evaluation rates each competency; 360 feedback rates each major skill area.
     const m = s.modal;
     let rateRows = [], total = 0;
     if (m) {
@@ -64,16 +80,22 @@ class TeamLegacy extends React.Component {
       toast: s.toast,
     };
   }
+  // ===== STAFF EVALS · Render (legacy views) =====
   render() {
     const __v = this.renderVals() || {};
     return (
       <>
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* ===== STAFF EVALS · Page title ===== */}
         <div>
-          <h1 style={{ margin: "0", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.5px" }}>{__v.title}</h1>
+          <h1 style={{ margin: "0", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.5px" }}>{(this.context && this.context.title) || __v.title}</h1>
           <div style={{ fontSize: "14px", color: "#6b7280", marginTop: "6px" }}>{__v.subtitle}</div>
         </div>
+        {/* ===== STAFF EVALS · Tabs ===== */}
+        <PageTabs />
+        {/* ===== STAFF EVALS · Old team evaluations view (team-evals) ===== */}
         {(__v.isEvals) ? (<>
+          {/* ===== STAFF EVALS · KPI tiles ===== */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: "12px" }}>
             {(__v.kpis || []).map((k, $index) => (<React.Fragment key={$index}>
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "18px" }}>
@@ -83,6 +105,7 @@ class TeamLegacy extends React.Component {
               </div>
             </React.Fragment>))}
           </div>
+          {/* ===== STAFF EVALS · Direct reports list ===== */}
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ padding: "18px clamp(16px,2.4vw,22px)", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Direct reports</div>
             {(__v.members || []).map((m, $index) => (<React.Fragment key={$index}>
@@ -101,8 +124,10 @@ class TeamLegacy extends React.Component {
             </React.Fragment>))}
           </div>
         </>) : null}
+        {/* ===== STAFF EVALS · 360 Feedback tab ===== */}
         {(__v.isFeedback) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
+            {/* ===== STAFF EVALS · Feedback requested from you ===== */}
             <div style={{ flex: "2 1 480px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ padding: "18px 22px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Feedback requested from you</div>
@@ -124,6 +149,7 @@ class TeamLegacy extends React.Component {
                 </div>
               </React.Fragment>))}
             </div>
+            {/* ===== STAFF EVALS · Your 360 assessors ===== */}
             <div style={{ flex: "1 1 300px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ padding: "18px 22px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Your 360° assessors</div>
               <div style={{ padding: "16px 22px 6px" }}>
@@ -147,8 +173,10 @@ class TeamLegacy extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== STAFF EVALS · Plan Approvals tab ===== */}
         {(__v.isApprovals) ? (<>
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
+            {/* ===== STAFF EVALS · Approvals header & Pending / Approved / Returned switch ===== */}
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "16px 22px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
               <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Development plan actions</div>
               <div style={{ display: "flex", background: "rgba(118,118,128,.12)", borderRadius: "10px", padding: "3px", gap: "3px" }}>
@@ -157,9 +185,11 @@ class TeamLegacy extends React.Component {
                 </React.Fragment>))}
               </div>
             </div>
+            {/* ===== STAFF EVALS · Empty approvals message ===== */}
             {(__v.noApprovals) ? (<>
               <div style={{ padding: "40px", textAlign: "center", fontSize: "13.5px", color: "#6b7280" }}>Nothing here.</div>
             </>) : null}
+            {/* ===== STAFF EVALS · Approval rows (Return / Approve) ===== */}
             {(__v.approvals || []).map((p, $index) => (<React.Fragment key={$index}>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px", padding: "16px 22px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <span style={{ flex: "none", font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "3px 9px", background: p?.gapBg, color: p?.gapFg }}>Gap {p?.gap}</span>
@@ -180,9 +210,11 @@ class TeamLegacy extends React.Component {
             </React.Fragment>))}
           </div>
         </>) : null}
+        {/* ===== STAFF EVALS · Evaluate / feedback side panel ===== */}
         {(__v.modalOpen) ? (<>
           <div onClick={__v.closeModal} style={{ position: "fixed", inset: "0", zIndex: "70", background: "rgba(8,12,24,.5)", display: "flex", justifyContent: "flex-end" }}>
             <div onClick={__v.stop} style={{ width: "min(640px,100%)", height: "100%", background: "#fff", display: "flex", flexDirection: "column", boxShadow: "-20px 0 60px rgba(0,0,0,.2)" }}>
+              {/* ===== STAFF EVALS · Side panel header ===== */}
               <div style={{ padding: "18px 22px", borderBottom: "1px solid rgba(15,35,65,.07)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
                 <div>
                   <div style={{ fontSize: "18px", fontWeight: "700" }}>{__v.modalTitle}</div>
@@ -192,6 +224,7 @@ class TeamLegacy extends React.Component {
                   <i className={"icon-x"} style={{ fontSize: "18px" }}></i>
                 </button>
               </div>
+              {/* ===== STAFF EVALS · Rating rows & comments ===== */}
               <div style={{ flex: "1", overflowY: "auto", padding: "8px 22px 20px" }}>
                 {(__v.rateRows || []).map((r, $index) => (<React.Fragment key={$index}>
                   <div style={{ padding: "14px 0", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
@@ -213,6 +246,7 @@ class TeamLegacy extends React.Component {
                 </React.Fragment>))}
                 <label style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "16px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COMMENTS<textarea value={__v.comment} onChange={__v.onComment} placeholder={"Strengths, areas to improve, suggested training…"} style={{ minHeight: "110px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "10px", font: "400 13.5px/1.5 Inter,sans-serif", color: "#111827", resize: "vertical" }}></textarea></label>
               </div>
+              {/* ===== STAFF EVALS · Side panel footer (Submit) ===== */}
               <div style={{ padding: "14px 22px", borderTop: "1px solid rgba(15,35,65,.07)", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{__v.ratedText}</span>
                 <button onClick={__v.submitModal} style={{ height: "38px", padding: "0 20px", border: "0", borderRadius: "999px", background: __v.submitBg, color: "#fff", font: "600 13.5px Inter,sans-serif", cursor: __v.submitCursor }}>Submit</button>
@@ -220,6 +254,7 @@ class TeamLegacy extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== STAFF EVALS · Toast ===== */}
         {(__v.toast) ? (<>
           <div style={{ position: "fixed", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: "80", background: "#111827", color: "#fff", font: "500 13px Inter,sans-serif", padding: "10px 16px", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,.25)", display: "flex", alignItems: "center", gap: "8px" }}><i className={"icon-circle-check"} style={{ fontSize: "15px", color: "#4ade80" }}></i>{__v.toast}</div>
         </>) : null}
@@ -230,6 +265,8 @@ class TeamLegacy extends React.Component {
 }
 
 
+// ===== STAFF EVALS · Entry point =====
+// view "staff-evals" (Reviews tab) -> SMStaffEvals.jsx; "feedback" / "approvals" -> the legacy class above.
 export default function SMTeam(props) {
   return props.view === 'staff-evals' ? <StaffEvaluations {...props} /> : <TeamLegacy {...props} />;
 }

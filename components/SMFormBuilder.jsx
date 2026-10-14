@@ -1,10 +1,27 @@
 'use client';
+// =============================================================================
+// SMFormBuilder · Form library and drag-and-drop assessment form builder (build, score, preview, version)
+// Screen / URL: "/forms" (tabs inside the page: Build, Rubric & Scoring, Preview, Versions)
+// Who sees it: admin, creator (Forms is hidden from managers and staff in the sidebar)
+// Used by: SkillMatrixApp.jsx (page "forms"); SMCycles.jsx imports loadForms/saveForms/newForm/makeQuestion/loadBank/QBANK_KEY
+//   Depends on: smUI (PageHeader, Btn), ui/select (Select), SMFormBuilder.module.css, props.data (framework, BANKS, PROF, IMP, depts)
+// Sections (search for these markers): FORMS · Constants, Likert scale helpers, Likert scale display, Question factory,
+//   Default evaluation tiers, Seed forms, Shared load/save API, Conditional logic & scoring, Main component, Drag & drop,
+//   Preview answers & signature pad, View values, Build tab: canvas items, Build tab: question inspector values, Live score,
+//   Preview tab: question rows, Values handed to the screen, Save draft & publish, Tabs, Question palette & question bank,
+//   Rubric & scoring values, Preview result values, Version history actions, Render, Page header, Form toolbar, Locked notice,
+//   Tab bar, Build tab, Question types palette, Question bank, Canvas, Section header card, Question card, Inspector (all parts),
+//   Rubric & Scoring tab, Scoring mode & pass threshold, Evaluation tiers, Scoring matrix, Preview tab, Live result panel,
+//   Versions tab, Toast
+// =============================================================================
 import React from 'react';
 import __css from './SMFormBuilder.module.css';
 import { PageHeader, Btn } from './smUI';
 import { Select } from './ui/select';
 
 
+// ===== FORMS · Constants (storage key, question types, scales, colours) =====
+// All forms live in localStorage under "skm-forms" (KEY).
 const KEY = 'skm-forms';
 const TYPES = {
   section: ['Section', 'icon-heading'], likert: ['Likert scale', 'icon-gauge'], single: ['Single choice', 'icon-circle-dot'], multi: ['Multiple select', 'icon-list-checks'],
@@ -21,6 +38,8 @@ const PRESETS = {
   custom: { label: 'Custom labels' },
 };
 const POINTS = [3, 4, 5, 7];
+// ===== FORMS · Likert scale helpers =====
+// Labels/descriptions for a preset; the 5-point Proficiency preset reads the live Rating Scales (data.PROF).
 function presetLabels(preset, n, d) {
   if (preset === 'proficiency' && n === 5) return d ? d.PROF.slice(1).map(p => p.label) : SCALES.proficiency;
   const p = PRESETS[preset]; return p && p[n] ? [...p[n]] : null;
@@ -39,6 +58,7 @@ function likertOf(q, d) {
   const descs = q.descs && q.descs.length === points ? q.descs : presetDescs(preset, points, d);
   return { preset, points, labels, descs, showNumbers: q.showNumbers !== false };
 }
+// ===== FORMS · Likert scale display (LikertScale) =====
 // Renders the scale exactly as participants see it. `value`/`onPick` make it interactive (Preview).
 function LikertScale({ sc, value, onPick }) {
   return (
@@ -53,6 +73,8 @@ function LikertScale({ sc, value, onPick }) {
     </div>
   );
 }
+// ===== FORMS · Question factory (blank) & small helpers =====
+// blank(type) makes a new question with sensible defaults for that question type.
 let UID = Date.now();
 const nid = () => 'q' + (UID++).toString(36);
 const today = () => new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -68,7 +90,10 @@ function blank(type, over) {
   if (type === 'file') Object.assign(b, { accept: 'image/*,.pdf', maxMB: 10 });
   return Object.assign(b, over || {});
 }
+// ===== FORMS · Default evaluation tiers =====
+// Result bands by percentage: Expert 90+, Proficient 80+, Competent 60+, Basic 40+, Novice below.
 const TIERS = () => [{ name: 'Expert', min: 90, color: '#0d3b2a' }, { name: 'Proficient', min: 80, color: '#2f9e44' }, { name: 'Competent', min: 60, color: '#1c8fd1' }, { name: 'Basic', min: 40, color: '#f08c00' }, { name: 'Novice', min: 0, color: '#e03131' }];
+// ===== FORMS · Seed forms (first run) =====
 // Seed forms come from the DVLA source documents: one RBDI tool and one HR question bank per job level
 // (questions, options and answer keys verbatim), plus self-ratings for the general and technical skills.
 function seed(d) {
@@ -97,6 +122,8 @@ function seed(d) {
   });
   return forms;
 }
+// ===== FORMS · Shared load/save API (used by Assessment Cycles) =====
+// "skm-qbank" holds questions uploaded in Cycles. loadForms() seeds and saves the default forms when "skm-forms" is empty.
 // Shared with Assessment Cycles, which can create forms and add questions from an upload.
 export const QBANK_KEY = 'skm-qbank';
 export function makeQuestion(type, over) { return blank(type, over); }
@@ -108,6 +135,8 @@ export function loadForms(d) {
 export function saveForms(forms) { try { localStorage.setItem(KEY, JSON.stringify(forms)); } catch (e) {} }
 export function newForm(name, items, note) { return { id: 'f' + Date.now().toString(36), name, status: 'Draft', version: 1, items, scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: note || 'Created', items: null }] }; }
 export function loadBank() { try { const b = JSON.parse(localStorage.getItem(QBANK_KEY) || '[]'); return Array.isArray(b) ? b : []; } catch (e) { return []; } }
+// ===== FORMS · Conditional logic, answered check & scoring =====
+// condMet(): true when a question's condition on an earlier answer holds (or it has no condition).
 function condMet(q, items, ans) {
   const c = q.cond; if (!c) return true;
   const src = items.find(x => x.id === c.qid); if (!src) return true;
@@ -123,6 +152,8 @@ function answered(q, v) {
   if (q.type === 'matrix') return v && q.rows.every((_, i) => v[i] !== undefined);
   return v !== undefined && v !== null && v !== '';
 }
+// score(): weighted points per section. Manual-review text questions count as "pending"; questions whose
+// condition is not met are skipped; "equal" mode gives every weighted question a weight of 1.
 function score(form, ans) {
   const out = { earned: 0, max: 0, pending: 0, sections: [] }; let cur = { title: 'General', earned: 0, max: 0 };
   const push = () => { if (cur.max > 0) out.sections.push(cur); };
@@ -143,11 +174,14 @@ function score(form, ans) {
   });
   push(); return out;
 }
+// ===== FORMS · Main component (state & editing actions) =====
 class SMFormBuilder extends React.Component {
   state = { forms: null, sel: 0, selQ: null, tab: 'build', ans: {}, tried: false, submitMsg: '', submitOk: false, over: null, gpsBusy: null, toast: '' };
   componentDidMount() { this.setState({ forms: loadForms(this.props.data), bankUp: loadBank() }); this._sig = {}; }
+  // Every state change saves the forms list to localStorage "skm-forms" when it has changed.
   setState(u, cb) { return super.setState(u, () => { const fm = this.state.forms; if (fm && fm !== this._saved) { this._saved = fm; try { localStorage.setItem(KEY, JSON.stringify(fm)); } catch (e) {} } cb && cb(); }); }
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  // Editing a Published/Archived form starts a new Draft version (version number +1, logged in history).
   edit(fn) {
     this.setState(s => ({ forms: s.forms.map((f, i) => {
       if (i !== s.sel) return f; let g = fn(f);
@@ -157,12 +191,14 @@ class SMFormBuilder extends React.Component {
   setItems(fn) { this.edit(f => ({ ...f, items: fn(f.items) })); }
   updQ(id, patch) { this.setItems(items => items.map(q => q.id === id ? { ...q, ...patch } : q)); }
   insert(q, at) { this.setItems(items => { const a = [...items]; a.splice(at == null ? a.length : at, 0, q); return a; }); this.setState({ selQ: q.id }); }
+  // ===== FORMS · Drag & drop and reorder =====
   dropAt(i) {
     const d = this._drag; this._drag = null; this.setState({ over: null }); if (!d) return;
     if (d.kind === 'new') this.insert(blank(d.type), i);
     else this.setItems(items => { const a = [...items]; const [m] = a.splice(d.from, 1); a.splice(d.from < i ? i - 1 : i, 0, m); return a; });
   }
   move(i, dir) { this.setItems(items => { const j = i + dir; if (j < 0 || j >= items.length) return items; const a = [...items]; [a[i], a[j]] = [a[j], a[i]]; return a; }); }
+  // ===== FORMS · Preview answers & signature pad =====
   setAns(id, v) { this.setState(s => ({ ans: { ...s.ans, [id]: v }, submitMsg: '' })); }
   bindSig(el, id) {
     if (!el) return; this._sig = this._sig || {}; this._sig[id] = el; if (el._bound) return; el._bound = true;
@@ -173,6 +209,8 @@ class SMFormBuilder extends React.Component {
     const end = () => { if (!down) return; down = false; this.setAns(id, 'signed'); };
     el.addEventListener('pointerup', end); el.addEventListener('pointerleave', end);
   }
+  // ===== FORMS · View values (renderVals) =====
+  // Builds every value and handler the JSX below reads as __v.*; layout switches to side panes at 1180px+.
   renderVals() {
     const s = this.state, d = this.props.data, vw = this.props.vw || 1440;
     if (!d || !s.forms) return {};
@@ -193,6 +231,7 @@ class SMFormBuilder extends React.Component {
       file: ({ 'image/*': 'Images', '.pdf': 'PDF', 'image/*,.pdf': 'Images & PDF', '': 'Any file' }[q.accept] || 'Files') + ' · max ' + q.maxMB + ' MB',
       signature: 'Draw-to-sign pad', gps: 'Captures latitude and longitude',
     }[q.type]);
+    // ===== FORMS · Build tab: canvas items =====
     const canvas = items.map((q, i) => ({
       isSection: q.type === 'section', isQuestion: q.type !== 'section', text: q.text, help: q.help, num: numOf[q.id], icon: TYPES[q.type][1], typeLabel: TYPES[q.type][0],
       required: q.required, weightText: q.weight > 0 ? 'Weight ' + q.weight : 'Not scored', condText: condLabel(q), comp: q.comp, summary: summary(q),
@@ -207,6 +246,8 @@ class SMFormBuilder extends React.Component {
       dup: e => { e.stopPropagation(); this.insert({ ...clone(q), id: nid() }, i + 1); },
       remove: e => { e.stopPropagation(); this.setItems(a => a.filter(x => x.id !== q.id).map(x => x.cond && x.cond.qid === q.id ? { ...x, cond: null } : x)); if (s.selQ === q.id) this.setState({ selQ: null }); },
     }));
+    // ===== FORMS · Build tab: question inspector values =====
+    // Conditions can only point to earlier Likert, single, multi or numeric questions.
     let insp = {};
     if (sel) {
       const u = p => this.updQ(sel.id, p);
@@ -252,6 +293,7 @@ class SMFormBuilder extends React.Component {
         onCondOp: e => u({ cond: { ...cond, op: e.target.value } }), onCondVal: e => u({ cond: { ...cond, value: e.target.value } }), onCondEffect: e => u({ cond: { ...cond, effect: e.target.value } }),
       };
     }
+    // ===== FORMS · Live score for Preview & Rubric totals =====
     const sc = score(f, s.ans), pct = sc.max ? Math.round(sc.earned / sc.max * 100) : 0;
     const tiers = [...f.scoring.tiers].sort((a, b) => b.min - a.min), tier = tiers.find(t => pct >= t.min) || tiers[tiers.length - 1] || { name: '—', color: '#9ca3af' };
     const passed = pct >= f.scoring.pass;
@@ -260,6 +302,7 @@ class SMFormBuilder extends React.Component {
       if (q.type === 'numeric' && (q.answer === '' || q.answer === undefined)) return a; if (['file', 'signature', 'gps', 'text'].includes(q.type)) return a; return a + w; }, 0);
     const method = q => q.type === 'text' ? (q.scoring === 'manual' ? 'Manual' : 'Not scored') : ['file', 'signature', 'gps'].includes(q.type) || q.weight <= 0 || (q.type === 'numeric' && (q.answer === '' || q.answer === undefined)) ? 'Not scored' : q.cond && q.cond.effect === 'score' ? 'Conditional' : 'Auto';
     const MC = { Auto: ['#dcfce7', '#15803d'], Manual: ['#fef3c7', '#92400e'], 'Not scored': ['#f3f4f6', '#6b7280'], Conditional: ['#f3e8ff', '#6d28d9'] };
+    // ===== FORMS · Preview tab: question rows & validation =====
     const pv = items.filter(q => q.type === 'section' || condMet(q, items, s.ans) || (q.cond && q.cond.effect === 'score')).map(q => {
       const v = s.ans[q.id], base = { isSection: q.type === 'section', isQuestion: q.type !== 'section', text: q.text, help: q.help, num: numOf[q.id], required: q.required };
       if (q.type === 'section') return base;
@@ -285,7 +328,9 @@ class SMFormBuilder extends React.Component {
     });
     const missing = items.filter(q => q.type !== 'section' && q.required && condMet(q, items, s.ans) && !answered(q, s.ans[q.id])).length;
     const setScoring = p => this.edit(x => ({ ...x, scoring: { ...x.scoring, ...p } }));
+    // ===== FORMS · Values handed to the screen =====
     return {
+      // ===== FORMS · Form picker, new form, name & status =====
       selValue: String(s.sel), onPickForm: e => this.setState({ sel: +e.target.value, selQ: null, ans: {}, tried: false, submitMsg: '' }),
       formOptions: s.forms.map((x, i) => ({ value: String(i), label: x.name + ' (' + x.status + ')' })),
       newForm: () => { const nf = { id: 'f' + Date.now(), name: 'Untitled assessment form', status: 'Draft', version: 1, items: [blank('section', { text: 'Section 1' })], scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: 'Created', items: null }] };
@@ -294,6 +339,8 @@ class SMFormBuilder extends React.Component {
       status: f.status, version: f.version, statusBg: SC[f.status][0], statusFg: SC[f.status][1], qCountText: qCount + ' questions · ' + items.filter(q => q.type === 'section').length + ' sections',
       lockedNote: f.status === 'Published' ? 'v' + f.version + ' is published and locked. Any change you make starts draft v' + (Math.max(...f.history.map(h => h.v)) + 1) + '.' : f.status === 'Archived' ? 'This form is archived. Editing it creates a new draft.' : '',
       publishBg: f.status === 'Draft' ? '#16a34a' : '#9ca3af', publishText: f.status === 'Draft' ? 'Publish v' + f.version : 'Published',
+      // ===== FORMS · Save draft & publish =====
+      // Publish needs at least one question and a scoring option on every choice question; older published versions become "Superseded".
       saveDraft: () => { if (f.status !== 'Draft') { this.flash('Nothing to save. Make an edit to start a new draft.'); return; } this.flash('Draft v' + f.version + ' saved'); },
       publish: () => { if (f.status !== 'Draft') return; if (!qCount) { this.flash('Add at least one question before publishing'); return; }
         const bad = items.find(q => (q.type === 'single' || q.type === 'multi') && !q.options.some(o => +o.score > 0) && q.weight > 0);
@@ -302,10 +349,13 @@ class SMFormBuilder extends React.Component {
           const hist = x.history.map(h => h.status === 'Published' ? { ...h, status: 'Superseded' } : h).filter(h => h.v !== x.version);
           return { ...x, status: 'Published', history: [...hist, { v: x.version, status: 'Published', date: today(), note: 'Published with ' + qCount + ' questions', items: clone(x.items), scoring: clone(x.scoring) }] }; }) }));
         this.flash('v' + f.version + ' published. It can now be scheduled for assessment day.'); },
+      // ===== FORMS · Tabs (Build / Rubric & Scoring / Preview / Versions) =====
       tabs: [['build', 'Build', 'icon-blocks'], ['rubric', 'Rubric & Scoring', 'icon-scale'], ['preview', 'Preview & Test', 'icon-eye'], ['versions', 'Versions', 'icon-history']].map(([k, label, icon]) => ({ label, icon,
         onClick: () => this.setState({ tab: k }), bg: s.tab === k ? '#e6f2ea' : 'transparent', fg: s.tab === k ? '#0d3b2a' : '#4b5563' })),
       tabBuild: s.tab === 'build', tabRubric: s.tab === 'rubric', tabPreview: s.tab === 'preview', tabVersions: s.tab === 'versions',
       paneMax: wide ? '260px' : 'none', inspMax: wide ? '360px' : 'none', panePos: wide ? 'sticky' : 'static', inspMaxH: wide ? 'calc(100vh - 100px)' : 'none',
+      // ===== FORMS · Question palette & question bank =====
+      // Question bank = uploaded questions + one self-rating per competency + HR bank questions; search shows at most 80.
       palette: Object.entries(TYPES).map(([k, [label, icon]]) => ({ label, icon, add: () => { const at = sel ? items.indexOf(sel) + 1 : null; this.insert(blank(k), at); },
         onDragStart: e => { this._drag = { kind: 'new', type: k }; try { e.dataTransfer.effectAllowed = 'copy'; e.dataTransfer.setData('text/plain', k); } catch (er) {} } })),
       dragEnd: () => { this._drag = null; this.setState({ over: null }); },
@@ -318,9 +368,11 @@ class SMFormBuilder extends React.Component {
         const hit = t ? list.filter(x => (x.name + ' ' + x.major).toLowerCase().includes(t)) : list;
         return hit.slice(0, 80); })(),
       bankQ: s.bankQ || '', onBankQ: e => this.setState({ bankQ: e.target.value }), bankTotal: (s.bankUp || []).length + d.framework.length + (d.BANKS || []).reduce((a, b) => a + b.items.length, 0),
+      // ===== FORMS · Canvas & inspector =====
       canvas, endOver: e => { e.preventDefault(); if (this.state.over !== items.length) this.setState({ over: items.length }); }, endDrop: e => { e.preventDefault(); this.dropAt(items.length); },
       endBorder: s.over === items.length ? '#f2a516' : 'rgba(15,35,65,.14)', endBg: s.over === items.length ? '#fffbeb' : 'transparent',
       noSel: !sel, hasSel: !!sel, insp, compOptions: d.framework.map(c => c.name),
+      // ===== FORMS · Rubric & scoring values =====
       modes: [['weighted', 'Weighted'], ['equal', 'Equal weight']].map(([k, label]) => ({ label, onClick: () => setScoring({ mode: k }), bg: f.scoring.mode === k ? '#fff' : 'transparent', fg: f.scoring.mode === k ? '#111827' : '#4b5563' })),
       pass: f.scoring.pass, onPass: e => setScoring({ pass: +e.target.value }),
       maxPoints: +maxAll.toFixed(1), passPoints: +(maxAll * f.scoring.pass / 100).toFixed(1), manualCount: items.filter(q => q.type === 'text' && q.scoring === 'manual').length,
@@ -332,11 +384,13 @@ class SMFormBuilder extends React.Component {
       addTier: () => setScoring({ tiers: [...f.scoring.tiers, { name: 'New tier', min: 50, color: COLORS[f.scoring.tiers.length % COLORS.length] }] }),
       matrixRows: items.filter(q => q.type !== 'section').map(q => { const m = method(q), w = f.scoring.mode === 'equal' ? (q.weight > 0 ? 1 : 0) : q.weight;
         return { num: numOf[q.id], text: q.text, type: TYPES[q.type][0], method: m, mBg: MC[m][0], mFg: MC[m][1], weight: q.weight, max: m === 'Auto' || m === 'Conditional' ? w : '—', onWeight: e => this.updQ(q.id, { weight: +e.target.value }) }; }),
+      // ===== FORMS · Preview result values =====
       pv, res: { pct, earned: +sc.earned.toFixed(1), max: +sc.max.toFixed(1), tier: tier.name, tierColor: tier.color, passText: passed ? 'Pass (≥' + f.scoring.pass + '%)' : 'Below pass mark (' + f.scoring.pass + '%)', passBg: passed ? '#dcfce7' : '#fee2e2', passFg: passed ? '#15803d' : '#b91c1c',
         sections: sc.sections.map(x => { const p = Math.round(x.earned / x.max * 100); return { title: x.title, pct: p, w: p + '%' }; }), pending: sc.pending ? sc.pending + ' open-text answer' + (sc.pending > 1 ? 's' : '') + ' will be scored by a reviewer' : '' },
       resetPreview: () => { Object.values(this._sig || {}).forEach(el => el.getContext('2d').clearRect(0, 0, el.width, el.height)); this.setState({ ans: {}, tried: false, submitMsg: '' }); },
       submitPreview: () => this.setState({ tried: true, submitMsg: missing ? missing + ' required question' + (missing > 1 ? 's are' : ' is') + ' still unanswered.' : 'Test response is valid. Score ' + pct + '% · ' + tier.name + '.', submitOk: !missing }),
       submitMsg: s.submitMsg, submitBg: s.submitOk ? '#dcfce7' : '#fef2f2', submitFg: s.submitOk ? '#15803d' : '#991b1b',
+      // ===== FORMS · Version history actions =====
       history: [...f.history].sort((a, b) => b.v - a.v).map(h => ({ ...h, bg: SC[h.status][0], fg: SC[h.status][1], canRestore: !!h.items && h.v !== f.version,
         restore: () => { this.edit(x => ({ ...x, items: clone(h.items).map(q => ({ ...q })), scoring: h.scoring ? clone(h.scoring) : x.scoring })); this.setState({ tab: 'build', selQ: null }); this.flash('Restored v' + h.v + ' as a new draft'); } })),
       duplicate: () => { const nf = { ...clone(f), id: 'f' + Date.now(), name: f.name + ' (copy)', status: 'Draft', version: 1, history: [{ v: 1, status: 'Draft', date: today(), note: 'Duplicated from ' + f.name + ' v' + f.version, items: null }] };
@@ -345,6 +399,7 @@ class SMFormBuilder extends React.Component {
       toast: s.toast,
     };
   }
+  // ===== FORMS · Render =====
   render() {
     // Forms load from localStorage after mount; render once they are there so every input starts controlled.
     if (!this.state.forms) return null;
@@ -352,6 +407,7 @@ class SMFormBuilder extends React.Component {
     return (
       <>
       <div style={{ padding: "clamp(16px,2.6vw,30px) clamp(14px,2.4vw,32px) 48px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* ===== FORMS · Page header (form picker + New form) ===== */}
         <PageHeader title={"Form Builder"} description={"Build assessment forms by dragging question types onto the canvas. Each question shows exactly what staff will see."}
           actions={<>
             <Select value={__v.selValue} onChange={__v.onPickForm} aria-label={"Form"} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
@@ -359,6 +415,7 @@ class SMFormBuilder extends React.Component {
             </Select>
             <Btn kind={"primary"} icon={"icon-file-plus"} onClick={__v.newForm}>New form</Btn>
           </>} />
+        {/* ===== FORMS · Form toolbar (name, status, Save draft, Publish) ===== */}
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", padding: "14px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
             <input className={__css.h0} value={__v.formName} onChange={__v.onFormName} style={{ flex: "1 1 260px", minWidth: "0", border: "1px solid transparent", borderRadius: "10px", padding: "6px 8px", font: "600 18px Inter,sans-serif", color: "#111827", background: "transparent" }} />
@@ -369,17 +426,21 @@ class SMFormBuilder extends React.Component {
               <button onClick={__v.publish} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.publishBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-rocket"} style={{ fontSize: "14px" }}></i>{__v.publishText}</button>
             </div>
           </div>
+          {/* ===== FORMS · Locked (published) notice ===== */}
           {(__v.lockedNote) ? (<>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#fffbeb", borderBottom: "1px solid #fde68a", fontSize: "12.5px", color: "#92400e" }}><i className={"icon-info"} style={{ fontSize: "14px" }}></i>{__v.lockedNote}</div>
           </>) : null}
+          {/* ===== FORMS · Tab bar ===== */}
           <div style={{ display: "flex", gap: "4px", padding: "6px 10px", overflowX: "auto" }}>
             {(__v.tabs || []).map((t, $index) => (<React.Fragment key={$index}>
               <button onClick={t?.onClick} style={{ flex: "none", display: "flex", alignItems: "center", gap: "7px", height: "36px", padding: "0 14px", border: "0", borderRadius: "10px", cursor: "pointer", whiteSpace: "nowrap", font: "500 14px Inter,sans-serif", background: t?.bg, color: t?.fg }}><i className={t?.icon} style={{ fontSize: "15px" }}></i>{t?.label}</button>
             </React.Fragment>))}
           </div>
         </div>
+        {/* ===== FORMS · Build tab ===== */}
         {(__v.tabBuild) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "flex-start" }}>
+            {/* ===== FORMS · Question types palette (left) ===== */}
             <aside style={{ flex: "1 1 220px", maxWidth: __v.paneMax, display: "flex", flexDirection: "column", gap: "14px", position: __v.panePos, top: "80px" }}>
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "14px" }}>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280", marginBottom: "10px" }}>QUESTION TYPES</div>
@@ -394,6 +455,7 @@ class SMFormBuilder extends React.Component {
                   </React.Fragment>))}
                 </div>
               </div>
+              {/* ===== FORMS · Question bank (left) ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "14px" }}>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280", marginBottom: "4px" }}>QUESTION BANK</div>
                 <div style={{ fontSize: "11.5px", color: "#6b7280", marginBottom: "8px" }}>{__v.bankTotal} items: library competencies (as Likert) and the DVLA question banks</div>
@@ -411,9 +473,11 @@ class SMFormBuilder extends React.Component {
                 </div>
               </div>
             </aside>
+            {/* ===== FORMS · Canvas (questions in the middle) ===== */}
             <section style={{ flex: "3 1 440px", minWidth: "0", display: "flex", flexDirection: "column", gap: "8px" }}>
               {(__v.canvas || []).map((it, $index) => (<React.Fragment key={$index}>
                 <div draggable={"true"} onDragStart={it?.onDragStart} onDragOver={it?.onDragOver} onDrop={it?.onDrop} onDragEnd={__v.dragEnd} onClick={it?.select} style={{ borderTop: `3px solid ${it?.dropLine ?? ""}`, borderRadius: "12px" }}>
+                  {/* ===== FORMS · Section header card ===== */}
                   {(it?.isSection) ? (<>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", borderRadius: "12px", background: "#0d3b2a", color: "#fff", cursor: "pointer", outline: it?.outline, outlineOffset: "2px" }}>
                       <i className={"icon-grip-vertical"} style={{ fontSize: "16px", color: "#9cc4b0", cursor: "grab" }}></i>
@@ -434,6 +498,7 @@ class SMFormBuilder extends React.Component {
                       </button>
                     </div>
                   </>) : null}
+                  {/* ===== FORMS · Question card ===== */}
                   {(it?.isQuestion) ? (<>
                     <div className={__css.h3} style={{ display: "flex", gap: "10px", padding: "14px", borderRadius: "12px", background: "#fff", border: `1.5px solid ${it?.border ?? ""}`, cursor: "pointer", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
                       <i className={"icon-grip-vertical"} style={{ fontSize: "16px", color: "#9ca3af", cursor: "grab", marginTop: "2px" }}></i>
@@ -454,6 +519,7 @@ class SMFormBuilder extends React.Component {
                         </div>
                         <div style={{ font: "500 14.5px/1.45 Inter,sans-serif", color: "#111827", marginTop: "8px", textWrap: "pretty" }}>{it?.text}</div>
                         {(it?.help) ? (<div style={{ font: "400 12.5px Inter,sans-serif", color: "#6b7280", marginTop: "3px" }}>{it?.help}</div>) : null}
+                        {/* ===== FORMS · Answer preview on canvas (read-only) ===== */}
                         <div style={{ marginTop: "10px", pointerEvents: "none" }} aria-hidden={"true"}>
                           {it.type === 'likert' ? <LikertScale sc={it.scale} /> : null}
                           {it.type === 'single' || it.type === 'multi' ? (
@@ -475,6 +541,7 @@ class SMFormBuilder extends React.Component {
                         </div>
                         <div style={{ font: "400 11.5px Inter,sans-serif", color: "#9ca3af", marginTop: "8px" }}>{it?.summary}</div>
                       </div>
+                      {/* ===== FORMS · Card buttons (move, duplicate, delete) ===== */}
                       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                         <button onClick={it?.up} title={"Move up"} style={{ background: "none", border: "0", color: "#9ca3af", cursor: "pointer", display: "flex", padding: "4px" }}>
                           <i className={"icon-arrow-up"} style={{ fontSize: "14px" }}></i>
@@ -493,9 +560,12 @@ class SMFormBuilder extends React.Component {
                   </>) : null}
                 </div>
               </React.Fragment>))}
+              {/* ===== FORMS · Drop zone at end of canvas ===== */}
               <div onDragOver={__v.endOver} onDrop={__v.endDrop} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", minHeight: "72px", border: `2px dashed ${__v.endBorder ?? ""}`, borderRadius: "12px", background: __v.endBg, font: "500 13px Inter,sans-serif", color: "#6b7280", textAlign: "center", padding: "12px" }}><i className={"icon-mouse-pointer-click"} style={{ fontSize: "16px" }}></i>Drop a question type here, or click one in the panel</div>
             </section>
+            {/* ===== FORMS · Question settings inspector (right) ===== */}
             <aside style={{ flex: "1 1 300px", maxWidth: __v.inspMax, minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", position: __v.panePos, top: "80px", maxHeight: __v.inspMaxH, overflowY: "auto" }}>
+              {/* ===== FORMS · Inspector empty state ===== */}
               {(__v.noSel) ? (<>
                 <div style={{ padding: "40px 20px", textAlign: "center", color: "#6b7280", fontSize: "13.5px" }}>
                   <i className={"icon-mouse-pointer-2"} style={{ fontSize: "24px", color: "#cbd2da" }}></i>
@@ -508,6 +578,7 @@ class SMFormBuilder extends React.Component {
                   <span style={{ fontSize: "14.5px", fontWeight: "600" }}>{__v.insp?.typeLabel}</span>
                 </div>
                 <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {/* ===== FORMS · Inspector: text, help, required, weight, competency ===== */}
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>{__v.insp?.textLabel}<textarea value={__v.insp?.text} onChange={__v.insp?.onText} style={{ minHeight: "70px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "8px 10px", font: "400 13.5px/1.5 Inter,sans-serif", color: "#111827", resize: "vertical" }}></textarea></label>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>HELP TEXT<input value={__v.insp?.help} onChange={__v.insp?.onHelp} placeholder={"Optional guidance for staff"} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13px Inter,sans-serif" }} /></label>
                   {(__v.insp?.isQuestion) ? (<>
@@ -524,6 +595,7 @@ class SMFormBuilder extends React.Component {
                         </React.Fragment>))}
                       </Select></label>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: Likert settings (points, preset, labels) ===== */}
                   {(__v.insp?.isLikert) ? (() => { const L = __v.insp.likert; const lab = { display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }; const inp = { height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "8px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }; return (<>
                     <div style={lab}>POINTS
                       <div style={{ display: "flex", background: "rgba(118,118,128,.12)", borderRadius: "10px", padding: "3px", gap: "3px" }}>
@@ -546,6 +618,7 @@ class SMFormBuilder extends React.Component {
                       </div>
                     </div>
                   </>); })() : null}
+                  {/* ===== FORMS · Inspector: choice options & scores ===== */}
                   {(__v.insp?.isChoice) ? (<>
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", marginBottom: "6px" }}>
@@ -567,6 +640,7 @@ class SMFormBuilder extends React.Component {
                       <div style={{ fontSize: "11.5px", color: "#6b7280", marginTop: "8px", lineHeight: "1.5" }}>{__v.insp?.optionHint}</div>
                     </div>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: numeric settings ===== */}
                   {(__v.insp?.isNumeric) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MINIMUM<input type={"number"} value={__v.insp?.min} onChange={__v.insp?.onMin} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
@@ -576,6 +650,7 @@ class SMFormBuilder extends React.Component {
                     </div>
                     <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>UNIT<input value={__v.insp?.unit} onChange={__v.insp?.onUnit} placeholder={"e.g. minutes"} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13px Inter,sans-serif" }} /></label>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: open text settings ===== */}
                   {(__v.insp?.isText) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MIN CHARACTERS<input type={"number"} min={"0"} value={__v.insp?.minChars} onChange={__v.insp?.onMinChars} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
@@ -585,11 +660,13 @@ class SMFormBuilder extends React.Component {
                         </Select></label>
                     </div>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: matrix rows & columns ===== */}
                   {(__v.insp?.isMatrix) ? (<>
                     <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ROWS (ONE PER LINE)<textarea value={__v.insp?.rows} onChange={__v.insp?.onRows} style={{ minHeight: "80px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "8px 10px", font: "400 13px/1.5 Inter,sans-serif", resize: "vertical" }}></textarea></label>
                     <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>COLUMNS, LOWEST TO HIGHEST<textarea value={__v.insp?.cols} onChange={__v.insp?.onCols} style={{ minHeight: "80px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "8px 10px", font: "400 13px/1.5 Inter,sans-serif", resize: "vertical" }}></textarea></label>
                     <div style={{ fontSize: "11.5px", color: "#6b7280", lineHeight: "1.5" }}>Each row scores its column position ÷ number of columns, then rows are averaged.</div>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: file upload settings ===== */}
                   {(__v.insp?.isFile) ? (<>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ALLOWED FILES<Select value={__v.insp?.accept} onChange={__v.insp?.onAccept} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", background: "#fff" }}>
@@ -601,9 +678,11 @@ class SMFormBuilder extends React.Component {
                       <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>MAX SIZE (MB)<input type={"number"} min={"1"} max={"50"} value={__v.insp?.maxMB} onChange={__v.insp?.onMaxMB} style={{ height: "34px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 8px", font: "400 13px Inter,sans-serif", minWidth: "0" }} /></label>
                     </div>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: info note (signature / GPS) ===== */}
                   {(__v.insp?.infoNote) ? (<>
                     <div style={{ fontSize: "12px", color: "#4b5563", background: "#f5f6f8", borderRadius: "10px", padding: "10px", lineHeight: "1.5" }}>{__v.insp?.infoNote}</div>
                   </>) : null}
+                  {/* ===== FORMS · Inspector: conditional logic ===== */}
                   {(__v.insp?.isQuestion) ? (<>
                     <div style={{ borderTop: "1px solid rgba(15,35,65,.07)", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                       <button onClick={__v.insp?.toggleCond} style={{ display: "flex", alignItems: "center", gap: "8px", background: "none", border: "0", padding: "0", cursor: "pointer", font: "600 13px Inter,sans-serif", color: "#374151" }}><span style={{ width: "34px", height: "20px", borderRadius: "999px", padding: "2px", display: "flex", justifyContent: __v.insp?.condJustify, background: __v.insp?.condBg }}>
@@ -647,9 +726,11 @@ class SMFormBuilder extends React.Component {
             </aside>
           </div>
         </>) : null}
+        {/* ===== FORMS · Rubric & Scoring tab ===== */}
         {(__v.tabRubric) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
             <div style={{ flex: "1 1 340px", minWidth: "0", display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* ===== FORMS · Scoring mode & pass threshold card ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "16.5px", fontWeight: "600" }}>Scoring model</div>
                 <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -681,6 +762,7 @@ class SMFormBuilder extends React.Component {
                   </div>
                 </div>
               </div>
+              {/* ===== FORMS · Evaluation tiers card ===== */}
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
                 <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(15,35,65,.07)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: "16.5px", fontWeight: "600" }}>Evaluation tiers</span>
@@ -702,6 +784,7 @@ class SMFormBuilder extends React.Component {
                 </div>
               </div>
             </div>
+            {/* ===== FORMS · Scoring matrix table ===== */}
             <div style={{ flex: "2 1 520px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div style={{ fontSize: "16.5px", fontWeight: "600" }}>Scoring matrix</div>
@@ -732,13 +815,16 @@ class SMFormBuilder extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== FORMS · Preview tab ===== */}
         {(__v.tabPreview) ? (<>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "flex-start" }}>
             <div style={{ flex: "3 1 520px", minWidth: "0", display: "flex", flexDirection: "column", gap: "12px" }}>
+              {/* ===== FORMS · Preview banner ===== */}
               <div style={{ background: "#0d3b2a", color: "#fff", borderRadius: "12px", padding: "18px 20px" }}>
                 <div style={{ font: "700 10px Inter,sans-serif", letterSpacing: ".6px", color: "#b9d8c6" }}>PREVIEW · WHAT STAFF WILL SEE</div>
                 <div style={{ fontSize: "19px", fontWeight: "700", marginTop: "6px" }}>{__v.formName}</div>
               </div>
+              {/* ===== FORMS · Preview questions ===== */}
               {(__v.pv || []).map((q, $index) => (<React.Fragment key={$index}>
                 <div>
                   {(q?.isSection) ? (<>
@@ -838,11 +924,13 @@ class SMFormBuilder extends React.Component {
                   </>) : null}
                 </div>
               </React.Fragment>))}
+              {/* ===== FORMS · Preview buttons (Reset / Submit) ===== */}
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "10px" }}>
                 <button onClick={__v.resetPreview} style={{ height: "38px", padding: "0 16px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "999px", background: "#fff", color: "#374151", font: "500 13.5px Inter,sans-serif", cursor: "pointer" }}>Reset</button>
                 <button onClick={__v.submitPreview} style={{ height: "38px", padding: "0 18px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13.5px Inter,sans-serif", cursor: "pointer" }}>Submit test response</button>
               </div>
             </div>
+            {/* ===== FORMS · Live result panel (score, tier, sections) ===== */}
             <aside style={{ flex: "1 1 280px", maxWidth: __v.inspMax, minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", position: __v.panePos, top: "80px" }}>
               <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "15px", fontWeight: "600" }}>Live score</div>
               <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -877,6 +965,7 @@ class SMFormBuilder extends React.Component {
             </aside>
           </div>
         </>) : null}
+        {/* ===== FORMS · Versions tab (history, duplicate, archive, restore) ===== */}
         {(__v.tabVersions) ? (<>
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "16px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
@@ -889,6 +978,7 @@ class SMFormBuilder extends React.Component {
                 <button onClick={__v.archive} style={{ height: "34px", padding: "0 12px", border: "1px solid #fecaca", borderRadius: "10px", background: "#fff", color: "#b91c1c", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Archive</button>
               </div>
             </div>
+            {/* ===== FORMS · Version row ===== */}
             {(__v.history || []).map((h, $index) => (<React.Fragment key={$index}>
               <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <span style={{ font: "700 13px 'JetBrains Mono',monospace", width: "40px" }}>v{h?.v}</span>
@@ -904,6 +994,7 @@ class SMFormBuilder extends React.Component {
             </React.Fragment>))}
           </div>
         </>) : null}
+        {/* ===== FORMS · Toast message ===== */}
         {(__v.toast) ? (<>
           <div style={{ position: "fixed", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: "80", background: "#111827", color: "#fff", font: "500 13px Inter,sans-serif", padding: "10px 16px", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,.25)", display: "flex", alignItems: "center", gap: "8px" }}><i className={"icon-circle-check"} style={{ fontSize: "15px", color: "#4ade80" }}></i>{__v.toast}</div>
         </>) : null}

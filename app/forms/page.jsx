@@ -1,3 +1,5 @@
+// Route /forms · Forms library and builder · drawn by components/SMFormBuilder.jsx
+// Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 
 export const metadata = {

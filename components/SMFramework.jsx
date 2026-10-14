@@ -1,15 +1,26 @@
 'use client';
+// =============================================================================
+// SMFramework.jsx · Skill Framework: Competencies library, Target Profiles and Rating Scales tabs
+// Screen / URL: /framework?tab=competencies (default), /framework?tab=targets, /framework?tab=scales (old /library, /targets, /scales redirect)
+// Who sees it: admin / creator
+// Used by: components/SkillMatrixApp.jsx   Depends on: ./smUI, ./smModel (targetOf, resolveProfile, BANDS, TIERS), ./dvlaBanks (JOB_LEVELS), ./ui/select
+// Sections (search for these markers): FRAMEWORK · Constants, FRAMEWORK · Page wrapper, FRAMEWORK · Competencies tab · State & helpers, FRAMEWORK · Competencies tab · Render, FRAMEWORK · Departments list, FRAMEWORK · Competency list, FRAMEWORK · Add a competency row, FRAMEWORK · Helper · Bank question count, FRAMEWORK · Target Profiles tab · State & helpers, FRAMEWORK · Target Profiles tab · Render, FRAMEWORK · Profiles table, FRAMEWORK · Required proficiency matrix, FRAMEWORK · Profile drawer, FRAMEWORK · Rating Scales tab, FRAMEWORK · Scale cards
+// =============================================================================
 import React, { useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Field, Badge, ScopeBadge, EmptyState, DataTable, Toast, Drawer, ScopeSelect, INPUT, LABEL } from './smUI';
 import { ALL, BANDS, TIERS, targetOf, resolveProfile, profileLabel } from './smModel';
 import { JOB_LEVELS } from './dvlaBanks';
 import { Select } from './ui/select';
 
+// ===== FRAMEWORK · Constants =====
 // Job levels used by the DVLA assessment tools and question banks.
 const LEVELS = JOB_LEVELS.map((t, i) => [String(i), t]);
 const LVL = JOB_LEVELS.map(title => ({ title }));
+// Cell background per proficiency level 0-5 in the target matrix and category chips.
 const CELL_BG = ['#fff', '#eef6fc', '#edf7ef', '#fdf8e1', '#fef1e1', '#fdeaea'];
 
+// ===== FRAMEWORK · Page wrapper =====
+// view comes from the URL tab: library = Competencies, targets = Target Profiles, scales = Rating Scales.
 export default function SMFramework(props) {
   const { view = 'library' } = props;
   const [toast, setToast] = useState('');
@@ -24,6 +35,9 @@ export default function SMFramework(props) {
   );
 }
 
+// ===== FRAMEWORK · Competencies tab · State & helpers =====
+// General skills have no dept (apply to everyone); technical skills belong to one department.
+// Adding/removing competencies only changes this screen's state (not saved).
 function Library({ data: D, flash }) {
   const CORE = 'General skills (all departments)';
   const [sel, setSel] = useState(CORE);
@@ -35,13 +49,16 @@ function Library({ data: D, flash }) {
   const comps = list(sel);
   const groups = [...new Set(comps.map(c => c.group))];
   const depts = [CORE, ...D.depts.map(d => d.name)];
+  // ===== FRAMEWORK · Competencies tab · Render =====
   return (
     <>
       <PageHeader title="Competency Library" description="Department → major skill → specific competency, as set out in the DVLA assessment tools. General skills apply to every department; technical ones belong to one." />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
+        {/* ===== FRAMEWORK · Competencies · Departments list ===== */}
         <Card title="Departments" style={{ flex: '1 1 240px', maxWidth: '320px' }} bodyStyle={{ padding: '8px' }}>
           {depts.map(n => <button key={n} type="button" onClick={() => setSel(n)} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', height: '40px', padding: '0 10px', border: '0', borderRadius: '10px', cursor: 'pointer', textAlign: 'left', font: '500 13.5px Inter,sans-serif', background: n === sel ? '#e6f2ea' : 'transparent', color: n === sel ? '#0d3b2a' : '#374151' }}>{n}<span style={{ font: '600 11px Inter,sans-serif', color: '#6b7280' }}>{list(n).length}</span></button>)}
         </Card>
+        {/* ===== FRAMEWORK · Competencies · Competency list (grouped by major skill) ===== */}
         <Card title={sel} sub={sel === CORE ? 'Assessed for every member of staff, in every department' : 'Technical competencies for this department, plus the ' + base(CORE).length + ' general skills'} style={{ flex: '3 1 520px' }} flush>
           {groups.length ? groups.map(g => (
             <div key={g} style={{ borderBottom: '1px solid rgba(15,35,65,.07)' }}>
@@ -58,6 +75,7 @@ function Library({ data: D, flash }) {
                   <span style={{ fontSize: '11.5px', color: '#9ca3af', width: '150px' }}>{qCount(D, c.id)}</span>
                   <button type="button" title="Remove" onClick={() => { if (c.custom) setExtra({ ...extra, [sel]: extra[sel].filter(x => x.id !== c.id) }); else setRemoved({ ...removed, [c.id]: true }); flash('Competency removed from the library'); }} style={{ background: 'none', border: '0', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: '4px' }}><i className="icon-trash-2" style={{ fontSize: '14px' }}></i></button>
                 </div>))}
+              {/* ===== FRAMEWORK · Competencies · Add a competency row ===== */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '10px 20px 14px 46px' }}>
                 <input value={(draft[g] || {}).name || ''} onChange={e => setDraft({ ...draft, [g]: { ...(draft[g] || {}), name: e.target.value } })} placeholder="Add a competency" style={{ ...INPUT, flex: '1 1 200px', border: '1px dashed #c7ccd4' }} />
                 <Sel value={(draft[g] || {}).imp || '3'} onChange={v => setDraft({ ...draft, [g]: { ...(draft[g] || {}), imp: v } })} options={[1, 2, 3, 4, 5].map(n => [String(n), n + ' · ' + D.IMP[n].short])} />
@@ -71,18 +89,22 @@ function Library({ data: D, flash }) {
   );
 }
 
+// ===== FRAMEWORK · Helper · Bank question count =====
 // How many questions the DVLA question banks hold for a competency, across the four job levels.
 function qCount(D, id) {
   const per = (D.BANKS || []).map(b => b.items.filter(q => q[0] === id).length).filter(Boolean);
   return per.length ? per.reduce((a, b) => a + b, 0) + ' bank questions (' + per.length + ' levels)' : 'Rated on the proficiency scale';
 }
 
+// ===== FRAMEWORK · Target Profiles tab · State & helpers =====
+// Profiles are saved by SkillMatrixApp (setProfiles -> localStorage "skm-target-profiles"). The department picker starts at the global scope.
 function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
   const [local, setLocal] = useState(null);
   const dept = local ?? scope;
   const [edit, setEdit] = useState(null);
   const [err, setErr] = useState('');
   // The profile that applies at each job level in the chosen department.
+  // A department override replaces the org-wide profile for that job level (resolveProfile in smModel).
   const columns = LVL.map((_, level) => {
     if (dept === ALL) { const p = profiles.find(x => x.level === level && x.scope === 'all'); return p ? { p, override: false } : null; }
     const r = resolveProfile(profiles, { level, dept }); return r.p ? r : null;
@@ -92,6 +114,7 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
   const staffOn = p => model.staff.filter(s => s.profile && s.profile.id === p.id && (dept === ALL || s.dept === dept)).length;
   const save = list => setProfiles(list);
   const setCell = (p, c, v) => save(profiles.map(x => x.id === p.id ? { ...x, comps: { ...x.comps, [c.id]: +v } } : x));
+  // Apply to all: turns an override into the org-wide profile for its level, replacing any existing one.
   const applyAll = p => {
     const replaced = profiles.find(x => x.level === p.level && x.scope === 'all');
     save(profiles.filter(x => x !== replaced).map(x => x.id === p.id ? { ...x, scope: 'all' } : x));
@@ -99,6 +122,7 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
   };
   const openNew = () => { setErr(''); setEdit({ id: null, level: '0', track: 'Technical', scope: dept === ALL ? 'all' : [dept], targets: { Technical: 3, General: 3 }, comps: {} }); };
   const openEdit = p => { setErr(''); setEdit({ ...p, level: String(p.level), scope: p.scope === 'all' ? 'all' : [...p.scope] }); };
+  // Save rules: only one org-wide profile per job level, and at most one override per level per department.
   const submit = () => {
     const lv = +edit.level, sc = edit.scope;
     if (sc !== 'all' && !sc.length) { setErr('Choose at least one department, or set the scope to All departments.'); return; }
@@ -109,11 +133,14 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
     save(edit.id ? profiles.map(x => x.id === edit.id ? p : x) : [...profiles, p]);
     setEdit(null); flash(edit.id ? 'Target profile saved. Gaps recalculated.' : 'Target profile created');
   };
+  // ===== FRAMEWORK · Target Profiles tab · Render =====
   return (
     <>
+      {/* ===== FRAMEWORK · Target Profiles · Page header, New profile, department filter ===== */}
       <PageHeader title="Target Profiles" description="The proficiency each job level requires. Org-wide profiles apply everywhere; a department override replaces them for that department."
         actions={<Btn kind="primary" icon="icon-plus" onClick={openNew}>New profile</Btn>}
         filters={<><ScopeSelect depts={D.depts} value={dept} globalValue={scope} onChange={setLocal} /><span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>Changes recalculate every gap, dashboard and training need straight away</span></>} />
+      {/* ===== FRAMEWORK · Target Profiles · Profiles table ===== */}
       <Card title={dept === ALL ? 'All target profiles' : 'Profiles that apply in ' + dept} sub="Mapped by job level and career track" flush>
         <DataTable minWidth={860} rows={listed} rowKey={p => p.id} empty={<EmptyState icon="icon-crosshair" title="No profiles" action={<Btn onClick={openNew}>New profile</Btn>} />} columns={[
           { key: 'title', label: 'Job level · track', render: p => <div><div style={{ fontWeight: 600 }}>{p.title}</div><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{p.track} track</div></div> },
@@ -127,6 +154,7 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
             {p.scope !== 'all' ? <Btn small kind="danger" onClick={() => { save(profiles.filter(x => x.id !== p.id)); flash('Override removed. The org-wide profile applies again.'); }}>Remove</Btn> : null}</span> },
         ]} />
       </Card>
+      {/* ===== FRAMEWORK · Target Profiles · Required proficiency matrix (cell falls back to the category target unless set) ===== */}
       <Card title={'Required proficiency · ' + (dept === ALL ? 'org-wide profiles' : dept)} sub={dept === ALL ? 'Editing here changes the org-wide profile for every department without an override' : 'Each column is the profile that applies in ' + dept + '. Faded values come from the category target.'} flush>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', minWidth: '760px', width: '100%', font: '400 13px Inter,sans-serif' }}>
@@ -145,13 +173,16 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
           </table>
         </div>
       </Card>
+      {/* ===== FRAMEWORK · Target Profiles · New / Edit profile drawer ===== */}
       <Drawer open={!!edit} title={edit && edit.id ? 'Edit target profile' : 'New target profile'} sub="Job level, track and the departments it applies to" onClose={() => setEdit(null)} width={560}
         footer={<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}><Btn onClick={() => setEdit(null)}>Cancel</Btn><Btn kind="primary" onClick={submit}>{edit && edit.id ? 'Save profile' : 'Create profile'}</Btn></div>}>
         {edit ? <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* ===== FRAMEWORK · Profile drawer · Job level and career track ===== */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="JOB LEVEL"><Sel value={edit.level} onChange={v => setEdit({ ...edit, level: v })} options={LEVELS} /></Field>
             <Field label="CAREER TRACK"><Sel value={edit.track} onChange={v => setEdit({ ...edit, track: v })} options={['Technical', 'Management']} /></Field>
           </div>
+          {/* ===== FRAMEWORK · Profile drawer · Scope (all or specific departments) ===== */}
           <div style={LABEL}>SCOPE
             <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
               {[['all', 'All departments', 'Org-wide default'], ['some', 'Specific departments', 'Overrides the org-wide profile there']].map(([k, l, d]) => { const on = (edit.scope === 'all') === (k === 'all'); return (
@@ -163,6 +194,7 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
             {D.depts.map(d => { const on = edit.scope.includes(d.name); return <label key={d.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '10px', border: '1px solid ' + (on ? '#0d3b2a' : 'rgba(15,35,65,.1)'), background: on ? '#f1f8f3' : '#fff', cursor: 'pointer', fontSize: '13px' }}>
               <input type="checkbox" checked={on} onChange={() => setEdit({ ...edit, scope: on ? edit.scope.filter(x => x !== d.name) : [...edit.scope, d.name] })} style={{ accentColor: '#0d3b2a' }} />{d.name}</label>; })}
           </div> : null}
+          {/* ===== FRAMEWORK · Profile drawer · Category targets and error message ===== */}
           <div style={LABEL}>CATEGORY TARGETS (1–5)
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '8px', marginTop: '4px' }}>
               {D.categories.map(c => <label key={c} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', font: '500 13px Inter,sans-serif', color: '#374151', letterSpacing: 0 }}>{c}
@@ -177,6 +209,8 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
   );
 }
 
+// ===== FRAMEWORK · Rating Scales tab =====
+// Read-only reference: proficiency (PROF), importance (IMP), gap (GAP) and the DVLA scoring bands.
 function Scales({ data: d }) {
   const scales = [
     { title: 'Skill Proficiency', sub: 'Used for self-assessment and manager review. Also the Form Builder’s default Likert preset.', rows: d.PROF.slice(1).map(p => ({ n: p.n, label: p.label, desc: p.desc, bg: ['', '#e6f2ea', '#e3e9f0', '#c9d5e3', '#3a5a80', '#0d3b2a'][p.n], fg: p.n >= 4 ? '#fff' : '#0d3b2a' })) },
@@ -186,7 +220,9 @@ function Scales({ data: d }) {
       desc: 'Maps to proficiency level ' + TIERS.filter(t => t.min >= b.min && (!i || t.min < BANDS[i - 1].min)).map(t => t.level + ' (' + t.name + (t.min !== b.min ? ', ' + t.min + '%+' : '') + ')').join(' or ') + '.' })) }];
   return (
     <>
+      {/* ===== FRAMEWORK · Rating Scales · Page header ===== */}
       <PageHeader title="Rating Scales" description="The proficiency, importance and gap scales used across the platform" />
+      {/* ===== FRAMEWORK · Rating Scales · Scale cards ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,420px),1fr))', gap: '20px', alignItems: 'start' }}>
         {scales.map(sc => (
           <Card key={sc.title} title={sc.title} sub={sc.sub} flush style={{ overflow: 'hidden' }}>

@@ -1,19 +1,33 @@
 'use client';
+// =============================================================================
+// SMAssessmentSession.jsx · the timed, one-sitting skills assessment an officer takes
+// Screen / URL: /take (full screen, no sidebar). Three stages: brief/rules -> live questions -> submitted receipt
+// Who sees it: manager / creator / staff (participant). Admins are sent Home (see normalize() in SkillMatrixApp)
+// Used by: components/SkillMatrixApp.jsx (when page is "take")   Depends on: React, ./SMAssessmentSession.module.css; props data, go, onStatus, vw
+// Sections (search for these markers): ASSESSMENT · Constants, ASSESSMENT · Session component (state & lifecycle), ASSESSMENT · Question list, ASSESSMENT · Autosave, timer & integrity checks, ASSESSMENT · Submit, ASSESSMENT · Answers & completeness rules, ASSESSMENT · Render values, ASSESSMENT · Brief screen values, ASSESSMENT · Submitted screen values, ASSESSMENT · Live screen values, ASSESSMENT · Render, ASSESSMENT · Top bar, ASSESSMENT · Progress bar, ASSESSMENT · Brief screen, ASSESSMENT · Live question screen, ASSESSMENT · Question navigator, ASSESSMENT · Integrity checks panel, ASSESSMENT · Question card, ASSESSMENT · Previous / Flag / Next buttons, ASSESSMENT · Submitted screen, ASSESSMENT · Submit confirmation dialog, ASSESSMENT · Left-the-window warning dialog
+// =============================================================================
 import React from 'react';
 import __css from './SMAssessmentSession.module.css';
 
 
+// ===== ASSESSMENT · Constants =====
+// localStorage "skm-session" holds the one attempt: startAt, shuffled order, answers, flags, strikes, events,
+// submittedAt, reason and receipt ref. SkillMatrixApp also reads it to show the attempt status elsewhere.
 const KEY = 'skm-session';
 // The assessment for the signed-in officer: a self-rating of their department's technical skills and the
 // DVLA general skills, plus one open-text answer that a reviewer scores. Departments with a DVLA question
 // bank (HR, RBDI) sit that bank's questions instead; see the Form Builder.
 const pad = n => String(n).padStart(2, '0');
+// ===== ASSESSMENT · Session component (state & lifecycle) =====
+// On mount, reloads a saved attempt from skm-session and re-arms the timer and integrity checks if it is not yet submitted.
 class SMAssessmentSession extends React.Component {
   state = { sess: null, idx: 0, now: Date.now(), agreed: false, review: false, warn: false, savedAt: null };
   componentDidMount() {
     try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) this.setState({ sess: s }, () => { if (!s.submittedAt) this.arm(); }); } catch (e) {}
   }
   componentWillUnmount() { this.disarm(); }
+  // ===== ASSESSMENT · Question list =====
+  // One 1-5 rating per department competency, one per General framework skill, then one written answer (min 40 characters).
   questions() {
     const d = this.props.data;
     const hint = 'Choose the description that best matches what you can do today.';
@@ -22,6 +36,9 @@ class SMAssessmentSession extends React.Component {
     const text = { id: 'o1', type: 'text', section: 'General skills', text: 'Describe a recent piece of work that shows your Leadership & Management skills. What did you do, and what would you do differently?', min: 40 };
     return [...lik, ...gen, text];
   }
+  // ===== ASSESSMENT · Autosave, timer & integrity checks =====
+  // save() writes skm-session on every change (this is the autosave). arm() starts a 1-second tick that auto-submits
+  // when time runs out, and listens for the tab being hidden or the window losing focus (each counts as a strike).
   save(sess) { try { localStorage.setItem(KEY, JSON.stringify(sess)); } catch (e) {} this.setState({ sess, savedAt: Date.now() }); }
   arm() {
     this.disarm();
@@ -31,6 +48,8 @@ class SMAssessmentSession extends React.Component {
     document.addEventListener('visibilitychange', this._vis); window.addEventListener('blur', this._blur);
   }
   disarm() { clearInterval(this._tick); if (this._vis) document.removeEventListener('visibilitychange', this._vis); if (this._blur) window.removeEventListener('blur', this._blur); }
+  // Strike: leaving the window counts once (repeats within 1.5s are ignored). At cycle.tabLimit strikes the attempt is
+  // auto-submitted with reason "integrity"; before that a warning dialog is shown.
   strike() {
     const s = this.state.sess; if (!s || s.submittedAt) return;
     if (this._last && Date.now() - this._last < 1500) return; this._last = Date.now();
@@ -39,7 +58,11 @@ class SMAssessmentSession extends React.Component {
     this.save(next);
     if (strikes >= limit) this.submit('integrity', next); else this.setState({ warn: true });
   }
+  // Time left = start time + cycle duration - now, so the clock keeps running even if the page is closed.
   remaining() { const s = this.state.sess; if (!s) return 0; return s.startAt + this.props.data.cycle.durationMin * 60000 - Date.now(); }
+  // ===== ASSESSMENT · Submit =====
+  // Reason is "manual", "time" or "integrity". Adds a SMA-Q4-XXXXX receipt reference, leaves fullscreen and tells
+  // SkillMatrixApp the new status via onStatus.
   submit(reason, base) {
     const s = base || this.state.sess; if (!s || s.submittedAt) return;
     const next = { ...s, submittedAt: Date.now(), reason, ref: 'SMA-Q4-' + Math.random().toString(36).slice(2, 7).toUpperCase() };
@@ -47,6 +70,8 @@ class SMAssessmentSession extends React.Component {
     try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
     this.props.onStatus && this.props.onStatus('submitted');
   }
+  // ===== ASSESSMENT · Answers & completeness rules =====
+  // A written answer only counts once it reaches q.min characters; a number must be between 0 and 1000.
   answer(id, v) { const s = this.state.sess; this.save({ ...s, answers: { ...s.answers, [id]: v } }); }
   isAnswered(q, a) {
     const v = a[q.id];
@@ -55,6 +80,9 @@ class SMAssessmentSession extends React.Component {
     if (q.type === 'numeric') return v !== undefined && v !== '' && !isNaN(+v) && +v >= 0 && +v <= 1000;
     return v !== undefined && v !== null && v !== '';
   }
+  // ===== ASSESSMENT · Render values =====
+  // Stage: "brief" (no attempt saved) -> "live" (started) -> "done" (submitted). Copy, cut, paste and right-click
+  // are blocked only while live.
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
@@ -62,6 +90,7 @@ class SMAssessmentSession extends React.Component {
     const stage = !sess ? 'brief' : sess.submittedAt ? 'done' : 'live';
     const base = { cycleName: C.name, isBrief: stage === 'brief', isLive: stage === 'live', notLive: stage !== 'live', isDone: stage === 'done', goHome: () => go('home'),
       block: e => { if (stage === 'live') e.preventDefault(); }, userSelect: stage === 'live' ? 'none' : 'auto', duration: C.durationMin, tabLimit: C.tabLimit };
+    // ===== ASSESSMENT · Brief screen values =====
     if (stage === 'brief') return { ...base,
       facts: [{ icon: 'icon-calendar', label: 'DATE', value: C.dayLabel }, { icon: 'icon-clock', label: 'WINDOW', value: C.window }, { icon: 'icon-timer', label: 'TIME LIMIT', value: C.durationMin + ' minutes' }, { icon: 'icon-list-checks', label: 'QUESTIONS', value: all.length + ' questions' }],
       rules: [
@@ -73,6 +102,7 @@ class SMAssessmentSession extends React.Component {
         { icon: 'icon-cloud-check', text: 'Your answers save as you go, and still save if your connection drops for a moment.' }],
       agreed: s.agreed, toggleAgree: () => this.setState({ agreed: !s.agreed }),
       startBg: s.agreed ? '#15904c' : '#a3acb9', startCursor: s.agreed ? 'pointer' : 'not-allowed',
+      // Start: needs the agreement box ticked; shuffles the question order, saves a new attempt, starts the timer and asks for fullscreen.
       start: () => { if (!s.agreed) return;
         const order = all.map(q => q.id).sort(() => Math.random() - 0.5);
         const ns = { startAt: Date.now(), order, answers: {}, flags: [], strikes: 0, events: [] };
@@ -82,6 +112,7 @@ class SMAssessmentSession extends React.Component {
     const byId = Object.fromEntries(all.map(q => [q.id, q]));
     const qs = sess.order.map(id => byId[id]).filter(Boolean), a = sess.answers || {};
     const answered = qs.filter(q => this.isAnswered(q, a)).length;
+    // ===== ASSESSMENT · Submitted screen values =====
     if (stage === 'done') {
       const used = Math.min(sess.submittedAt - sess.startAt, C.durationMin * 60000), mm = Math.floor(used / 60000), ss = Math.floor(used % 60000 / 1000);
       return { ...base,
@@ -90,11 +121,14 @@ class SMAssessmentSession extends React.Component {
           { label: 'REFERENCE', value: sess.ref, font: "'JetBrains Mono',monospace" }, { label: 'SUBMITTED', value: new Date(sess.submittedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }), font: 'Inter,sans-serif' },
           { label: 'TIME USED', value: mm + 'm ' + pad(ss) + 's of ' + C.durationMin + 'm', font: 'Inter,sans-serif' }, { label: 'ANSWERED', value: answered + ' of ' + qs.length, font: 'Inter,sans-serif' },
           { label: 'INTEGRITY EVENTS', value: String(sess.strikes || 0), font: 'Inter,sans-serif' }, { label: 'RESULTS RELEASED', value: C.resultsLabel, font: 'Inter,sans-serif' }],
+        // Reset demo attempt: deletes skm-session so the assessment can be taken again (demo convenience).
         reset: () => { try { localStorage.removeItem(KEY); } catch (e) {} this.setState({ sess: null, agreed: false, idx: 0 }); this.props.onStatus && this.props.onStatus('not_started'); } };
     }
+    // ===== ASSESSMENT · Live screen values =====
     const rem = Math.max(0, this.remaining()), mins = Math.floor(rem / 60000), secs = Math.floor(rem % 60000 / 1000);
     const idx = Math.min(s.idx, qs.length - 1), q = qs[idx], v = a[q.id], flags = sess.flags || [];
     const setIdx = i => this.setState({ idx: Math.max(0, Math.min(qs.length - 1, i)) });
+    // Current question view. Ratings use the 1-5 proficiency scale (data.PROF); single/multi/numeric/text types come from question banks.
     let qv = { section: q.section.toUpperCase(), text: q.text, hint: q.hint || (q.type === 'single' ? 'Choose one answer.' : q.type === 'numeric' ? 'Enter a whole number between 0 and 1000.' : q.type === 'text' ? 'Write at least ' + q.min + ' characters.' : ''),
       reqText: 'REQUIRED', reqFg: '#991b1b', reqBg: '#fef2f2', isChoice: false, isNumeric: false, isText: false };
     if (this.isAnswered(q, a)) { qv.reqText = 'ANSWERED'; qv.reqFg = '#15803d'; qv.reqBg = '#dcfce7'; }
@@ -111,6 +145,7 @@ class SMAssessmentSession extends React.Component {
       countHint: len >= q.min ? 'Minimum length met' : (q.min - len) + ' more characters needed', countColor: len >= q.min ? '#15803d' : '#6b7280' }; }
     const unanswered = qs.filter(x => !this.isAnswered(x, a));
     const flagged = flags.includes(q.id);
+    // Timer turns amber under 5 minutes and red under 1 minute. Navigator is a sticky sidebar on screens 900px and wider.
     return { ...base,
       timeLeft: pad(mins) + ':' + pad(secs), timerBg: rem < 60000 ? '#dc2626' : rem < 300000 ? '#f2a516' : 'rgba(255,255,255,.12)', timerFg: rem < 300000 && rem >= 60000 ? '#1f2937' : '#fff',
       savedText: s.savedAt ? 'Saved ' + new Date(s.savedAt).toLocaleTimeString('en-GB') : 'Autosave on',
@@ -130,18 +165,21 @@ class SMAssessmentSession extends React.Component {
       submitNow: () => this.submit('manual'),
       showWarn: s.warn, dismissWarn: () => this.setState({ warn: false }) };
   }
+  // ===== ASSESSMENT · Render =====
   render() {
     const __v = this.renderVals() || {};
     return (
       <>
       <div onCopy={__v.block} onCut={__v.block} onPaste={__v.block} onContextMenu={__v.block} style={{ minHeight: "100vh", background: "transparent", display: "flex", flexDirection: "column", fontFamily: "Inter,system-ui,sans-serif", color: "#111827", userSelect: __v.userSelect }}>
+        {/* ===== ASSESSMENT · Top bar (cycle name, officer name and ID) ===== */}
         <header style={{ position: "sticky", top: "0", zIndex: "20", background: "#0d3b2a", color: "#fff", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px clamp(12px,2.4vw,28px)", minHeight: "63px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: "0" }}>
             <div style={{ minWidth: "0" }}>
               <div style={{ fontSize: "clamp(15px,1.6vw,18px)", fontWeight: "700", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{__v.cycleName}</div>
-              <div style={{ fontSize: "12px", color: "#b9d8c6", marginTop: "2px" }}>ADJEI DENZIL ASIAM · 123456789</div>
+              <div style={{ fontSize: "12px", color: "#b9d8c6", marginTop: "2px" }}>{[this.props.data?.user?.name, this.props.data?.user?.id].filter(x => x && x !== '—').join(' · ')}</div>
             </div>
           </div>
+          {/* ===== ASSESSMENT · Top bar · Live: autosave status, timer, Submit button ===== */}
           {(__v.isLive) ? (<>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <span style={{ fontSize: "12px", color: "#b9d8c6", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap" }}><i className={"icon-cloud-check"} style={{ fontSize: "14px" }}></i>{__v.savedText}</span>
@@ -152,24 +190,29 @@ class SMAssessmentSession extends React.Component {
               <button onClick={__v.openReview} style={{ height: "38px", padding: "0 18px", border: "0", borderRadius: "999px", background: "#fff", color: "#0d3b2a", font: "600 13.5px Inter,sans-serif", cursor: "pointer" }}>Submit</button>
             </div>
           </>) : null}
+          {/* ===== ASSESSMENT · Top bar · Back to portal (brief and submitted stages) ===== */}
           {(__v.notLive) ? (<>
             <button onClick={__v.goHome} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 14px", border: "1px solid rgba(255,255,255,.25)", borderRadius: "999px", background: "transparent", color: "#fff", font: "500 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-arrow-left"} style={{ fontSize: "14px" }}></i>Back to portal</button>
           </>) : null}
         </header>
+        {/* ===== ASSESSMENT · Progress bar (share of questions answered) ===== */}
         {(__v.isLive) ? (<>
           <div style={{ height: "4px", background: "#dde3ea" }}>
             <div style={{ height: "100%", background: "#f2a516", width: __v.progressPct, transition: "width .3s" }}></div>
           </div>
         </>) : null}
+        {/* ===== ASSESSMENT · Brief screen (rules and Start) ===== */}
         {(__v.isBrief) ? (<>
-          <div style={{ flex: "1", display: "flex", justifyContent: "center", padding: "clamp(16px,4vw,48px) clamp(12px,3vw,24px)" }}>
+          <div style={{ flex: "1", display: "flex", justifyContent: "center", alignItems: "center", padding: "clamp(16px,4vw,48px) clamp(12px,3vw,24px)" }}>
             <div style={{ width: "100%", maxWidth: "820px", display: "flex", flexDirection: "column", gap: "18px" }}>
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", overflow: "hidden" }}>
+                {/* ===== ASSESSMENT · Brief · Title and intro ===== */}
                 <div style={{ padding: "clamp(20px,3vw,32px)", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                   <span style={{ font: "700 10px Inter,sans-serif", letterSpacing: ".6px", color: "#9a3412", background: "#ffedd5", borderRadius: "999px", padding: "3px 9px" }}>OPEN TODAY · ONE ATTEMPT</span>
                   <h1 style={{ margin: "14px 0 6px", fontSize: "clamp(22px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.4px" }}>{__v.cycleName}</h1>
                   <p style={{ margin: "0", fontSize: "15px", lineHeight: "1.6", color: "#4b5563", maxWidth: "620px", textWrap: "pretty" }}>This is a timed, one-day assessment of your skills. It has to be done in one sitting: once you start, the timer runs until you submit or the time runs out.</p>
                 </div>
+                {/* ===== ASSESSMENT · Brief · Key facts (date, window, time limit, questions) ===== */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                   {(__v.facts || []).map((f, $index) => (<React.Fragment key={$index}>
                     <div style={{ padding: "18px clamp(16px,2.4vw,24px)", borderRight: "1px solid rgba(15,35,65,.07)" }}>
@@ -178,6 +221,7 @@ class SMAssessmentSession extends React.Component {
                     </div>
                   </React.Fragment>))}
                 </div>
+                {/* ===== ASSESSMENT · Brief · Rules for this session ===== */}
                 <div style={{ padding: "clamp(20px,3vw,28px) clamp(20px,3vw,32px)" }}>
                   <div style={{ fontSize: "15px", fontWeight: "600", marginBottom: "14px" }}>Rules for this session</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -191,6 +235,7 @@ class SMAssessmentSession extends React.Component {
                     </React.Fragment>))}
                   </div>
                 </div>
+                {/* ===== ASSESSMENT · Brief · Agreement checkbox and Start timer button ===== */}
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "14px", padding: "18px clamp(20px,3vw,32px)", background: "rgba(255,255,255,.4)", borderTop: "1px solid rgba(15,35,65,.07)" }}>
                   <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13.5px", color: "#374151", cursor: "pointer", maxWidth: "480px" }}><input type={"checkbox"} checked={__v.agreed} onChange={__v.toggleAgree} style={{ width: "17px", height: "17px", marginTop: "1px", accentColor: "#0d3b2a", flex: "none" }} />I'll complete this assessment on my own, without help or outside resources, and I understand I only get one attempt.</label>
                   <button onClick={__v.start} style={{ display: "flex", alignItems: "center", gap: "8px", height: "42px", padding: "0 22px", border: "0", borderRadius: "999px", background: __v.startBg, color: "#fff", font: "600 14px Inter,sans-serif", cursor: __v.startCursor }}><i className={"icon-play"} style={{ fontSize: "15px" }}></i>Start {__v.duration}-minute timer</button>
@@ -199,8 +244,10 @@ class SMAssessmentSession extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== ASSESSMENT · Live question screen ===== */}
         {(__v.isLive) ? (<>
-          <div style={{ flex: "1", display: "flex", flexWrap: "wrap", gap: "20px", padding: "clamp(12px,2.4vw,28px)", alignItems: "flex-start", maxWidth: "1320px", width: "100%", margin: "0 auto" }}>
+          <div style={{ flex: "1", display: "flex", flexWrap: "wrap", gap: "20px", padding: "clamp(12px,2.4vw,28px)", alignItems: "flex-start", alignContent: "center", justifyContent: "center", maxWidth: "1320px", width: "100%", margin: "0 auto" }}>
+            {/* ===== ASSESSMENT · Live · Question navigator (numbered buttons, legend) ===== */}
             <aside style={{ flex: "1 1 240px", maxWidth: __v.navMax, background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "18px", position: __v.navPos, top: "90px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <span style={{ fontSize: "14px", fontWeight: "600" }}>Questions</span>
@@ -218,6 +265,7 @@ class SMAssessmentSession extends React.Component {
                 <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "10px", height: "10px", borderRadius: "3px", border: "1.5px solid #cbd2da" }}></span>Not answered</span>
                 <span style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "9px", height: "9px", borderRadius: "50%", background: "#f2a516" }}></span>Flagged</span>
               </div>
+              {/* ===== ASSESSMENT · Live · Integrity checks panel (times left window, copy/paste, order) ===== */}
               <div style={{ marginTop: "18px", paddingTop: "16px", borderTop: "1px solid rgba(15,35,65,.07)", display: "flex", flexDirection: "column", gap: "10px" }}>
                 <span style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>INTEGRITY CHECKS</span>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", color: "#374151" }}>
@@ -234,6 +282,7 @@ class SMAssessmentSession extends React.Component {
                 </div>
               </div>
             </aside>
+            {/* ===== ASSESSMENT · Live · Question card ===== */}
             <section style={{ flex: "3 1 520px", minWidth: "0", display: "flex", flexDirection: "column", gap: "14px" }}>
               <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "clamp(18px,3vw,32px)" }}>
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", font: "600 11px Inter,sans-serif", letterSpacing: ".5px", color: "#6b7280" }}>
@@ -244,6 +293,7 @@ class SMAssessmentSession extends React.Component {
                 </div>
                 <h2 style={{ margin: "12px 0 6px", fontSize: "clamp(18px,2vw,22px)", fontWeight: "600", lineHeight: "1.4", textWrap: "pretty" }}>{__v.q?.text}</h2>
                 <p style={{ margin: "0 0 20px", fontSize: "13.5px", color: "#6b7280" }}>{__v.q?.hint}</p>
+                {/* ===== ASSESSMENT · Live · Answer options (rating, single or multiple choice) ===== */}
                 {(__v.q?.isChoice) ? (<>
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     {(__v.q?.options || []).map((o, $index) => (<React.Fragment key={$index}>
@@ -259,6 +309,7 @@ class SMAssessmentSession extends React.Component {
                     </React.Fragment>))}
                   </div>
                 </>) : null}
+                {/* ===== ASSESSMENT · Live · Number answer ===== */}
                 {(__v.q?.isNumeric) ? (<>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", maxWidth: "320px" }}>
                     <input type={"number"} min={"0"} max={"1000"} value={__v.q?.value} onChange={__v.q?.onInput} placeholder={"Enter a number"} style={{ flex: "1", height: "46px", border: "1.5px solid rgba(15,35,65,.14)", borderRadius: "12px", padding: "0 14px", font: "600 17px 'JetBrains Mono',monospace", color: "#111827", minWidth: "0" }} />
@@ -268,6 +319,7 @@ class SMAssessmentSession extends React.Component {
                     <div style={{ marginTop: "8px", fontSize: "12.5px", color: "#b91c1c" }}>{__v.q?.error}</div>
                   </>) : null}
                 </>) : null}
+                {/* ===== ASSESSMENT · Live · Written answer with character count ===== */}
                 {(__v.q?.isText) ? (<>
                   <textarea value={__v.q?.value} onChange={__v.q?.onInput} placeholder={"Type your answer here…"} style={{ width: "100%", minHeight: "200px", border: "1.5px solid rgba(15,35,65,.14)", borderRadius: "12px", padding: "14px", font: "400 15px/1.6 Inter,sans-serif", color: "#111827", resize: "vertical" }}></textarea>
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "12.5px", color: __v.q?.countColor }}>
@@ -276,6 +328,7 @@ class SMAssessmentSession extends React.Component {
                   </div>
                 </>) : null}
               </div>
+              {/* ===== ASSESSMENT · Live · Previous / Flag for review / Next buttons ===== */}
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
                 <button onClick={__v.prev} style={{ display: "flex", alignItems: "center", gap: "6px", height: "40px", padding: "0 16px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "999px", background: "#fff", color: __v.prevColor, font: "500 13.5px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-arrow-left"} style={{ fontSize: "15px" }}></i>Previous</button>
                 <button onClick={__v.toggleFlag} style={{ display: "flex", alignItems: "center", gap: "6px", height: "40px", padding: "0 16px", border: `1px solid ${__v.flagBorder ?? ""}`, borderRadius: "999px", background: __v.flagBg, color: "#92400e", font: "500 13.5px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-flag"} style={{ fontSize: "14px" }}></i>{__v.flagText}</button>
@@ -284,8 +337,9 @@ class SMAssessmentSession extends React.Component {
             </section>
           </div>
         </>) : null}
+        {/* ===== ASSESSMENT · Submitted screen (receipt) ===== */}
         {(__v.isDone) ? (<>
-          <div style={{ flex: "1", display: "flex", justifyContent: "center", padding: "clamp(16px,4vw,48px) clamp(12px,3vw,24px)" }}>
+          <div style={{ flex: "1", display: "flex", justifyContent: "center", alignItems: "center", padding: "clamp(16px,4vw,48px) clamp(12px,3vw,24px)" }}>
             <div style={{ width: "100%", maxWidth: "640px", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", overflow: "hidden" }}>
               <div style={{ padding: "clamp(28px,4vw,44px)", textAlign: "center", background: "linear-gradient(110deg,#0b4a2e 0%,#15904c 42%,#b8901f 82%,#f2c14e 100%)", color: "#fff" }}>
                 <div style={{ width: "68px", height: "68px", borderRadius: "50%", background: "rgba(255,255,255,.18)", border: "1px solid rgba(255,255,255,.4)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 24px rgba(0,0,0,.18)" }}>
@@ -294,6 +348,7 @@ class SMAssessmentSession extends React.Component {
                 <h1 style={{ margin: "16px 0 6px", fontSize: "clamp(24px,3vw,30px)", fontWeight: "700", letterSpacing: "-0.3px" }}>Assessment submitted</h1>
                 <p style={{ margin: "0 auto", fontSize: "14.5px", lineHeight: "1.6", color: "#f1f8f3", maxWidth: "460px", textWrap: "pretty" }}>{__v.doneReason}</p>
               </div>
+              {/* ===== ASSESSMENT · Submitted · Receipt details (reference, time used, answered...) ===== */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
                 {(__v.receipt || []).map((r, $index) => (<React.Fragment key={$index}>
                   <div style={{ padding: "16px 22px", borderBottom: "1px solid rgba(15,35,65,.07)", borderRight: "1px solid rgba(15,35,65,.07)" }}>
@@ -302,6 +357,7 @@ class SMAssessmentSession extends React.Component {
                   </div>
                 </React.Fragment>))}
               </div>
+              {/* ===== ASSESSMENT · Submitted · Reset demo attempt and Return to Home ===== */}
               <div style={{ padding: "20px 22px", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                 <button onClick={__v.reset} style={{ background: "none", border: "0", cursor: "pointer", color: "#6b7280", font: "500 12px Inter,sans-serif", textDecoration: "underline" }}>Reset demo attempt</button>
                 <button onClick={__v.goHome} style={{ display: "flex", alignItems: "center", gap: "8px", height: "40px", padding: "0 20px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13.5px Inter,sans-serif", cursor: "pointer" }}>Return to Home<i className={"icon-arrow-right"} style={{ fontSize: "15px" }}></i></button>
@@ -309,6 +365,7 @@ class SMAssessmentSession extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== ASSESSMENT · Submit confirmation dialog (answered / unanswered / flagged) ===== */}
         {(__v.showReview) ? (<>
           <div style={{ position: "fixed", inset: "0", zIndex: "50", background: "rgba(8,12,24,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
             <div style={{ width: "min(520px,100%)", background: "#fff", borderRadius: "14px", boxShadow: "0 30px 80px rgba(0,0,0,.35)", overflow: "hidden" }}>
@@ -345,6 +402,7 @@ class SMAssessmentSession extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== ASSESSMENT · Left-the-window warning dialog ===== */}
         {(__v.showWarn) ? (<>
           <div style={{ position: "fixed", inset: "0", zIndex: "60", background: "rgba(127,29,29,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
             <div style={{ width: "min(460px,100%)", background: "#fff", borderRadius: "14px", boxShadow: "0 30px 80px rgba(0,0,0,.35)", padding: "24px", textAlign: "center" }}>

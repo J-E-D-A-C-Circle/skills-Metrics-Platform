@@ -1,4 +1,11 @@
 'use client';
+// =============================================================================
+// select.jsx · Custom dropdown (shadcn-style Select) used instead of native <select>
+// Screen / URL: any dropdown in the app (filters, forms, settings, profile, staff drawer sort)
+// Who sees it: admin / manager / creator / staff (participant)
+// Used by: smUI.jsx (Sel), SkillMatrixApp.jsx, SMAssessments, SMCycles, SMFormBuilder, SMFramework, SMProfile, SMSystem   Depends on: react, react-dom (createPortal)
+// Sections (search for these markers): UI KIT
+// =============================================================================
 // Shadcn-style Select, written for this project (no Radix dependency; the brief allows xlsx only).
 // It is a drop-in replacement for a native <select>: it accepts <option>/<optgroup> children or an
 // `options` array, and calls onChange with { target: { value } } like the native element. Use
@@ -7,9 +14,11 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+// ===== UI KIT · Select helpers =====
 const GREEN = '#0d3b2a';
 const textOf = n => (n == null || typeof n === 'boolean' ? '' : Array.isArray(n) ? n.map(textOf).join('') : typeof n === 'object' ? textOf(n.props && n.props.children) : String(n));
 
+// ===== UI KIT · Options parsing =====
 // Flattens <option>/<optgroup> children into rows: { kind: 'item' | 'label' | 'sep', ... }.
 function fromChildren(children, out) {
   React.Children.forEach(children, ch => {
@@ -34,6 +43,7 @@ function fromOptions(options) {
   return out;
 }
 
+// ===== UI KIT · Select component (state) =====
 export function Select({ value, defaultValue, onChange, onValueChange, options, children, placeholder = 'Select…', disabled, title, style, contentStyle, name, id, 'aria-label': ariaLabel, ...rest }) {
   const rows = useMemo(() => (options ? fromOptions(options) : fromChildren(children, [])), [options, children]);
   const items = rows.filter(r => r.kind === 'item');
@@ -47,6 +57,7 @@ export function Select({ value, defaultValue, onChange, onValueChange, options, 
   const trig = useRef(null), list = useRef(null), typed = useRef({ s: '', t: 0 });
   const uid = useId(), listId = 'sel-' + uid.replace(/:/g, '');
 
+  // ===== UI KIT · Selection & typeahead helpers =====
   const commit = it => {
     if (!it || it.disabled) return;
     if (it.value !== cur) {
@@ -66,6 +77,7 @@ export function Select({ value, defaultValue, onChange, onValueChange, options, 
     return -1;
   };
 
+  // ===== UI KIT · List positioning =====
   // Place the list under the trigger (or above it when there is more room there), at least as wide as the trigger.
   const place = () => {
     const el = trig.current; if (!el) return;
@@ -88,6 +100,7 @@ export function Select({ value, defaultValue, onChange, onValueChange, options, 
   }, [open]);
   useEffect(() => { if (open && list.current) { const el = list.current.querySelector('[data-active="true"]'); el && el.scrollIntoView({ block: 'nearest' }); } }, [open, active, pos]);
 
+  // ===== UI KIT · Keyboard handling =====
   const onTriggerKey = e => {
     if (disabled) return;
     if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); show(); return; }
@@ -106,10 +119,12 @@ export function Select({ value, defaultValue, onChange, onValueChange, options, 
     else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { const i = typeahead(k); if (i >= 0) setActive(i); }
   };
 
+  // ===== UI KIT · Render =====
   const shown = selected ? selected.label : cur && !items.length ? cur : '';
   const sizer = items.length <= 80 ? items : [];
   return (
     <>
+      {/* ===== UI KIT · Trigger button ===== */}
       <button ref={trig} type="button" id={id} role="combobox" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} aria-label={ariaLabel} title={title} disabled={disabled}
         onClick={e => { e.preventDefault(); open ? hide(false) : show(); }} onKeyDown={onTriggerKey}
         onFocus={e => { try { setRing(e.currentTarget.matches(':focus-visible')); } catch (er) { setRing(true); } }} onBlur={() => setRing(false)} data-state={open ? 'open' : 'closed'} {...rest}
@@ -123,6 +138,7 @@ export function Select({ value, defaultValue, onChange, onValueChange, options, 
         <i className="icon-chevron-down" aria-hidden="true" style={{ fontSize: '14px', opacity: 0.55, flex: 'none', transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none' }}></i>
       </button>
       {name ? <input type="hidden" name={name} value={cur || ''} /> : null}
+      {/* ===== UI KIT · Dropdown list (portal) ===== */}
       {open && pos ? createPortal(
         <div ref={list} id={listId} role="listbox" tabIndex={-1} aria-label={ariaLabel || title} aria-activedescendant={active >= 0 ? listId + '-' + active : undefined} onKeyDown={onListKey} onMouseDown={e => e.preventDefault()}
           style={{ position: 'fixed', zIndex: 1000, left: pos.left, right: pos.right, top: pos.top, bottom: pos.bottom, minWidth: pos.minWidth, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight, overflowY: 'auto', padding: '4px', boxSizing: 'border-box',

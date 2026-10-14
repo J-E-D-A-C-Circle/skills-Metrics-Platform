@@ -1,20 +1,35 @@
 'use client';
+// =============================================================================
+// SMHome · Home page: personal dashboard for staff/managers; admins are handed to SMAdminHome
+// Screen / URL: Home, "/" and "/home"
+// Who sees it: staff (participant), manager, creator get PersonalHome; admin gets SMAdminHome
+// Used by: components/SkillMatrixApp.jsx   Depends on: SMAdminHome, smUI (avatarKey), SMHome.module.css
+// Sections (search for these markers): HOME · Personal home, Profile photo sync, State & helpers, Assessment banner states,
+//   Calendar month grid, Values for render, Render, Page layout, Welcome banner, Info row, Assessment banner, KPI cards,
+//   Manager evaluation notice, Priority skill gaps, Quick actions, Skill snapshot, Team skill heatmap, Side panel, Calendar,
+//   Today, Cycle timeline, Entry point
+// =============================================================================
 import React from 'react';
 import __css from './SMHome.module.css';
 import AdminHome from './SMAdminHome';
+import { avatarKey } from './smUI';
 
 
+// ===== HOME · Personal home (staff / manager / creator) =====
 class PersonalHome extends React.Component {
   state = { heatOpen: true, alert: true, ym: null, avatar: null };
 
+  // ===== HOME · Profile photo sync =====
+  // Photo is read from localStorage key avatarKey() (skm-user-avatar or skm-user-avatar:<username>).
+  // Re-read when My Profile fires 'skm-avatar-changed', or another browser tab changes storage.
   componentDidMount() {
     try {
-      const av = localStorage.getItem('skm-user-avatar');
+      const av = localStorage.getItem(avatarKey());
       if (av) this.setState({ avatar: av });
     } catch (e) {}
     this.onAvatarStorage = () => {
       try {
-        const av = localStorage.getItem('skm-user-avatar');
+        const av = localStorage.getItem(avatarKey());
         this.setState({ avatar: av || null });
       } catch (e) {}
     };
@@ -27,6 +42,7 @@ class PersonalHome extends React.Component {
     window.removeEventListener('storage', this.onAvatarStorage);
   }
 
+  // ===== HOME · State & helpers (renderVals: every value the screen shows) =====
   renderVals() {
     const d = this.props.data, go = this.props.go || (() => {}), vw = this.props.vw || 1440, s = this.state;
     if (!d) return {};
@@ -34,11 +50,16 @@ class PersonalHome extends React.Component {
     const comps = d.comps.map(c => ({ ...c, gapLabel: d.GAP[c.gap].label, gapBg: d.GAP[c.gap].bg, gapFg: d.GAP[c.gap].fg,
       impLabel: c.importance + ' · ' + d.IMP[c.importance].short, impBg: d.IMP[c.importance].bg }));
     const total = comps.length, avg = comps.reduce((a, c) => a + c.actual, 0) / total, maxGap = Math.max(...comps.map(c => c.gap));
+    // ===== HOME · Assessment banner states =====
+    // Banner text, colour and button depend on status: not_started / in_progress / submitted (the button opens /take).
     const B = {
       not_started: { chip: 'TODAY', icon: 'icon-timer', title: 'Your ' + C.name + ' is open today.', text: 'Complete it in one sitting between ' + C.window + '. Once you start you have ' + C.durationMin + ' minutes and the timer cannot be paused.', cta: 'Start Assessment', bg: 'linear-gradient(90deg,#0d3b2a 0%,#145a3c 55%,#9a7a45 100%)', kicker: C.short + ' · ' + C.window, sub: C.questions + ' questions · ' + C.durationMin + ' minutes · 1 attempt', act: () => go('take') },
       in_progress: { chip: 'LIVE', icon: 'icon-alarm-clock', title: 'Your assessment timer is still running.', text: 'Go back now. Your answers have been saved and any unanswered questions will be submitted automatically when the time runs out.', cta: 'Resume Assessment', bg: 'linear-gradient(90deg,#7f1d1d 0%,#9f2d20 60%,#c2410c 100%)', kicker: 'IN PROGRESS · TIMER RUNNING', sub: 'Return before time runs out', act: () => go('take') },
       submitted: { chip: 'DONE', icon: 'icon-circle-check', title: 'Assessment submitted. Thank you.', text: 'Your line manager will complete their evaluation by ' + C.mgrCloseLabel + '. Results are released on ' + C.resultsLabel + '.', cta: 'View Receipt', bg: 'linear-gradient(110deg,#0b4a2e 0%,#15904c 42%,#b8901f 82%,#f2c14e 100%)', kicker: C.short + ' · SUBMITTED', sub: 'Results on ' + C.resultsLabel, act: () => go('take') },
     }[st];
+    // ===== HOME · Calendar month grid =====
+    // Blank cells pad the days before the 1st. Assessment day is filled dark green; manager close, results
+    // and plan-due dates get a dot. prevMonth/nextMonth shift the shown month (state.ym).
     const now = new Date(), ym = s.ym || [now.getFullYear(), now.getMonth()];
     const first = new Date(ym[0], ym[1], 1).getDay(), dim = new Date(ym[0], ym[1] + 1, 0).getDate(), days = [];
     const same = (a, y, m, dd) => a.getFullYear() === y && a.getMonth() === m && a.getDate() === dd;
@@ -49,24 +70,30 @@ class PersonalHome extends React.Component {
         dot: isA ? '#ea7a12' : (isR || isM || isP) ? '#111827' : 'transparent', title: isA ? 'Assessment day' : isR ? 'Results released' : isM ? 'Manager evaluations close' : isP ? 'Development plans due' : '' });
     }
     const shift = k => () => { let m = ym[1] + k, y = ym[0]; if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; } this.setState({ ym: [y, m] }); };
+    // ===== HOME · Values for render =====
     return {
-      goProfile: () => go('profile'), goSkills: () => go('profile', 'skills'), goHistory: () => go('profile', 'history'), goHeatmap: () => go('heatmap'), goAssessments: () => go('assessments'),
+      goProfile: () => go('profile'), goSkills: () => go('profile', 'skills'), goHistory: () => go('profile', 'history'), goHeatmap: () => go('analytics', 'heatmap'), goAssessments: () => go('assessments'),
       showPhoto: vw >= 760, dayLabel: C.dayLabel, windowText: C.window, duration: C.durationMin,
       bannerBg: B.bg, bannerIcon: B.icon, bannerChip: B.chip, bannerTitle: B.title, bannerText: B.text, bannerCta: B.cta, bannerAction: B.act, qaKicker: B.kicker, qaSub: B.sub,
+      // Average proficiency = mean of actual levels; open gaps = competencies with gap > 0.
       total, avgText: d.fmt(avg) + ' / 5', avgLabel: d.LEVEL[Math.round(avg)], openGaps: comps.filter(c => c.gap > 0).length, maxGapText: maxGap + ' · ' + d.GAP[maxGap].label,
       gapSpan: vw >= 1280 ? 2 : 1,
       gapDist: d.GAP.map((g, i) => ({ count: comps.filter(c => c.gap === i).length, bg: g.bg, title: i + ' · ' + g.label })).filter(g => g.count),
       showAlert: s.alert, hideAlert: () => this.setState({ alert: false }),
+      // Priority gaps: top 5 competencies ranked by gap x importance.
       topGaps: [...comps].sort((a, b) => b.gap * b.importance - a.gap * a.importance).slice(0, 5),
-      quick: [ft.evidence ? { icon: 'icon-upload', title: 'Upload Evidence', sub: 'Attach certificates to back up your ratings', onClick: () => go('evidence') } : null, ft.developmentPlan ? { icon: 'icon-target', title: 'Development Plan', sub: '1 action is waiting for manager approval', onClick: () => go('plan') } : null,
+      // Quick actions: Upload Evidence / Development Plan only show when those features are switched on.
+      quick: [ft.evidence ? { icon: 'icon-upload', title: 'Upload Evidence', sub: 'Attach certificates to back up your ratings', onClick: () => go('profile', 'evidence') } : null, ft.developmentPlan ? { icon: 'icon-target', title: 'Development Plan', sub: '1 action is waiting for manager approval', onClick: () => go('profile', 'plan') } : null,
         { icon: 'icon-clipboard-list', title: 'My Assessments', sub: 'Your cycles, results and reports', onClick: () => go('assessments') }, { icon: 'icon-radar', title: 'Skill Profile', sub: 'Target vs actual for each competency', onClick: () => go('profile', 'skills') }].filter(Boolean),
       majors: d.majors.map(m => ({ ...m, targetPct: (m.t / 5 * 100) + '%', actualPct: (m.a / 5 * 100) + '%' })),
+      // Team heatmap only for manager or admin.
       showTeam: role === 'manager' || role === 'admin', heatOpen: s.heatOpen, heatChev: s.heatOpen ? 'icon-chevron-up' : 'icon-chevron-down', toggleHeat: () => this.setState({ heatOpen: !s.heatOpen }),
       heat: d.team.map(t => ({ name: t.name, role: t.role, cells: t.gaps.map((g, i) => ({ label: g === 0 ? '✓' : g, bg: d.GAP[g].bg, fg: d.GAP[g].fg, title: d.majors[i].name + ': ' + d.GAP[g].label })) })),
       gapScale: d.GAP,
       asideMax: vw >= 1280 ? '380px' : 'none',
       monthName: new Date(ym[0], ym[1], 1).toLocaleString('en', { month: 'long', year: 'numeric' }), days, prevMonth: shift(-1), nextMonth: shift(1),
       avatar: s.avatar,
+      // Cycle timeline rows in the side panel (plans row only when the developmentPlan feature is on).
       timeline: [
         { name: 'ASSESSMENT DAY (TIMED)', when: C.dayLabel, ring: '#ea7a12', fill: st === 'submitted' ? '#ea7a12' : '#fff' },
         { name: 'MANAGER EVALUATIONS CLOSE', when: C.mgrCloseLabel, ring: '#111827', fill: '#fff' },
@@ -74,15 +101,23 @@ class PersonalHome extends React.Component {
         ft.developmentPlan ? { name: 'DEVELOPMENT PLANS DUE', when: C.plansLabel, ring: '#2fb36b', fill: '#fff' } : null].filter(Boolean),
     };
   }
+  // ===== HOME · Render =====
   render() {
     const __v = this.renderVals() || {};
     return (
       <>
+      {/* ===== HOME · Page layout (main column + side panel) ===== */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "22px", padding: "clamp(16px,2.6vw,36px) clamp(14px,2vw,28px) 40px", alignItems: "flex-start" }}>
         <div style={{ flex: "1 1 620px", minWidth: "0", display: "flex", flexDirection: "column", gap: "18px" }}>
+          {/* ===== HOME · Welcome banner card ===== */}
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ position: "relative", minHeight: "180px", background: "#0d3b2a", display: "flex" }}>
-              <div style={{ position: "relative", zIndex: "1", flex: "1", padding: "18px clamp(16px,2.4vw,28px) 22px", display: "flex", flexDirection: "column" }}>
+              {/* ===== HOME · Welcome banner · Green glow overlay (wide screens) ===== */}
+              {(__v.showPhoto) ? (
+                <div style={{ position: "absolute", inset: "0", background: "linear-gradient(90deg, rgba(21,144,76,0) 22%, rgba(21,144,76,0.2) 46%, rgba(21,144,76,0.1) 62%, rgba(21,144,76,0) 80%)", pointerEvents: "none" }} />
+              ) : null}
+              {/* ===== HOME · Welcome banner · Profile photo, name & email ===== */}
+              <div style={{ position: "relative", zIndex: "1", flex: "1", padding: "18px clamp(16px,2.4vw,28px) 22px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", margin: "4px 0 0 clamp(0px,2.5vw,32px)" }}>
                   <div
                     onClick={__v.goProfile}
@@ -107,17 +142,18 @@ class PersonalHome extends React.Component {
                     {__v.avatar ? (
                       <img src={__v.avatar} alt={"Profile"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                     ) : (
-                      "AD"
+                      this.props.data?.user?.initials
                     )}
                   </div>
                   <div style={{ color: "#fff", minWidth: "0", flex: "1 1 auto" }}>
                     <div style={{ fontSize: "14.5px", fontWeight: "500" }}>Welcome back,</div>
-                    <div style={{ fontSize: "clamp(18px,2vw,22px)", fontWeight: "700", letterSpacing: "-0.2px", marginTop: "2px" }}>ADJEI DENZIL ASIAM</div>
-                    <div style={{ fontSize: "13px", color: "#d6e9de", marginTop: "3px", overflowWrap: "break-word" }}>denzilasiam.adjei@dvla.gov.gh</div>
+                    <div style={{ fontSize: "clamp(18px,2vw,22px)", fontWeight: "700", letterSpacing: "-0.2px", marginTop: "2px" }}>{this.props.data?.user?.name}</div>
+                    <div style={{ fontSize: "13px", color: "#d6e9de", marginTop: "3px", overflowWrap: "break-word" }}>{this.props.data?.user?.email}</div>
                     <button onClick={__v.goProfile} style={{ marginTop: "6px", background: "none", border: "0", padding: "0", color: "#fff", font: "600 10px Inter,sans-serif", textDecoration: "underline", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", whiteSpace: "nowrap" }}>View Skill Profile<i className={"icon-chevron-right"} style={{ fontSize: "11px" }}></i></button>
                   </div>
                 </div>
               </div>
+              {/* ===== HOME · Welcome banner · DVLA head office photo (wide screens only) ===== */}
               {(__v.showPhoto) ? (
                 <div style={{
                   position: "absolute",
@@ -129,8 +165,8 @@ class PersonalHome extends React.Component {
                   backgroundSize: "cover",
                   backgroundPosition: "center 38%",
                   backgroundRepeat: "no-repeat",
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 15%, rgba(0,0,0,0.85) 42%, #000 75%)",
-                  maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.2) 15%, rgba(0,0,0,0.85) 42%, #000 75%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 18%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0.92) 62%, #000 80%)",
+                  maskImage: "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 18%, rgba(0,0,0,0.6) 40%, rgba(0,0,0,0.92) 62%, #000 80%)",
                   display: "flex",
                   alignItems: "flex-end",
                   justifyContent: "flex-end",
@@ -168,20 +204,21 @@ class PersonalHome extends React.Component {
                 </div>
               ) : null}
             </div>
+            {/* ===== HOME · Info row (Staff ID, Department, Designation, Assessment day) ===== */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: "18px", padding: "22px 22px 24px" }}>
               <div>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>STAFF ID</div>
-                <div style={{ font: "600 17px 'JetBrains Mono',monospace", marginTop: "9px", color: "#111827" }}>123456789</div>
-                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>HEAD OFFICE</div>
+                <div style={{ font: "600 17px 'JetBrains Mono',monospace", marginTop: "9px", color: "#111827" }}>{this.props.data?.user?.id}</div>
+                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>{this.props.data?.user?.location}</div>
               </div>
               <div>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>DEPARTMENT</div>
-                <div style={{ fontSize: "18px", fontWeight: "600", marginTop: "6px" }}>IT DEPARTMENT</div>
-                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>HOD: Joseph Ahor Abandoh-Sam</div>
+                <div style={{ fontSize: "18px", fontWeight: "600", marginTop: "6px" }}>{this.props.data?.user?.dept}</div>
+                <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>{this.props.data?.user?.manager}</div>
               </div>
               <div>
                 <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".6px", color: "#6b7280" }}>DESIGNATION</div>
-                <div style={{ fontSize: "18px", fontWeight: "600", marginTop: "6px" }}>IT OFFICER</div>
+                <div style={{ fontSize: "18px", fontWeight: "600", marginTop: "6px" }}>{this.props.data?.user?.designation}</div>
                 <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "6px" }}>Target: {this.props.data?.user?.target}</div>
               </div>
               <div>
@@ -191,6 +228,7 @@ class PersonalHome extends React.Component {
               </div>
             </div>
           </div>
+          {/* ===== HOME · Assessment banner ===== */}
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14px", padding: "14px 20px 14px 18px", borderRadius: "12px", background: __v.bannerBg, color: "#fff" }}>
             <div style={{ width: "40px", height: "40px", borderRadius: "9px", background: "rgba(255,255,255,.14)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
               <i className={__v.bannerIcon} style={{ fontSize: "20px" }}></i>
@@ -204,17 +242,21 @@ class PersonalHome extends React.Component {
             </div>
             <button onClick={__v.bannerAction} style={{ display: "flex", alignItems: "center", gap: "8px", height: "34px", padding: "0 16px", border: "0", borderRadius: "999px", background: "#fff", color: "#0d3b2a", font: "600 13.5px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}>{__v.bannerCta}<i className={"icon-arrow-right"} style={{ fontSize: "15px" }}></i></button>
           </div>
+          {/* ===== HOME · KPI cards ===== */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: "12px" }}>
+            {/* ===== HOME · KPI cards · Competencies assessed ===== */}
             <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "20px 18px 18px", display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ fontSize: "13.5px", color: "#374151" }}>Competencies Assessed</div>
               <div style={{ fontSize: "15px", fontWeight: "700" }}>{__v.total} of {__v.total}</div>
               <button onClick={__v.goSkills} style={{ alignSelf: "flex-start", marginTop: "auto", height: "28px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 12px Inter,sans-serif", cursor: "pointer" }}>View</button>
             </div>
+            {/* ===== HOME · KPI cards · Average proficiency ===== */}
             <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "20px 18px 18px", display: "flex", flexDirection: "column", gap: "12px" }}>
               <div style={{ fontSize: "13.5px", color: "#374151" }}>Average Proficiency</div>
               <div style={{ fontSize: "15px", fontWeight: "700" }}>{__v.avgText} <span style={{ fontWeight: "500", color: "#6b7280", fontSize: "13px" }}>· {__v.avgLabel}</span></div>
               <button onClick={__v.goSkills} style={{ alignSelf: "flex-start", marginTop: "auto", height: "28px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 12px Inter,sans-serif", cursor: "pointer" }}>View</button>
             </div>
+            {/* ===== HOME · KPI cards · Skill gaps ===== */}
             <div style={{ gridColumn: `span ${__v.gapSpan ?? ""}`, background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "20px 18px 18px", display: "flex", flexDirection: "column", gap: "8px" }}>
               <div style={{ fontSize: "13.5px", color: "#374151" }}>Skill Gaps <span style={{ color: "#9ca3af" }}>(Target − Actual)</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -235,6 +277,7 @@ class PersonalHome extends React.Component {
               <button onClick={__v.goSkills} style={{ alignSelf: "flex-start", marginTop: "8px", height: "28px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 12px Inter,sans-serif", cursor: "pointer" }}>View</button>
             </div>
           </div>
+          {/* ===== HOME · Manager evaluation notice (dismissible) ===== */}
           {(__v.showAlert) ? (<>
             <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", padding: "20px 20px 20px 18px", border: "1px solid #a7e3c0", borderRadius: "12px", background: "#ecfbf2" }}>
               <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#d3f4e0", display: "flex", alignItems: "center", justifyContent: "center", flex: "none", color: "#16a34a" }}>
@@ -249,7 +292,9 @@ class PersonalHome extends React.Component {
               </button>
             </div>
           </>) : null}
+          {/* ===== HOME · Priority gaps + Quick actions row ===== */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-start" }}>
+            {/* ===== HOME · Priority skill gaps table ===== */}
             <div style={{ flex: "1.6 1 420px", minWidth: "0", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", padding: "18px 18px 12px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                 <div>
@@ -280,6 +325,7 @@ class PersonalHome extends React.Component {
                 </div>
               </div>
             </div>
+            {/* ===== HOME · Quick actions ===== */}
             <div style={{ flex: "1 1 280px", minWidth: "0" }}>
               <div style={{ fontSize: "16.5px", fontWeight: "600", margin: "0 0 12px" }}>Quick Actions</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -309,6 +355,7 @@ class PersonalHome extends React.Component {
               </div>
             </div>
           </div>
+          {/* ===== HOME · Skill snapshot (target vs actual per major skill) ===== */}
           <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", padding: "18px 18px 14px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
               <div>
@@ -337,6 +384,7 @@ class PersonalHome extends React.Component {
               </React.Fragment>))}
             </div>
           </div>
+          {/* ===== HOME · Team skill heatmap (manager / admin only) ===== */}
           {(__v.showTeam) ? (<>
             <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "20px 22px" }}>
@@ -370,12 +418,14 @@ class PersonalHome extends React.Component {
             </div>
           </>) : null}
         </div>
+        {/* ===== HOME · Side panel (calendar + timeline) ===== */}
         <aside className={__css.stickyAside} style={{ position: "sticky", top: "80px", alignSelf: "flex-start", flex: "1 1 320px", maxWidth: __v.asideMax, maxHeight: "calc(100vh - 96px)", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none", background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", padding: "28px 18px 24px" }}>
           <button onClick={__v.goAssessments} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#127a42" }}>Full Assessment Calendar</button>
           <div style={{ display: "flex", gap: "16px", marginTop: "14px", fontSize: "11.5px", color: "#4b5563" }}>
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ea7a12" }}></span>Assessment</span>
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#111827" }}></span>Other</span>
           </div>
+          {/* ===== HOME · Calendar ===== */}
           <div style={{ marginTop: "20px", border: "1px solid #e5e7eb", borderRadius: "12px", padding: "20px 16px 22px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "17px", color: "#1f2937" }}>{__v.monthName}</span>
@@ -407,11 +457,13 @@ class PersonalHome extends React.Component {
               </React.Fragment>))}
             </div>
           </div>
+          {/* ===== HOME · Today (assessment window) ===== */}
           <div style={{ marginTop: "24px", display: "flex", alignItems: "center", gap: "12px", fontSize: "14.5px", color: "#1f2937", paddingLeft: "4px" }}><i className={"icon-calendar-days"} style={{ fontSize: "18px", color: "#15904c" }}></i>Today</div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginTop: "14px", paddingLeft: "4px", fontSize: "12px", color: "#1f2937" }}>
             <span style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "9px", height: "9px", border: "1.5px solid #ea7a12", borderRadius: "50%" }}></span>Q4 SKILLS ASSESSMENT ({__v.duration} MIN)</span>
             <span style={{ fontSize: "11px", color: "#4b5563", whiteSpace: "nowrap" }}>{__v.windowText}</span>
           </div>
+          {/* ===== HOME · Cycle timeline ===== */}
           <div style={{ marginTop: "28px", display: "flex", alignItems: "center", gap: "12px", fontSize: "14.5px", color: "#1f2937", paddingLeft: "4px" }}><i className={"icon-calendar-clock"} style={{ fontSize: "18px", color: "#15904c" }}></i>Cycle Timeline</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "18px", marginTop: "16px", paddingLeft: "4px" }}>
             {(__v.timeline || []).map((a, $index) => (<React.Fragment key={$index}>
@@ -429,6 +481,8 @@ class PersonalHome extends React.Component {
 }
 
 
+// ===== HOME · Entry point (SMHome) =====
+// Admins get the admin overview (SMAdminHome); every other role gets the personal home.
 export default function SMHome(props) {
   return props.role === 'admin' ? <AdminHome {...props} /> : <PersonalHome {...props} />;
 }

@@ -1,3 +1,4 @@
+// Any unknown URL · falls back to Home via components/AppRouter.jsx
 import AppRouter from '@/components/AppRouter';
 
 export const metadata = {

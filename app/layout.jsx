@@ -1,3 +1,4 @@
+// Root layout for every page · loads globals.css, the Inter / JetBrains Mono fonts and the Lucide icon font
 import './globals.css';
 
 export const metadata = {

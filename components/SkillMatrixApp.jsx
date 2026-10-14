@@ -1,4 +1,11 @@
 'use client';
+// =============================================================================
+// SkillMatrixApp.jsx · App shell: header, sidebar, notifications, footer and the page router for every screen
+// Screen / URL: every URL (/, /profile, /assessments, /take, /signin, /staff-evals, /analytics, /training, /reports, /framework, /cycles, /forms, /settings, /help, /report?id=...); old URLs are redirected here
+// Who sees it: admin / manager / creator / staff (participant); the sidebar and allowed pages depend on role
+// Used by: components/AppRouter.jsx (rendered from every app/<route>/page.jsx)   Depends on: SM* page components, smModel.js (buildModel), dvlaBanks.js (question banks), smUI.jsx (TabsContext, avatarKey), ui/select.jsx
+// Sections (search for these markers): APP SHELL, DATA MODEL, SIDEBAR, ROUTER, SIGNED-IN USER, NOTES, NOTIFICATIONS, HEADER, PAGE ROUTER, FOOTER
+// =============================================================================
 import React from 'react';
 import __css from './SkillMatrixApp.module.css';
 import SMSignIn from './SMSignIn';
@@ -17,13 +24,16 @@ import SMStaffReport from './SMStaffReport';
 import { buildModel, ALL } from './smModel';
 import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from './dvlaBanks';
 import { Select } from './ui/select';
+import { TabsContext, avatarKey } from './smUI';
 
+// ===== APP SHELL · Feature flags =====
 // Feature flags. A feature that is off is removed from the sidebar, routes, Profile tabs,
 // Home cards, notifications and links. Its code stays in place so it can be switched back on.
 const FEATURES = { auditLogs: false, developmentPlan: false, feedback360: false, evidence: false, planApprovals: false };
 // Plan Approvals depends on the Development Plan, so it is only on when both are on.
 const FT = { ...FEATURES, planApprovals: FEATURES.planApprovals && FEATURES.developmentPlan };
 
+// ===== APP SHELL · Data version reset (localStorage) =====
 // Browser state saved against an older version of the sample data (departments, competencies, forms)
 // no longer matches, so it is cleared once. Change DATA_VERSION whenever buildData() changes shape.
 const DATA_VERSION = 'dvla-docs-1';
@@ -36,7 +46,11 @@ if (typeof window !== 'undefined') {
   } catch (e) {}
 }
 
+// ===== DATA MODEL · Sample data (buildData) =====
+// Builds every scale, department, competency, staff member, target profile and cycle. The result is DATA,
+// passed to every page as `data`.
 function buildData() {
+  // ===== DATA MODEL · Rating scales (gap, importance, proficiency) =====
   const GAP = [
     { n: 0, label: 'No Gap', bg: '#d6336c', fg: '#fff', desc: "The employee's current skill level fully meets or exceeds the required skill level. There is no discrepancy between the required and current skills." },
     { n: 1, label: 'Minimal', bg: '#1c8fd1', fg: '#fff', desc: "The employee's current skill level is very close to the required skill level. Only minor improvements or refinements are needed to meet the requirement." },
@@ -58,6 +72,7 @@ function buildData() {
     { n: 3, label: 'Competent', desc: 'Comfortable with the skill. Can perform tasks independently but may require occasional guidance for complex challenges.' },
     { n: 4, label: 'Proficient', desc: 'Strong understanding with extensive hands-on experience. Can handle complex tasks and resolve issues effectively.' },
     { n: 5, label: 'Expert', desc: 'Mastery of the skill. Recognized as a go-to person for challenges and can guide or train others.' }];
+  // ===== DATA MODEL · IT skills prototype & team =====
   const SKILLS = [
     { name: 'Systems & Infrastructure', items: [['Network Administration', 'Network', 5, 4, 3, 'CCNA verified'], ['Server Management', 'Servers', 4, 4, 3], ['Backup & Disaster Recovery', 'Backup & DR', 4, 4, 1]] },
     { name: 'Software & Data', items: [['Database Administration', 'Databases', 4, 4, 2], ['Application Support', 'App Support', 5, 4, 4], ['Data Analysis & Reporting', 'Data & Reports', 3, 3, 3]] },
@@ -84,6 +99,7 @@ function buildData() {
     { id: 't6', name: 'Abena Frimpong', role: 'Security Analyst', gaps: [2, 1, 0, 1], self: 'In progress', eval: 'Locked' },
   ];
   const categories = ['Technical', 'General'];
+  // ===== DATA MODEL · Current cycle & demo user =====
   const now = new Date(), add = d => new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
   const dl = (d, o) => d.toLocaleDateString('en-GB', o || { weekday: 'short', day: 'numeric', month: 'short' });
   const pad = n => String(n).padStart(2, '0'), iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -94,6 +110,7 @@ function buildData() {
   };
   const user = { name: 'ADJEI DENZIL ASIAM', first: 'DENZIL', last: 'ADJEI', other: 'ASIAM', email: 'denzilasiam.adjei@dvla.gov.gh', mobile: '0256488784', id: '123456789', dept: 'IT DEPARTMENT', deptName: 'IT Department', designation: 'IT OFFICER', location: 'HEAD OFFICE', dob: '13 April 1998', gender: 'Male', manager: 'HOD: Joseph Ahor Abandoh-Sam', target: JOB_LEVELS[1] + ' · Technical track' };
 
+  // ===== DATA MODEL · Departments & competency framework =====
   // ---- Organisation: departments, competency framework, training ----
   // Taken from the DVLA source documents: the RBDI Competency Capacity Assessment Tools and the HR Skill
   // Matrix Question Banks (one per job level, see dvlaBanks.js) and the Skills Matrix Data Analysis sample
@@ -123,6 +140,7 @@ function buildData() {
     primary: { name: 'Training & practice: ' + c.name, provider: 'HR · Learning & Development', days: 0, mode: 'To be scheduled' },
     refresher: { name: 'Coached practice: ' + c.name, provider: 'Line manager / workplace mentor', days: 0, mode: 'On the job' } }]));
 
+  // ===== DATA MODEL · Staff generator =====
   // ---- Staff, with item-level answers for the current cycle and results for earlier cycles ----
   const rng = seed => () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const cl = v => Math.max(1, Math.min(5, v));
@@ -204,6 +222,7 @@ function buildData() {
     }
   });
 
+  // ===== DATA MODEL · Target profiles =====
   // ---- Target profiles: org-wide by job level, with department overrides ----
   const P = (id, level, scope, targets, comps) => ({ id, title: JOB_LEVELS[level], track: level >= 2 ? 'Management' : 'Technical', level, scope, targets, comps: comps || {} });
   const profiles = [
@@ -214,6 +233,7 @@ function buildData() {
     P('p7', 2, ['Corporate Affairs'], { Technical: 5, General: 5 }),
   ];
 
+  // ===== DATA MODEL · Assessment cycles =====
   // ---- Assessment cycles ----
   const N = { invite: true, reminder: true, results: true };
   const cycles = [
@@ -229,66 +249,115 @@ function buildData() {
 }
 const DATA = buildData();
 
+// ===== SIDEBAR · Menu groups (NAV) =====
 // Sidebar for each role. `feature` items only appear when that flag is on.
+// Administrators run assessments but never take one, so My Assessments and Take Assessment are not theirs.
 const NAV = [
   { label: 'Overview', items: [{ label: 'Home', icon: 'icon-house', key: 'home' }] },
-  { label: 'Analytics', items: [
-    { label: 'Executive Dashboard', icon: 'icon-chart-column', key: 'dashboard', roles: ['admin', 'manager'] },
-    { label: 'Skill Heatmap', icon: 'icon-grid-3x3', key: 'heatmap', roles: ['admin', 'manager'] },
-    { label: 'Training Needs', icon: 'icon-graduation-cap', key: 'training', roles: ['admin', 'manager'] },
-    { label: 'Report Builder', icon: 'icon-file-spreadsheet', key: 'reports', roles: ['admin'] },
-    { label: 'Scheduled Reports', icon: 'icon-calendar-clock', key: 'schedules', roles: ['admin'] }] },
   { label: 'Assessments', items: [
     { label: 'Assessment Cycles', icon: 'icon-calendar-cog', key: 'cycles', roles: ['admin'] },
-    { label: 'Form Builder', icon: 'icon-file-pen-line', key: 'forms', roles: ['admin', 'creator'] },
+    { label: 'Forms', icon: 'icon-file-pen-line', key: 'forms', roles: ['admin', 'creator'] },
     { label: 'Staff Evaluations', icon: 'icon-users', key: 'staff-evals', roles: ['admin', 'manager'] },
-    { label: '360° Feedback', icon: 'icon-refresh-cw', key: 'feedback', roles: ['admin', 'manager'], feature: 'feedback360' },
-    { label: 'Plan Approvals', icon: 'icon-badge-check', key: 'approvals', roles: ['admin', 'manager'], feature: 'planApprovals' },
-    { label: 'My Assessments', icon: 'icon-clipboard-list', key: 'assessments' },
-    { label: 'Evidence & Certifications', icon: 'icon-award', key: 'evidence', feature: 'evidence' },
-    { label: 'Development Plan', icon: 'icon-target', key: 'plan', feature: 'developmentPlan' }] },
-  { label: 'Skill Framework', items: [
-    { label: 'Competency Library', icon: 'icon-network', key: 'library', roles: ['admin', 'creator'] },
-    { label: 'Target Profiles', icon: 'icon-crosshair', key: 'targets', roles: ['admin', 'creator'] },
-    { label: 'Rating Scales', icon: 'icon-sliders-horizontal', key: 'scales', roles: ['admin', 'creator'] }] },
+    { label: 'My Assessments', icon: 'icon-clipboard-list', key: 'assessments', roles: ['manager', 'creator', 'staff'] }] },
+  { label: 'Analytics', items: [
+    { label: 'Analytics', icon: 'icon-chart-column', key: 'analytics', roles: ['admin', 'manager'] },
+    { label: 'Training Needs', icon: 'icon-graduation-cap', key: 'training', roles: ['admin', 'manager'] },
+    { label: 'Reports', icon: 'icon-file-spreadsheet', key: 'reports', roles: ['admin'] }] },
   { label: 'Administration', items: [
-    { label: 'User Management', icon: 'icon-user-cog', key: 'users', roles: ['admin'] },
-    { label: 'Audit Logs', icon: 'icon-scroll-text', key: 'audit', roles: ['admin'], feature: 'auditLogs' },
-    { label: 'System Settings', icon: 'icon-settings', key: 'settings', roles: ['admin'] }] },
+    { label: 'Skill Framework', icon: 'icon-network', key: 'framework', roles: ['admin', 'creator'] }] },
 ];
-const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
+// Pages opened from the sidebar footer instead of the menu (Settings holds User Management).
+const FOOTER_PAGES = [{ label: 'Settings', icon: 'icon-settings', key: 'settings', roles: ['admin'] }];
+const PAGES = [...NAV.flatMap(g => g.items), ...FOOTER_PAGES];
+// ===== ROUTER · Tabbed pages (TABS) =====
+// Pages whose sub-pages are tabs. `view` is what the host component renders; a tab can have its own
+// `roles` and `feature` flag, and a tab that is off or not allowed is left out (the first allowed tab is the default).
+const TABS = {
+  analytics: [{ key: 'overview', label: 'Overview', icon: 'icon-chart-column', view: 'dashboard' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'departments' }, { key: 'heatmap', label: 'Heatmap', icon: 'icon-grid-3x3', view: 'heatmap' }],
+  training: [{ key: 'all', label: 'All Needs', icon: 'icon-graduation-cap', view: 'training' }, { key: 'top-needs', label: 'Top Training Needs', icon: 'icon-trending-up', view: 'topneeds' }],
+  reports: [{ key: 'builder', label: 'Report Builder', icon: 'icon-file-spreadsheet', view: 'reports' }, { key: 'scheduled', label: 'Scheduled', icon: 'icon-calendar-clock', view: 'schedules' }],
+  framework: [{ key: 'competencies', label: 'Competencies', icon: 'icon-network', view: 'library' }, { key: 'targets', label: 'Target Profiles', icon: 'icon-crosshair', view: 'targets' },
+    { key: 'scales', label: 'Rating Scales', icon: 'icon-sliders-horizontal', view: 'scales' }],
+  settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs' }],
+  'staff-evals': [{ key: 'reviews', label: 'Reviews', icon: 'icon-users', view: 'staff-evals' }, { key: 'feedback', label: '360° Feedback', icon: 'icon-refresh-cw', view: 'feedback', feature: 'feedback360' },
+    { key: 'approvals', label: 'Plan Approvals', icon: 'icon-badge-check', view: 'approvals', feature: 'planApprovals' }],
+};
+const tabsFor = (page, role) => (TABS[page] || []).filter(t => (!t.feature || FT[t.feature]) && (!t.roles || t.roles.includes(role)));
+// Profile tabs; Development Plan and Evidence only while their features are on. Administrators have no
+// assessment results, so they get no Skill Profile or Assessment History.
+const profileTabs = role => ['account', ...(role === 'admin' ? [] : ['skills', 'history']), ...(FT.developmentPlan ? ['plan'] : []), ...(FT.evidence ? ['evidence'] : [])];
+// ===== ROUTER · View groups (GROUP) =====
+// Maps each view to the page component that draws it (pAssess, pTeam, pAnalytics ... in PAGE ROUTER below).
+const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', departments: 'analytics', topneeds: 'training', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
   training: 'training', library: 'framework', targets: 'framework', scales: 'framework', cycles: 'cycles', users: 'system', audit: 'system', settings: 'system', help: 'system', report: 'report' };
-// Old URLs and the umbrella routes (app/analytics, app/team, app/framework, app/system) keep working.
-const ALIAS = { builder: 'cycles', 'team-evals': 'staff-evals', team: 'staff-evals', analytics: 'dashboard', framework: 'library', system: 'settings', assess: 'assessments' };
+// ===== ROUTER · Old URL redirects (REDIRECT) =====
+// Old URLs (and the umbrella routes in app/) -> [page, tab]. A missing tab keeps whatever ?tab= the URL had.
+const REDIRECT = { heatmap: ['analytics', 'heatmap'], dashboard: ['analytics'], schedules: ['reports', 'scheduled'], users: ['settings', 'users'],
+  library: ['framework', 'competencies'], targets: ['framework', 'targets'], scales: ['framework', 'scales'],
+  audit: ['settings', 'audit'], system: ['settings'], feedback: ['staff-evals', 'feedback'], approvals: ['staff-evals', 'approvals'], team: ['staff-evals'], 'team-evals': ['staff-evals'],
+  evidence: ['profile', 'evidence'], plan: ['profile', 'plan'], builder: ['cycles'], assess: ['assessments'] };
+// ===== ROUTER · Access guard (normalize) =====
+// ALWAYS: pages any role may open; everything else must be in that role's sidebar (navItems).
 const ALWAYS = ['home', 'profile', 'take', 'signin', 'help'];
-const navItems = role => NAV.flatMap(g => g.items).filter(i => (!i.feature || FT[i.feature]) && (!i.roles || i.roles.includes(role)));
-// Returns the page and tab to show for a URL, or Home when the page is hidden or not allowed for the role.
+const navItems = role => PAGES.filter(i => (!i.feature || FT[i.feature]) && (!i.roles || i.roles.includes(role)));
+// Returns the page and tab to show for a URL. A page the role cannot see goes Home; a tab that is off or
+// not allowed falls back to the page's first tab (returned as undefined so the URL stays clean).
 function normalize(page, tab, role) {
-  let p = ALIAS[page] || page || 'home', t = tab;
-  if (p === 'plan') { p = 'profile'; t = 'plan'; }
-  if (p === 'profile') { if (t === 'plan' && !FT.developmentPlan) return ['home', undefined]; if (t && !['account', 'skills', 'history', 'plan'].includes(t)) t = undefined; return ['profile', t]; }
+  let p = page || 'home', t = tab;
+  const r = REDIRECT[p]; if (r) { p = r[0]; if (r[1]) t = r[1]; }
+  if (p === 'profile') return ['profile', t && t !== 'account' && profileTabs(role).includes(t) ? t : undefined];
+  if (p === 'take' && role === 'admin') return ['home', undefined];
   if (p === 'report') return role === 'admin' || role === 'manager' ? ['report', undefined] : ['home', undefined];
   if (ALWAYS.includes(p)) return [p, undefined];
-  return navItems(role).some(i => i.key === p) ? [p, undefined] : ['home', undefined];
+  if (!navItems(role).some(i => i.key === p)) return ['home', undefined];
+  if (TABS[p]) { const list = tabsFor(p, role), hit = list.find(x => x.key === t); return [p, hit && hit !== list[0] ? hit.key : undefined]; }
+  return [p, undefined];
 }
+// ===== APP SHELL · localStorage & browser title helpers =====
 const load = (k, f) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? f : v; } catch (e) { return f; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 // Browser tab title for the page on screen (the route file's metadata only covers the first load).
-const TITLES = { ...Object.fromEntries(NAV.flatMap(g => g.items).map(i => [i.key, i.label])), home: 'Home', profile: 'My Profile', take: 'Take Assessment', signin: 'Sign in', help: 'Help & Guides', report: 'Individual Report' };
+const TITLES = { ...Object.fromEntries(PAGES.map(i => [i.key, i.label])), home: 'Home', profile: 'My Profile', take: 'Take Assessment', signin: 'Sign in', help: 'Help & Guides', report: 'Individual Report' };
 let wantedTitle = '';
 const setTitle = page => { wantedTitle = (TITLES[page] || 'Home') + ' · DVLA Skill Matrix & Assessment Platform'; try { if (document.title !== wantedTitle) document.title = wantedTitle; } catch (e) {} };
 
+// ===== SIGNED-IN USER · readMe / userFor =====
+// skm-users is the user list managed in Settings > Users; ROLE_KEY turns its role label into admin/creator/manager/staff.
+// The person signed in is saved as their username in skm-me. The seeded administrator keeps the full sample
+// profile; anyone else gets their own name, email, department and role, with a dash for details not held.
+const ROLE_KEY = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff' };
+const DEMO_USER = 'denzilasiam.adjei';
+function readMe() {
+  try {
+    const id = localStorage.getItem('skm-me'); if (!id) return null;
+    const all = JSON.parse(localStorage.getItem('skm-users') || 'null');
+    return (Array.isArray(all) && all.find(u => u.username === id)) || (id === DEMO_USER ? { username: DEMO_USER, role: 'Administrator' } : null);
+  } catch (e) { return null; }
+}
+function userFor(u) {
+  const base = { ...DATA.user, firstName: 'Denzil', short: 'Denzil A.', initials: 'AD' };
+  if (!u || u.username === DEMO_USER) return base;
+  const parts = (u.name || u.username || '').trim().split(/\s+/).filter(Boolean), up = x => (x || '').toUpperCase();
+  const first = parts[0] || '', last = parts.length > 1 ? parts[parts.length - 1] : '', dept = u.dept || DATA.user.deptName;
+  return { ...base, name: up(parts.join(' ')), first: up(first), last: up(last) || '—', other: up(parts.slice(1, -1).join(' ')) || '—', email: u.email || '—',
+    mobile: '—', id: '—', dob: '—', gender: '—', dept: up(dept), deptName: dept, designation: up(u.role) || '—', location: 'HEAD OFFICE', manager: '—',
+    firstName: first, short: first + (last ? ' ' + last[0] + '.' : ''), initials: up((first[0] || '') + (last[0] || '')) || '?' };
+}
+
+// ===== APP SHELL · Main component (state) =====
 class SkillMatrixApp extends React.Component {
   constructor(props) {
     super(props);
     const role = props.role || 'admin';
     const [page, tab] = normalize(props.routePage ?? props.startPage ?? 'home', props.routeTab, role);
-    this.state = { page, active: page === 'profile' && tab === 'plan' ? 'plan' : page, tab: tab || 'account', id: props.routeId || null, history: [], vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
+    this.state = { page, active: page, tab: tab || 'account', id: props.routeId || null, history: [], vw: typeof window !== 'undefined' ? window.innerWidth : 1440,
       navOpen: false, bellOpen: false, query: '', closed: {}, status: 'not_started',
       notesOpen: false, notes: [], selId: null, draft: { title: '', body: '' }, dirty: false,
       scope: ALL, profiles: DATA.profiles, evals: {}, avatar: null };
   }
   role() { return this.state.roleOverride || this.props.role || 'admin'; }
+  // ===== APP SHELL · Lifecycle (restore sign-in, avatar, URL sync) =====
+  // Restores skm-nav-pin (sidebar pinned), skm-notes, skm-session (assessment status), skm-target-profiles and skm-evals.
   componentDidMount() {
     this.onResize = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
     this.onResize();
@@ -296,10 +365,16 @@ class SkillMatrixApp extends React.Component {
     window.addEventListener('resize', this.onResize);
     try { const n = JSON.parse(localStorage.getItem('skm-notes') || '[]'); if (Array.isArray(n)) this.setState({ notes: n }); } catch (e) {}
     try { const s = JSON.parse(localStorage.getItem('skm-session') || 'null'); if (s) this.setState({ status: s.submittedAt ? 'submitted' : 'in_progress' }); } catch (e) {}
-    const sc = load('skm-scope', ALL), pr = load('skm-target-profiles', null), ev = load('skm-evals', {});
-    this.setState({ scope: sc === ALL || DATA.depts.some(d => d.name === sc) ? sc : ALL, profiles: Array.isArray(pr) && pr.length ? pr : DATA.profiles, evals: ev && typeof ev === 'object' ? ev : {} });
+    // Restore whoever signed in, then re-check the page from the URL against their role.
+    const me = readMe();
+    if (me) {
+      const role = ROLE_KEY[me.role] || 'staff', [p, t] = normalize(this.props.routePage ?? this.props.startPage ?? 'home', this.props.routeTab, role);
+      this.setState({ me, roleOverride: role, page: p, active: p, tab: t || 'account' }, () => { setTitle(p); this.syncUrl(); });
+    }
+    const pr = load('skm-target-profiles', null), ev = load('skm-evals', {});
+    this.setState({ profiles: Array.isArray(pr) && pr.length ? pr : DATA.profiles, evals: ev && typeof ev === 'object' ? ev : {} });
     // Profile photo chosen on the Profile page (shown in the sidebar and header).
-    this.onAvatarStorage = () => { try { this.setState({ avatar: localStorage.getItem('skm-user-avatar') || null }); } catch (e) {} };
+    this.onAvatarStorage = () => { try { this.setState({ avatar: localStorage.getItem(avatarKey()) || null }); } catch (e) {} };
     this.onAvatarStorage();
     window.addEventListener('skm-avatar-changed', this.onAvatarStorage);
     window.addEventListener('storage', this.onAvatarStorage);
@@ -319,7 +394,7 @@ class SkillMatrixApp extends React.Component {
     const rp = this.props.routePage;
     if (rp && (rp !== pp.routePage || this.props.routeTab !== pp.routeTab || this.props.routeId !== pp.routeId)) {
       const [p, t] = normalize(rp, this.props.routeTab, this.role());
-      if (p !== this.state.page || (t || 'account') !== this.state.tab || this.props.routeId !== this.state.id) this.setState({ page: p, active: p === 'profile' && t === 'plan' ? 'plan' : p, tab: t || 'account', id: this.props.routeId || null });
+      if (p !== this.state.page || (t || 'account') !== this.state.tab || this.props.routeId !== this.state.id) this.setState({ page: p, active: p, tab: t || 'account', id: this.props.routeId || null });
       this.syncUrl();
     }
   }
@@ -329,28 +404,46 @@ class SkillMatrixApp extends React.Component {
     window.removeEventListener('storage', this.onAvatarStorage);
     if (this.titleWatch) this.titleWatch.disconnect();
   }
+  // ===== APP SHELL · Navigation actions (go, tabs, sign out) =====
+  // history keeps the last 20 pages for the Back button; signOut clears skm-me and goes to /signin.
   go = (key, tab, id) => {
     const [page, t0] = normalize(key, tab, this.role());
     const t = t0 || 'account';
-    this.setState(s => ({ page, active: page === 'profile' && t === 'plan' ? 'plan' : page, tab: t, id: id || null, navOpen: false, bellOpen: false, history: [...s.history, { page: s.page, tab: s.tab, id: s.id }].slice(-20) }));
+    this.setState(s => ({ page, active: page, tab: t, id: id || null, navOpen: false, bellOpen: false, history: [...s.history, { page: s.page, tab: s.tab, id: s.id }].slice(-20) }));
     this.props.onNavigate && this.props.onNavigate(page, t, { id });
     try { window.scrollTo(0, 0); } catch (e) {}
   };
-  setScope = v => { this.setState({ scope: v }); save('skm-scope', v); };
+  selectTab = t => {
+    const [page, t0] = normalize(this.state.page, t, this.role());
+    this.setState(s => ({ tab: t0 || 'account', history: [...s.history, { page: s.page, tab: s.tab, id: s.id }].slice(-20) }));
+    this.props.onNavigate && this.props.onNavigate(page, t0);
+  };
+  signOut = () => {
+    try { localStorage.removeItem('skm-me'); } catch (e) {}
+    this.setState({ me: null, roleOverride: null }, () => { this.onAvatarStorage && this.onAvatarStorage(); this.go('signin'); });
+  };
+  // ===== APP SHELL · Saved data (target profiles, evaluations, notes) =====
+  // Saved to skm-target-profiles, skm-evals and skm-notes.
   setProfiles = p => { this.setState({ profiles: p }); save('skm-target-profiles', p); };
   setEval = (id, patch) => { this.setState(s => { const cur = s.evals[id] || {}; const next = { ...s.evals, [id]: { ...cur, ...patch, adj: { ...(cur.adj || {}), ...(patch.adj || {}) } } }; save('skm-evals', next); return { evals: next }; }); };
   resetEvals = () => { this.setState({ evals: {} }); save('skm-evals', {}); };
   persist(notes) { try { localStorage.setItem('skm-notes', JSON.stringify(notes)); } catch (e) {} }
   select(id) { const n = this.state.notes.find(x => x.id === id); this.setState({ selId: id, draft: { title: n.title, body: n.body }, dirty: false }); }
+  // ===== APP SHELL · View values (renderVals) =====
+  // Computes everything render() needs: sidebar groups, current tab/view, notifications and layout sizes.
   renderVals() {
     const s = this.state, set = o => this.setState(o);
     const role = this.role();
     const compact = s.vw < 1100, vw = s.vw, exp = compact || s.pinned || s.hover, floating = !compact && !s.pinned && s.hover;
     const q = s.query.trim().toLowerCase();
     const model = buildModel(DATA, s.profiles, s.evals);
-    const myDept = DATA.user.deptName;
-    const scope = role === 'manager' ? myDept : s.scope;
+    const user = userFor(s.me), data = { ...DATA, user };
+    const myDept = user.deptName;
+    // No department selector in the header: admins start on all departments and filter on each page.
+    const scope = role === 'manager' ? myDept : ALL;
     const scopeStaff = model.staff.filter(x => scope === ALL || x.dept === scope);
+    // ===== SIDEBAR · Menu items & badges =====
+    // Staff Evaluations badge = results waiting for review (Submitted or Auto-scored) in the visible scope.
     const awaiting = scopeStaff.filter(x => x.status === 'Submitted' || x.status === 'Auto-scored').length;
     const badges = { 'staff-evals': awaiting ? String(awaiting) : '' };
     const allowed = navItems(role);
@@ -367,30 +460,44 @@ class SkillMatrixApp extends React.Component {
       const open = q ? true : !s.closed[g.label];
       return { label: g.label, countLabel: g.label.toUpperCase() + ' · ' + items.length, showLabel: exp, showDivider: !exp, align: exp ? 'stretch' : 'center', items, open: exp ? open : true, chev: open ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => set({ closed: { ...s.closed, [g.label]: open } }) };
     }).filter(g => g.items.length);
-    const grp = GROUP[s.page] || s.page;
+    // ===== ROUTER · Current tab & view =====
+    // Tab pages: the tab on screen picks the host component's view.
+    const tabList = TABS[s.page] ? tabsFor(s.page, role) : null;
+    const curTab = tabList ? tabList.find(x => x.key === s.tab) || tabList[0] : null;
+    const view = curTab ? curTab.view : s.page;
+    const grp = GROUP[view] || view;
+    const tabsCtx = tabList ? { title: (PAGES.find(i => i.key === s.page) || {}).label, items: tabList, active: curTab && curTab.key, onSelect: this.selectTab } : null;
+    // ===== NOTES · Notes panel list =====
     const sel = s.notes.find(n => n.id === s.selId);
     const noteList = s.notes.map(n => ({ title: n.title || 'Untitled note', preview: n.body ? n.body.slice(0, 60) : 'Empty note',
       bg: n.id === s.selId ? '#262838' : 'transparent', accent: n.id === s.selId ? '#f5a623' : 'transparent', select: () => this.select(n.id) }));
+    // ===== NOTIFICATIONS · Bell list =====
+    // Each entry depends on role (and feature flags); empty entries are filtered out.
     const nextCycle = DATA.cycles.find(c => c.status === 'Scheduled');
     const notifs = [
-      { icon: 'icon-timer', title: s.status === 'submitted' ? 'Assessment submitted' : 'Your assessment is open today', sub: DATA.cycle.dayLabel + ' · ' + DATA.cycle.window + ' · ' + DATA.cycle.durationMin + ' min', onClick: () => this.go(s.status === 'submitted' ? 'assessments' : 'take') },
+      role !== 'admin' ? { icon: 'icon-timer', title: s.status === 'submitted' ? 'Assessment submitted' : 'Your assessment is open today', sub: DATA.cycle.dayLabel + ' · ' + DATA.cycle.window + ' · ' + DATA.cycle.durationMin + ' min', onClick: () => this.go(s.status === 'submitted' ? 'assessments' : 'take') } : null,
       (role === 'admin' || role === 'manager') && awaiting ? { icon: 'icon-user-round-check', title: awaiting + ' result' + (awaiting > 1 ? 's' : '') + ' waiting for review', sub: (scope === ALL ? 'All departments' : scope) + ' · ' + DATA.cycle.short, onClick: () => this.go('staff-evals') } : null,
       role === 'admin' && nextCycle ? { icon: 'icon-calendar-cog', title: nextCycle.name + ' is scheduled', sub: 'Opens ' + new Date(nextCycle.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), onClick: () => this.go('cycles') } : null,
-      { icon: 'icon-user-round-check', title: 'Manager evaluation received', sub: 'Q3 2026 · Joseph Ahor Abandoh-Sam', onClick: () => this.go('profile', 'history') },
-      FT.developmentPlan ? { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('plan') } : null,
+      role !== 'admin' ? { icon: 'icon-user-round-check', title: 'Manager evaluation received', sub: 'Q3 2026 · Joseph Ahor Abandoh-Sam', onClick: () => this.go('profile', 'history') } : null,
+      FT.developmentPlan ? { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('profile', 'plan') } : null,
     ].filter(Boolean);
-    const common = { data: DATA, role, vw, go: this.go, features: FT, model, scope, myDept };
+    // ===== APP SHELL · Values passed to render =====
+    const common = { data, role, vw, go: this.go, features: FT, model, scope, myDept };
     return {
-      avatar: s.avatar,
-      ...common, page: s.page, tab: s.tab, id: s.id, onTab: t => { set({ tab: t, active: t === 'plan' ? 'plan' : 'profile' }); this.props.onNavigate && this.props.onNavigate('profile', t, { replace: true }); }, status: s.status,
+      avatar: s.avatar, meShort: user.short, meInitials: user.initials,
+      ...common, page: s.page, view, tabsCtx, tab: s.tab, id: s.id, onTab: this.selectTab, status: s.status,
       onStatus: st => set({ status: st }), profiles: s.profiles, setProfiles: this.setProfiles, evals: s.evals, setEval: this.setEval, resetEvals: this.resetEvals,
+      // Sign-in and Take Assessment are full-screen (no header or sidebar); every other page is inside the shell.
       pTake: s.page === 'take', pSignin: s.page === 'signin', shell: s.page !== 'take' && s.page !== 'signin', pForms: s.page === 'forms',
-      onSignedIn: u => { const m = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff' }; this.setState({ roleOverride: m[u.role] || 'staff' }, () => this.go('home')); },
+      onSignedIn: u => { try { localStorage.setItem('skm-me', u.username); } catch (e) {} this.setState({ me: u, roleOverride: ROLE_KEY[u.role] || 'staff' }, () => { this.onAvatarStorage && this.onAvatarStorage(); this.go('home'); }); },
+      // Which page component shows, chosen by the view group (see PAGE ROUTER in render).
       pHome: s.page === 'home', pProfile: s.page === 'profile', pAssess: grp === 'assess', pTeam: grp === 'team', pAnalytics: grp === 'analytics', pTraining: grp === 'training', pFramework: grp === 'framework', pCycles: grp === 'cycles', pSystem: grp === 'system', pReport: grp === 'report',
-      compact, notCompact: !compact, wideHeader: vw >= 760, showScope: role === 'admin',
-      scopeValue: s.scope, onScope: e => this.setScope(e.target.value), deptNames: DATA.depts.map(d => d.name),
+      // ===== HEADER · Title & role label =====
+      compact, notCompact: !compact, wideHeader: vw >= 760,
       titleText: vw < 520 ? 'Skill Matrix' : 'Skill Matrix & Assessment Platform',
       roleLabel: { staff: 'Participant', manager: 'Manager / Supervisor', creator: 'Assessment Creator', admin: 'Administrator' }[role],
+      // ===== SIDEBAR · Layout (mobile drawer, hover-expand, pin) =====
+      // Below 1100px wide the sidebar is a drawer; on desktop it expands on hover unless pinned (skm-nav-pin).
       toggleNav: () => set({ navOpen: !s.navOpen }), drawerOverlay: compact && s.navOpen,
       asideShadow: floating || (compact && s.navOpen) ? 'inset 0 1px 0 rgba(255,255,255,.95),0 30px 80px rgba(10,52,36,.28)' : 'inset 0 1px 0 rgba(255,255,255,.95),inset 0 0 0 1px rgba(255,255,255,.25),0 24px 60px rgba(15,35,65,.14)',
       asidePos: compact ? 'fixed' : 'sticky', asideDisplay: !compact || s.navOpen ? 'flex' : 'none',
@@ -402,13 +509,17 @@ class SkillMatrixApp extends React.Component {
       togglePin: () => { const p = !s.pinned; set({ pinned: p, hover: p ? false : true }); try { localStorage.setItem('skm-nav-pin', p ? '1' : '0'); } catch (e) {} },
       navEnter: () => { if (compact || s.pinned) return; clearTimeout(this._hl); this._he = setTimeout(() => this.setState({ hover: true }), 90); },
       navLeave: () => { clearTimeout(this._he); if (compact || s.pinned) return; this._hl = setTimeout(() => this.setState({ hover: false }), 160); },
+      // ===== SIDEBAR · Greeting & footer quick actions =====
       greeting: (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,'; })(),
-      quick: (exp ? [['Notifications', 'icon-bell', () => set({ bellOpen: !s.bellOpen }), notifs.length], ['Help & Guides', 'icon-life-buoy', () => this.go('help')], [role === 'admin' ? 'System Settings' : 'My Profile', 'icon-settings', () => this.go(role === 'admin' ? 'settings' : 'profile')], ['Sign out', 'icon-log-out', () => this.go('signin')]]
-        : [['Help & Guides', 'icon-life-buoy', () => this.go('help')], ['Sign out', 'icon-log-out', () => this.go('signin')]]).map(([label, icon, onClick, badge]) => ({ label, icon, onClick, badge: badge || '', color: icon === 'icon-log-out' ? '#e5484d' : '#475569' })),
+      // Sidebar footer: Settings (administrators only), Help and Sign out. Notifications stay on the header bell.
+      quick: (exp ? [['Help & Guides', 'icon-life-buoy', () => this.go('help')], role === 'admin' ? ['Settings', 'icon-settings', () => this.go('settings')] : ['My Profile', 'icon-user', () => this.go('profile')], ['Sign out', 'icon-log-out', this.signOut]]
+        : [['Help & Guides', 'icon-life-buoy', () => this.go('help')], role === 'admin' ? ['Settings', 'icon-settings', () => this.go('settings')] : null, ['Sign out', 'icon-log-out', this.signOut]]).filter(Boolean).map(([label, icon, onClick, badge]) => ({ label, icon, onClick, badge: badge || '', color: icon === 'icon-log-out' ? '#e5484d' : '#475569' })),
+      // ===== HEADER · Back, profile & bell =====
       goBack: () => { const h = [...s.history]; const prev = h.pop() || { page: 'home' }; this.go(prev.page, prev.tab, prev.id); this.setState({ history: h }); },
       goProfile: () => this.go('profile'),
       bellOpen: s.bellOpen, toggleBell: () => set({ bellOpen: !s.bellOpen }), notifs, notifCount: notifs.length,
       groups, query: s.query, onQuery: e => set({ query: e.target.value }),
+      // ===== NOTES · Notes panel handlers (skm-notes) =====
       notesOpen: s.notesOpen, openNotes: () => set({ notesOpen: true }), closeNotes: () => set({ notesOpen: false }), stop: e => e.stopPropagation(),
       notesDir: vw < 720 ? 'column-reverse' : 'row', notesListW: vw < 720 ? '100%' : '242px', notesListMaxH: vw < 720 ? '220px' : 'none',
       noteCount: s.notes.length, hasNotes: s.notes.length > 0, noNotes: s.notes.length === 0, noteList,
@@ -422,59 +533,50 @@ class SkillMatrixApp extends React.Component {
       deleteNote: () => { const notes = s.notes.filter(n => n.id !== s.selId); this.persist(notes); set({ notes, selId: null, dirty: false }); },
     };
   }
+  // ===== APP SHELL · Render =====
+  // P = the props every page component receives (data, role, vw, go, features, model, scope, myDept).
   render() {
     const __v = this.renderVals() || {};
     const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept };
     return (
       <>
+      {/* ===== PAGE ROUTER · Full-screen pages (sign in, take assessment) ===== */}
       {(__v.pSignin) ? (<>
         <SMSignIn data={__v.data} vw={__v.vw} onSignedIn={__v.onSignedIn} features={__v.features} />
       </>) : null}
       {(__v.pTake) ? (<>
         <SMAssessmentSession data={__v.data} go={__v.go} onStatus={__v.onStatus} vw={__v.vw} />
       </>) : null}
+      {/* ===== APP SHELL · Layout (header + sidebar + main) ===== */}
       {(__v.shell) ? (<>
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+          {/* ===== HEADER · Top bar ===== */}
           <div style={{ position: "sticky", top: "0", zIndex: "50", padding: "10px 12px 0" }}>
             <header style={{ position: "relative", height: "58px", borderRadius: "20px", background: "rgba(10,52,36,.82)", backdropFilter: "blur(24px) saturate(180%)", WebkitBackdropFilter: "blur(24px) saturate(180%)", border: "1px solid rgba(255,255,255,.14)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.14),0 12px 30px rgba(10,52,36,.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "0 clamp(10px,1.6vw,18px)" }}>
+              {/* ===== HEADER · Logo & title ===== */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "0" }}>
                 {(__v.compact) ? (<>
                   <button onClick={__v.toggleNav} aria-label={"Menu"} style={{ width: "36px", height: "36px", borderRadius: "12px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <i className={"icon-menu"} style={{ fontSize: "19px" }}></i>
                   </button>
                 </>) : null}
-                {(__v.notCompact) ? (<>
-                  <button onClick={__v.goBack} aria-label={"Back"} style={{ width: "34px", height: "34px", borderRadius: "12px", background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.14)", color: "#cfe6d8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <i className={"icon-chevron-left"} style={{ fontSize: "18px" }}></i>
-                  </button>
-                </>) : null}
                 <span style={{ flex: "none", width: "46px", height: "46px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.25)" }}>
                   <img src={"/assets/dvla-logo.png"} alt={"DVLA"} style={{ width: "42px", height: "42px", objectFit: "contain", display: "block" }} />
                 </span>
                 <span style={{ color: "#fff", fontWeight: "700", fontSize: "clamp(15px,1.5vw,19px)", letterSpacing: "-0.3px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{__v.titleText}</span>
-                {(__v.wideHeader) ? (<>
-                  <span style={{ font: "600 11px Inter,sans-serif", letterSpacing: ".3px", color: "#dcede3", background: "rgba(255,255,255,.1)", border: "1px solid rgba(255,255,255,.18)", borderRadius: "999px", padding: "4px 10px", whiteSpace: "nowrap" }}>{__v.roleLabel}</span>
-                </>) : null}
               </div>
+              {/* ===== HEADER · Bell & profile button ===== */}
               <div style={{ display: "flex", alignItems: "center", gap: "clamp(8px,1.2vw,14px)", flex: "none" }}>
-                {(__v.showScope) ? (<>
-                  <label title={"Department scope for dashboards, heatmap, training needs, reports, staff evaluations and target profiles"} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", padding: "0 6px 0 12px", color: "#e3f1e8" }}>
-                    <i className={"icon-building-2"} style={{ fontSize: "15px" }}></i>
-                    <Select value={__v.scopeValue} onChange={__v.onScope} aria-label={"Department scope"} style={{ maxWidth: __v.wideHeader ? "200px" : "120px", height: "30px", border: "0", outline: "0", background: "transparent", color: "#fff", font: "600 12.5px Inter,sans-serif", cursor: "pointer" }}>
-                      <option value={ALL} style={{ color: "#111827" }}>All departments</option>
-                      {(__v.deptNames || []).map(n => <option key={n} value={n} style={{ color: "#111827" }}>{n}</option>)}
-                    </Select>
-                  </label>
-                </>) : null}
                 <button onClick={__v.toggleBell} aria-label={"Notifications"} style={{ position: "relative", width: "38px", height: "38px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#e3f1e8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <i className={"icon-bell"} style={{ fontSize: "18px" }}></i>
                   <span style={{ position: "absolute", top: "-4px", right: "-4px", background: "#ff3b30", color: "#fff", fontSize: "10px", fontWeight: "700", borderRadius: "999px", minWidth: "17px", height: "17px", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #0f4a33" }}>{__v.notifCount}</span>
                 </button>
                 <button onClick={__v.goProfile} title={"My Profile"} style={{ display: "flex", alignItems: "center", gap: "8px", height: "38px", padding: "0 10px 0 3px", borderRadius: "999px", background: "rgba(255,255,255,.12)", border: "1px solid rgba(255,255,255,.16)", color: "#fff", cursor: "pointer" }}>
-                  <span style={{ width: "32px", height: "32px", borderRadius: "50%", background: "repeating-linear-gradient(135deg,#cbd2da 0 4px,#b8c0ca 4px 8px)", border: "2px solid #fff", font: "600 10px 'JetBrains Mono',monospace", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{__v.avatar ? <img src={__v.avatar} alt={"AD"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : "AD"}</span>
-                  {(__v.wideHeader) ? (<span style={{ font: "600 13px Inter,sans-serif", whiteSpace: "nowrap" }}>Denzil A.</span>) : null}
+                  <span style={{ width: "32px", height: "32px", borderRadius: "50%", background: "repeating-linear-gradient(135deg,#cbd2da 0 4px,#b8c0ca 4px 8px)", border: "2px solid #fff", font: "600 10px 'JetBrains Mono',monospace", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>{__v.avatar ? <img src={__v.avatar} alt={__v.meInitials} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : __v.meInitials}</span>
+                  {(__v.wideHeader) ? (<span style={{ font: "600 13px Inter,sans-serif", whiteSpace: "nowrap" }}>{__v.meShort}</span>) : null}
                 </button>
               </div>
+              {/* ===== NOTIFICATIONS · Dropdown panel ===== */}
               {(__v.bellOpen) ? (<>
                 <div style={{ position: "absolute", top: "66px", right: "0", width: "min(360px,calc(100vw - 24px))", background: "rgba(255,255,255,.78)", backdropFilter: "blur(30px) saturate(180%)", WebkitBackdropFilter: "blur(30px) saturate(180%)", border: "1px solid rgba(255,255,255,.9)", borderRadius: "22px", boxShadow: "0 24px 60px rgba(15,35,65,.2)", overflow: "hidden", zIndex: "60" }}>
                   <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(15,35,65,.07)", fontSize: "14.5px", fontWeight: "600", display: "flex", justifyContent: "space-between", alignItems: "center" }}>Notifications<button onClick={__v.toggleBell} style={{ width: "26px", height: "26px", borderRadius: "999px", background: "rgba(118,118,128,.12)", border: "0", cursor: "pointer", color: "#4b5563", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -495,23 +597,25 @@ class SkillMatrixApp extends React.Component {
               </>) : null}
             </header>
           </div>
+          {/* ===== SIDEBAR · Mobile overlay & panel ===== */}
           <div style={{ display: "flex", flex: "1", alignItems: "flex-start" }}>
             {(__v.drawerOverlay) ? (<>
               <div onClick={__v.toggleNav} style={{ position: "fixed", inset: "0", background: "rgba(15,35,65,.25)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: "39" }}></div>
             </>) : null}
             <aside onMouseEnter={__v.navEnter} onMouseLeave={__v.navLeave} style={{ position: __v.asidePos, top: __v.asideTop, left: __v.asideLeft, zIndex: "40", flex: "none", width: __v.asideW, height: __v.asideH, margin: __v.asideMargin, display: __v.asideDisplay, flexDirection: "column", borderRadius: "28px", background: "rgba(255,255,255,.58)", backdropFilter: "blur(32px) saturate(190%)", WebkitBackdropFilter: "blur(32px) saturate(190%)", border: "1px solid rgba(255,255,255,.85)", boxShadow: __v.asideShadow, transition: "width .28s cubic-bezier(.2,.8,.2,1),margin .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s" }}>
+              {/* ===== SIDEBAR · User card (avatar, greeting, pin) ===== */}
               <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "12px", padding: `20px ${__v.padX ?? ""} 16px`, justifyContent: __v.rowJustify }}>
                 <button onClick={__v.goProfile} title={"My Profile"} style={{ flex: "none", width: "44px", height: "44px", borderRadius: "50%", padding: "0", cursor: "pointer", border: "2px solid #fff", boxShadow: "0 0 0 2px rgba(21,144,76,.25),0 6px 14px rgba(15,35,65,.15)", background: __v.avatar ? "transparent" : "linear-gradient(135deg, #0d3b2a 0%, #15904c 100%)", font: "600 12px Inter,sans-serif", color: "#fff", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {__v.avatar ? (
-                    <img src={__v.avatar} alt={"AD"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    <img src={__v.avatar} alt={__v.meInitials} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                   ) : (
-                    "AD"
+                    __v.meInitials
                   )}
                 </button>
                 {(__v.exp) ? (<>
                   <div style={{ minWidth: "0", flex: "1" }}>
                     <div style={{ font: "500 11.5px Inter,sans-serif", color: "#6b7280" }}>{__v.greeting}</div>
-                    <div style={{ font: "700 15.5px Inter,sans-serif", color: "#0f172a", letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Denzil A.</div>
+                    <div style={{ font: "700 15.5px Inter,sans-serif", color: "#0f172a", letterSpacing: "-0.2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{__v.meShort}</div>
                   </div>
                 </>) : null}
                 {(__v.showPin) ? (<>
@@ -521,6 +625,7 @@ class SkillMatrixApp extends React.Component {
                 </>) : null}
               </div>
               <div style={{ height: "1px", margin: `0 ${__v.padX ?? ""}`, background: "rgba(15,35,65,.08)" }}></div>
+              {/* ===== SIDEBAR · Menu search ===== */}
               {(__v.exp) ? (<>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "40px", margin: "14px 16px 0", borderRadius: "14px", padding: "0 8px 0 12px", background: "rgba(118,118,128,.1)", border: "1px solid rgba(255,255,255,.6)" }}>
                   <i className={"icon-search"} style={{ fontSize: "15px", color: "#8a94a3" }}></i>
@@ -533,6 +638,7 @@ class SkillMatrixApp extends React.Component {
                   <i className={"icon-search"} style={{ fontSize: "16px" }}></i>
                 </button>
               </>) : null}
+              {/* ===== SIDEBAR · Menu groups ===== */}
               <nav style={{ flex: "1", minHeight: "0", overflowY: "auto", overflowX: "hidden", padding: `14px ${__v.navPad ?? ""} 12px` }}>
                 {(__v.groups || []).map((g, $index) => (<React.Fragment key={$index}>
                   <div style={{ marginBottom: "14px" }}>
@@ -563,6 +669,7 @@ class SkillMatrixApp extends React.Component {
                   </div>
                 </React.Fragment>))}
               </nav>
+              {/* ===== SIDEBAR · Footer quick actions (Help, Settings, Sign out) ===== */}
               <div style={{ flex: "none", padding: `0 ${__v.navPad ?? ""} 14px`, display: "flex", flexDirection: "column", gap: "10px", alignItems: __v.footAlign }}>
                 <div style={{ flexShrink: "0", display: "flex", flexDirection: __v.quickDir, gap: "4px", padding: "6px", borderRadius: "18px", background: "rgba(255,255,255,.72)", border: "1px solid rgba(255,255,255,.9)", boxShadow: "0 4px 14px rgba(15,35,65,.06)", justifyContent: "space-between", width: __v.quickW }}>
                   {(__v.quick || []).map((qk, $index) => (<React.Fragment key={$index}>
@@ -576,20 +683,26 @@ class SkillMatrixApp extends React.Component {
                 </div>
               </div>
             </aside>
+            {/* ===== PAGE ROUTER · Main content ===== */}
             <main style={{ flex: "1", minWidth: "0", display: "flex", flexDirection: "column", minHeight: "calc(100vh - 68px)" }}>
               <div style={{ flex: "1" }}>
+                <TabsContext.Provider value={__v.tabsCtx}>
+                {/* ===== PAGE ROUTER · Page component per route ===== */}
+                {/* home: SMHome · profile: SMProfile · assessments: SMAssessments · staff-evals: SMTeam · analytics, reports: SMAnalytics · training: SMTraining (Top Needs tab: SMAnalytics) · framework: SMFramework · cycles: SMCycles · forms: SMFormBuilder · settings, help: SMSystem · report?id=: SMStaffReport */}
                 {(__v.pHome) ? (<SMHome {...P} status={__v.status} />) : null}
                 {(__v.pProfile) ? (<SMProfile {...P} tab={__v.tab} onTab={__v.onTab} />) : null}
-                {(__v.pAssess) ? (<SMAssessments {...P} view={__v.page} status={__v.status} />) : null}
-                {(__v.pTeam) ? (<SMTeam {...P} view={__v.page} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
-                {(__v.pAnalytics) ? (<SMAnalytics key={__v.page} {...P} view={__v.page} />) : null}
-                {(__v.pTraining) ? (<SMTraining {...P} />) : null}
-                {(__v.pFramework) ? (<SMFramework {...P} view={__v.page} profiles={__v.profiles} setProfiles={__v.setProfiles} />) : null}
+                {(__v.pAssess) ? (<SMAssessments {...P} view={__v.view} status={__v.status} />) : null}
+                {(__v.pTeam) ? (<SMTeam {...P} view={__v.view} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
+                {(__v.pAnalytics) ? (<SMAnalytics key={__v.view} {...P} view={__v.view} />) : null}
+                {(__v.pTraining) ? (__v.view === 'topneeds' ? <SMAnalytics key={__v.view} {...P} view={__v.view} /> : <SMTraining {...P} />) : null}
+                {(__v.pFramework) ? (<SMFramework {...P} view={__v.view} profiles={__v.profiles} setProfiles={__v.setProfiles} />) : null}
                 {(__v.pCycles) ? (<SMCycles {...P} />) : null}
                 {(__v.pForms) ? (<SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} />) : null}
-                {(__v.pSystem) ? (<SMSystem {...P} view={__v.page} />) : null}
+                {(__v.pSystem) ? (<SMSystem {...P} view={__v.view} />) : null}
                 {(__v.pReport) ? (<SMStaffReport key={__v.id} {...P} id={__v.id} />) : null}
+                </TabsContext.Provider>
               </div>
+              {/* ===== FOOTER · Page footer ===== */}
               <footer style={{ margin: "0 clamp(12px,2vw,20px)", borderTop: "1px solid rgba(15,35,65,.08)", padding: "20px 0 18px", textAlign: "center", fontSize: "13px", color: "#64748b" }}>© 2026 Skill Matrix &amp; Assessment Platform. All rights reserved.</footer>
             </main>
           </div>

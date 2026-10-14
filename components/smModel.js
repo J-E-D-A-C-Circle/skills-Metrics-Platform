@@ -1,6 +1,14 @@
+// =============================================================================
+// smModel.js · Data model: cycles, statuses, score bands, scoring and per-staff results
+// Screen / URL: no screen of its own; feeds Home, Analytics, Training Needs, Staff Evaluations, Skill Framework, Cycles and the staff report (/report?id=)
+// Who sees it: admin / manager (results); used for every role
+// Used by: SkillMatrixApp.jsx, SMAdminHome, SMAnalytics, SMCycles, SMFramework, SMStaffEvals, SMStaffReport, SMTraining, smUI.jsx   Depends on: nothing (pure functions over buildData() + skm-target-profiles + skm-evals)
+// Sections (search for these markers): DATA MODEL
+// =============================================================================
 // Derived data for the admin console. Everything here is computed from buildData()
 // plus the browser state (target profiles and evaluation reviews), so no totals are hard-coded.
 
+// ===== DATA MODEL · Cycles & statuses =====
 export const CYCLES = ['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'];
 export const CURRENT = 'Q4 2026';
 export const PREVIOUS = 'Q3 2026';
@@ -14,6 +22,7 @@ export const STATUS_HINT = {
   Confirmed: 'Result confirmed by the manager',
 };
 export const isScored = st => st === 'Submitted' || st === 'Auto-scored' || st === 'Confirmed';
+// ===== DATA MODEL · Score bands & tiers =====
 // Scoring interpretation from the DVLA competency assessment tools.
 export const BANDS = [{ name: 'High Competency', min: 80, bg: '#dcfce7', fg: '#15803d' }, { name: 'Moderate Competency', min: 60, bg: '#e0f2fe', fg: '#0369a1' },
   { name: 'Basic Competency', min: 40, bg: '#fef3c7', fg: '#92400e' }, { name: 'Training Required', min: 0, bg: '#fee2e2', fg: '#b91c1c' }];
@@ -24,10 +33,12 @@ export const TIERS = [{ name: 'Expert', min: 90, level: 5 }, { name: 'Proficient
 export const TIERS_TEXT = 'Expert ≥90, Proficient ≥80, Competent ≥60, Basic ≥40, otherwise Novice';
 export const PASS = 60;
 export const levelFromPct = p => (TIERS.find(t => p >= t.min) || TIERS[TIERS.length - 1]).level;
+// ===== DATA MODEL · Small helpers =====
 export const avg = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 export const round1 = n => Math.round(n * 10) / 10;
 export const ALL = 'All';
 
+// ===== DATA MODEL · Target profiles =====
 export function profileLabel(p) { return p ? p.title + ' · ' + p.track + ' track' : 'No target profile'; }
 
 // A department override beats the org-wide profile for the same job level.
@@ -38,12 +49,14 @@ export function resolveProfile(profiles, s) {
   const g = same.find(p => p.scope === 'all');
   return { p: g || null, override: false };
 }
+// Target for one competency: a per-competency value wins, then the category target, otherwise 3.
 export function targetOf(p, c) {
   if (!p) return 3;
   const v = p.comps && p.comps[c.id];
   return v != null ? v : (p.targets[c.category] != null ? p.targets[c.category] : 3);
 }
 
+// ===== DATA MODEL · Scoring =====
 // Objective items score automatically; open text only counts once a reviewer scores it.
 export function scoreSubmission(sub, textScore) {
   const per = {}; let earned = 0, max = 0, pending = 0;
@@ -62,12 +75,17 @@ export function scoreSubmission(sub, textScore) {
   return { comps, pct, pending, pass: pct >= PASS };
 }
 
+// ===== DATA MODEL · Training suggestion =====
+// A gap of 3 or more gets the full training programme; a smaller gap gets coached practice.
 function trainingFor(D, id, gap) {
   const t = D.training[id];
   if (!t || gap <= 0) return null;
   return gap >= 3 ? t.primary : t.refresher;
 }
 
+// ===== DATA MODEL · buildModel (per-staff results) =====
+// Cached: rebuilt only when the data, target profiles or evaluations change. Live evaluations (skm-evals)
+// override the seeded result, and a manager adjustment overrides the system score.
 let _cache = null;
 export function buildModel(D, profiles, evals) {
   if (_cache && _cache.D === D && _cache.profiles === profiles && _cache.evals === evals) return _cache.model;
@@ -78,6 +96,7 @@ export function buildModel(D, profiles, evals) {
     const text = live.text !== undefined ? live.text : seed.text;
     const confirmed = live.confirmed !== undefined ? live.confirmed : !!seed.confirmed;
     const adj = { ...(seed.adj || {}), ...(live.adj || {}) };
+    // Status: raw seed state first, then Confirmed / Auto-scored (open text scored) / Submitted.
     const status = s0.raw === 'not_started' ? 'Not started' : s0.raw === 'in_progress' ? 'In progress' : confirmed ? 'Confirmed' : text != null ? 'Auto-scored' : 'Submitted';
     const scored = isScored(status);
     const sc = scored ? scoreSubmission(s0.sub, text) : null;
@@ -86,6 +105,7 @@ export function buildModel(D, profiles, evals) {
       const c = compById[id], target = targetOf(p, c);
       const system = sc ? sc.comps[id].level : null, a = adj[id] || null;
       const final = scored ? (a ? a.score : system) : null;
+      // Actual = this cycle's final score once scored, otherwise last cycle's (Q3 2026) result.
       const actual = scored ? final : s0.hist[PREVIOUS][id];
       const gap = Math.max(0, target - actual);
       return { id, name: c.name, short: c.short, category: c.category, group: c.group, importance: c.importance, target, system, final, adjusted: a, actual, gap,
@@ -107,8 +127,10 @@ export function buildModel(D, profiles, evals) {
   return model;
 }
 
+// ===== DATA MODEL · Department scope =====
 export const inScope = (model, dept) => (!dept || dept === ALL ? model.staff : model.staff.filter(s => s.dept === dept));
 
+// ===== DATA MODEL · Drawer rows =====
 // Drawer rows. A staff row summarises a person (averages + their largest gap);
 // a record row is one person × one competency.
 export function staffRow(s) {
@@ -126,6 +148,7 @@ export function records(staffList, pred) {
   return out;
 }
 
+// ===== DATA MODEL · Individual report =====
 // Everything the individual report shows, used by the report page and the Report Builder.
 export function individualReport(D, model, id) {
   const s = model.byId[id];
