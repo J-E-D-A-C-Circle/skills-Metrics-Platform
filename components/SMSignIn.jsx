@@ -5,7 +5,7 @@
 // Who sees it: everyone before signing in
 // Used by: components/SkillMatrixApp.jsx   Depends on: React only (reads/writes localStorage skm-users)
 // Sections (search for these markers): SIGN IN · Constants, Component, Sign-in check, Finish sign-in, State & helpers, Render,
-//   Page layout, Brand panel, Form panel, Sign-in form, Username & password fields, Demo accounts, Set your password,
+//   Page layout, Brand panel, Brand panel animations, DVLA photo slideshow (full background), Form panel, Sign-in form, Username & password fields, Demo accounts, Set your password,
 //   Password rules checklist, Save & Cancel buttons
 // =============================================================================
 import React from 'react';
@@ -78,22 +78,41 @@ class SMSignIn extends React.Component {
       <div style={{ minHeight: "100vh", display: "flex", background: "transparent", fontFamily: "Inter,system-ui,sans-serif", color: "#111827" }}>
         {/* ===== SIGN IN · Brand panel (left, wide screens only) ===== */}
         {(__v.showBrand) ? (<>
+          {/* ===== SIGN IN · Brand panel animations ===== */}
+          {/* Background slideshow: 3 DVLA photos, 6s each (18s loop). Each fades in, slowly zooms/pans while on screen, then cross-fades into the next.
+              Slide 2 and 3 start 6s and 12s later. Headline fades up on load. Reduced motion: first photo only, no movement. */}
+          <style>{`
+            @keyframes skmSigninRise { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: none; } }
+            @keyframes skmSigninSlide {
+              0% { opacity: 0; transform: scale(1) translateX(0); }
+              6% { opacity: 1; }
+              33% { opacity: 1; }
+              40% { opacity: 0; transform: scale(1.1) translateX(-3%); }
+              100% { opacity: 0; transform: scale(1.1) translateX(-3%); }
+            }
+            .skm-signin-slide { opacity: 0; animation: skmSigninSlide 18s linear infinite both; transform-origin: 50% 45%; will-change: opacity, transform; }
+            .skm-signin-slide:nth-child(2) { animation-delay: 6s; }
+            .skm-signin-slide:nth-child(3) { animation-delay: 12s; }
+            .skm-signin-text { animation: skmSigninRise .9s cubic-bezier(.2,.7,.2,1) .3s both; }
+            @media (prefers-reduced-motion: reduce) { .skm-signin-slide, .skm-signin-text { animation: none; } .skm-signin-slide:first-child { opacity: 1; } }
+          `}</style>
           <div style={{ flex: "1 1 50%", position: "relative", background: "#0d3b2a", color: "#fff", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "40px 48px", overflow: "hidden" }}>
-            <div style={{
-              position: "absolute",
-              inset: "0",
-              backgroundImage: "url('/assets/dvla-head-office.jpg')",
-              backgroundSize: "cover",
-              backgroundPosition: "center 35%",
-              opacity: ".25",
-              filter: "saturate(1.2)"
-            }}></div>
-            <div style={{ position: "absolute", inset: "0", background: "linear-gradient(160deg, rgba(13,59,42,0.9) 0%, rgba(15,64,44,0.82) 50%, rgba(9,38,27,0.94) 100%)" }}></div>
+            {/* ===== SIGN IN · DVLA photo slideshow (full background) ===== */}
+            {/* Covers the whole green panel. Photos live in public/assets: dvla-login-1.jpg (MLNR building), dvla-login-2.jpg (DVLA Adentan office),
+                dvla-login-3.jpg (DVLA Head Office). To change or add photos, edit the list below (a 4th photo also needs an nth-child delay above and a longer loop).
+                Each slide is slightly oversized (inset -6%) so the zoom/pan never shows an edge. */}
+            <div style={{ position: "absolute", inset: "0" }}>
+              {['/assets/dvla-login-1.jpg', '/assets/dvla-login-2.jpg', '/assets/dvla-login-3.jpg'].map(src => (
+                <div key={src} className="skm-signin-slide" style={{ position: "absolute", inset: "-6%", backgroundImage: "url('" + src + "')", backgroundSize: "cover", backgroundPosition: "center", filter: "saturate(1.15) contrast(1.05)" }}></div>
+              ))}
+            </div>
+            {/* Green tint over the photo: lighter in the middle so the building shows, darker at top and bottom so the text stays readable. */}
+            <div style={{ position: "absolute", inset: "0", background: "linear-gradient(180deg, rgba(13,59,42,0.78) 0%, rgba(15,64,44,0.45) 38%, rgba(15,64,44,0.55) 62%, rgba(9,38,27,0.88) 100%)" }}></div>
             <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: "12px" }}>
               <img src="/assets/dvla-logo.png" alt="DVLA" style={{ width: "38px", height: "38px", objectFit: "contain" }} />
               <span style={{ fontSize: "17px", fontWeight: "700" }}>Skill Matrix &amp; Assessment Platform</span>
             </div>
-            <div style={{ position: "relative", maxWidth: "460px" }}>
+            <div className="skm-signin-text" style={{ position: "relative", maxWidth: "460px", textShadow: "0 2px 18px rgba(0,0,0,.35)" }}>
               <div style={{ fontSize: "clamp(28px,3vw,40px)", fontWeight: "700", letterSpacing: "-0.6px", lineHeight: "1.15" }}>Know your skills.<br />Close the gaps.</div>
               <div style={{ fontSize: "15px", color: "#cfe6d8", marginTop: "14px", lineHeight: "1.6" }}>Timed assessments, automatic scoring, manager review and training needs in one place.</div>
             </div>

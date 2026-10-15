@@ -2,14 +2,15 @@
 // =============================================================================
 // SMSystem · Settings area: General settings, User Management, Audit Log, plus Help & Guides
 // Screen / URL: "/settings" (General), "/settings?tab=users" (User Management), "/settings?tab=audit" (Audit Log),
-//   "/help" (Help & Guides). Old URLs /users, /audit and /system redirect here.
+//   "/help" (Help & Guides) and "/help?tab=ratings" (Rating Scales, moved from the Skill Framework). Old URLs /users, /audit and /system redirect here.
 // Who sees it: admin (General, Users, Audit Log); everyone (Help & Guides)
 // Used by: SkillMatrixApp.jsx (rendered when the page group is "system", with props.view)
-//   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), ui/select (Select), SMSystem.module.css
+//   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), SMFramework (RatingScales cards), ui/select (Select), SMSystem.module.css
 // Sections (search for these markers): USERS · Seed data, AUDIT LOG · Sample log entries, HELP · FAQ content,
 //   USERS · Storage & helpers, SETTINGS · Main component, SETTINGS · View values, USERS · Search & role filter,
 //   USERS · Add / edit user dialog, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
 //   AUDIT LOG · Filters, rows & CSV export, SETTINGS · General settings values, HELP · Quick links, FAQ & support ticket,
+//   HELP · Rating Scales tab,
 //   SETTINGS · Render, SETTINGS · Page header, USERS · User Management tab, USERS · "User created" card, USERS · Users table,
 //   USERS · Delete confirmation dialog, AUDIT LOG · Audit Log tab, SETTINGS · General tab, HELP · Help & Guides tab, Toast
 // =============================================================================
@@ -17,6 +18,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import __css from './SMSystem.module.css';
 import { PageHeader } from './smUI';
+import { RatingScales } from './SMFramework';
 import { Select } from './ui/select';
 
 
@@ -118,9 +120,9 @@ class SMSystem extends React.Component {
     return {
       headerActions: view === 'users' ? <button onClick={() => this.openAdd()} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-user-plus"} style={{ fontSize: "14px" }}></i>Add user</button>
         : view === 'settings' ? <button onClick={() => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); }} style={{ height: "36px", padding: "0 18px", border: "0", borderRadius: "999px", background: s.sDirty ? '#15904c' : '#a3acb9', color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>{s.sDirty ? 'Save settings' : 'All changes saved'}</button> : null,
-      title: { users: 'User Management', audit: 'Audit Logs', settings: 'System Settings', help: 'Help & Guides' }[view],
-      subtitle: { users: 'Manage who can sign in and what each role can do, across every department', audit: 'A tamper-evident record of sign-ins, assessments, integrity events and changes', settings: 'Platform-wide defaults for assessments, security and data', help: 'Answers about the timed assessment, scoring and your results' }[view],
-      isUsers: view === 'users', isAudit: view === 'audit', isSettings: view === 'settings', isHelp: view === 'help',
+      title: { users: 'User Management', audit: 'Audit Logs', settings: 'System Settings', help: 'Help & Guides', ratings: 'Help & Guides' }[view],
+      subtitle: { users: 'Manage who can sign in and what each role can do, across every department', audit: 'A tamper-evident record of sign-ins, assessments, integrity events and changes', settings: 'Platform-wide defaults for assessments, security and data', help: 'Answers about the timed assessment, scoring and your results', ratings: 'The proficiency, importance, gap and scoring scales used across the platform' }[view],
+      isUsers: view === 'users', isAudit: view === 'audit', isSettings: view === 'settings', isHelp: view === 'help', isRatings: view === 'ratings',
       // ===== USERS · Search & role filter =====
       uq: s.uq, onUq: e => this.setState({ uq: e.target.value }), uRole: s.uRole, onURole: e => this.setState({ uRole: e.target.value }), roleNames: ROLES, deptNames: d.depts.map(x => x.name),
       // ===== USERS · Add / edit user dialog values =====
@@ -195,8 +197,9 @@ class SMSystem extends React.Component {
       sSaveBg: s.sDirty ? '#15904c' : '#a3acb9', sSaveText: s.sDirty ? 'Save settings' : 'All changes saved',
       saveSettings: () => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); },
       // ===== HELP · Quick links, FAQ & support ticket =====
-      // Quick links by role: non-admins get My assessments, admin/creator get Rating scales, everyone gets Skill profile.
-      links: [role !== 'admin' ? { icon: 'icon-clipboard-list', title: 'My assessments', sub: 'Open today · ' + d.cycle.window, go: () => go('assessments') } : null, (role === 'admin' || role === 'creator') ? { icon: 'icon-sliders-horizontal', title: 'Rating scales explained', sub: 'Proficiency, importance and gap', go: () => go('framework', 'scales') } : null, { icon: 'icon-user', title: 'Your skill profile', sub: 'Target, actual and gap per competency', go: () => go('profile', 'skills') }].filter(Boolean),
+      // Quick links: non-admins get My assessments; everyone gets Rating scales (opens the Rating Scales tab on this page).
+      // The "Your skill profile" link was removed from Help & Guides (15 Oct 2026); it stays under My Profile.
+      links: [role !== 'admin' ? { icon: 'icon-clipboard-list', title: 'My assessments', sub: 'Open today · ' + d.cycle.window, go: () => go('assessments') } : null, { icon: 'icon-sliders-horizontal', title: 'Rating scales explained', sub: 'Proficiency, importance and gap', go: () => go('help', 'ratings') }].filter(Boolean),
       hq: s.hq, onHq: e => this.setState({ hq: e.target.value }), noFaq: faqs.length === 0,
       faqs: faqs.map(({ f, i }) => ({ q: f[0], a: f[1], open: !!s.open[i], chev: s.open[i] ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => this.setState({ open: { ...this.state.open, [i]: !this.state.open[i] } }) })),
       tSubject: s.tSubject, tMsg: s.tMsg, onTSubject: e => this.setState({ tSubject: e.target.value }), onTMsg: e => this.setState({ tMsg: e.target.value }), tBg: canSend ? '#15904c' : '#a3acb9',
@@ -469,6 +472,9 @@ class SMSystem extends React.Component {
             </div>
           </div>
         </>) : null}
+        {/* ===== HELP · Rating Scales tab (/help?tab=ratings) ===== */}
+        {/* Proficiency, importance, gap and scoring scales (cards come from SMFramework.jsx RatingScales). */}
+        {(__v.isRatings) ? <RatingScales data={this.props.data} /> : null}
         {/* ===== HELP · Help & Guides tab (/help) ===== */}
         {(__v.isHelp) ? (<>
           {/* ===== HELP · Quick link cards ===== */}

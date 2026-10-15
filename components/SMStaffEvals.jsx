@@ -3,11 +3,12 @@
 // SMStaffEvals.jsx · Staff Evaluations Reviews: review auto-scored results, score open text, confirm or adjust
 // Screen / URL: /staff-evals (Reviews tab)
 // Who sees it: admin (all departments); manager (own department only)
-// Used by: SMTeam.jsx   Depends on: ./smUI (Drawer, DataTable...), ./smModel (STATUSES, bandOf, inScope)
-// Sections (search for these markers): STAFF EVALS · Reviews page (/staff-evals), STAFF EVALS · State & filters, STAFF EVALS · CSV export, STAFF EVALS · Row action button rules, STAFF EVALS · Render, STAFF EVALS · Page header (scope, search, status filter, Reset demo reviews, Export CSV), STAFF EVALS · Status KPI tiles (click to filter), STAFF EVALS · Staff table, STAFF EVALS · Review drawer & toast, STAFF EVALS · Status sort order, STAFF EVALS · Review drawer, STAFF EVALS · Review drawer render, STAFF EVALS · Review drawer body, STAFF EVALS · Score summary tiles, STAFF EVALS · How scoring works note, STAFF EVALS · Open-text answer & rubric score, STAFF EVALS · Competency results & adjust, STAFF EVALS · Question bank answers, STAFF EVALS · Pass band badge, STAFF EVALS · Stat tile
+// Used by: SMTeam.jsx   Depends on: ./smUI (Drawer, DataTable...), ./smModel (STATUSES, bandOf, inScope), ./SMStaffReport (StaffReportModal)
+// Sections (search for these markers): STAFF EVALS · Reviews page (/staff-evals), STAFF EVALS · State & filters, STAFF EVALS · CSV export, STAFF EVALS · Row action button rules, STAFF EVALS · Render, STAFF EVALS · Page header (scope, search, status filter, Reset demo reviews, Export CSV), STAFF EVALS · Status KPI tiles (click to filter), STAFF EVALS · Staff table, STAFF EVALS · Review drawer & toast, STAFF EVALS · Staff details popup, STAFF EVALS · Status sort order, STAFF EVALS · Review drawer, STAFF EVALS · Review drawer render, STAFF EVALS · Review drawer body, STAFF EVALS · Score summary tiles, STAFF EVALS · How scoring works note, STAFF EVALS · Open-text answer & rubric score, STAFF EVALS · Competency results & adjust, STAFF EVALS · Question bank answers, STAFF EVALS · Pass band badge, STAFF EVALS · Stat tile
 // =============================================================================
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Badge, GapBadge, StatusBadge, EmptyState, DataTable, KpiTile, Toast, Drawer, ScopeSelect, INPUT, download, toCSV, slugify } from './smUI';
+import { StaffReportModal } from './SMStaffReport';
 import { ALL, STATUSES, STATUS_HINT, PASS, TIERS_TEXT, bandOf, inScope } from './smModel';
 
 // ===== STAFF EVALS · Reviews page (/staff-evals) =====
@@ -22,6 +23,9 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
   const [q, setQ] = useState('');
   const [st, setSt] = useState(ALL);
   const [openId, setOpenId] = useState(null);
+  // Staff member whose details are showing in the popup (null = popup closed).
+  const [reportId, setReportId] = useState(null);
+  const closeReport = useCallback(() => setReportId(null), []);
   const [toast, setToast] = useState('');
   const flash = m => { setToast(m); clearTimeout(flash._t); flash._t = setTimeout(() => setToast(''), 2600); };
   const staff = useMemo(() => inScope(model, dept), [model, dept]);
@@ -60,7 +64,7 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
       {/* ===== STAFF EVALS · Staff table ===== */}
       <Card title={(st === ALL ? 'All staff' : st) + ' · ' + (dept === ALL ? 'all departments' : dept)} sub={rows.length + ' of ' + staff.length + ' staff · ' + D.cycle.name} flush>
         <DataTable minWidth={980} rows={rows} rowKey={s => s.id} empty={<EmptyState icon="icon-users" title="No staff match" text="Change the status filter or search." />} columns={[
-          { key: 'name', label: 'Staff', render: s => <div><button type="button" onClick={() => go('report', null, s.id)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', color: '#127a42', font: '600 13px Inter,sans-serif', textAlign: 'left' }}>{s.name}</button><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{s.staffNo} · {s.designation}</div></div> },
+          { key: 'name', label: 'Staff', render: s => <div><button type="button" onClick={() => setReportId(s.id)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', color: '#127a42', font: '600 13px Inter,sans-serif', textAlign: 'left' }}>{s.name}</button><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{s.staffNo} · {s.designation}</div></div> },
           { key: 'dept', label: 'Department' },
           { key: 'status', label: 'Status', render: s => <StatusBadge status={s.status} /> },
           { key: 'score', label: 'System score', render: s => s.overallPct == null ? <span style={{ color: '#9ca3af' }}>—</span> : <span><b style={{ fontFamily: "'JetBrains Mono',monospace" }}>{s.overallPct}%</b> <BandBadge pct={s.overallPct} />{s.pending ? <div style={{ fontSize: '11px', color: '#3730a3', marginTop: '3px' }}>+ open text pending</div> : null}</span> },
@@ -69,7 +73,11 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
         ]} />
       </Card>
       {/* ===== STAFF EVALS · Review drawer & toast ===== */}
-      {cur ? <ReviewDrawer key={cur.id} D={D} s={cur} me={me} go={go} setEval={setEval} flash={flash} onClose={() => setOpenId(null)} /> : null}
+      {cur ? <ReviewDrawer key={cur.id} D={D} s={cur} me={me} onReport={() => setReportId(cur.id)} setEval={setEval} flash={flash} onClose={() => setOpenId(null)} /> : null}
+      {/* ===== STAFF EVALS · Staff details popup ===== */}
+      {/* Opens over this page (from the staff name or the drawer's Individual report button), so there is no page change. */}
+      {/* The left-hand list is the same staff as the table (same filters and order), so you can switch person without closing. */}
+      {reportId ? <StaffReportModal D={D} model={model} id={reportId} role={role} myDept={myDept} list={rows} onSelect={setReportId} onClose={closeReport} /> : null}
       <Toast text={toast} />
     </Page>
   );
@@ -78,7 +86,7 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
 const rank = st => ({ Submitted: 0, 'Auto-scored': 1, 'In progress': 2, 'Not started': 3, Confirmed: 4 })[st];
 
 // ===== STAFF EVALS · Review drawer =====
-function ReviewDrawer({ D, s, me, go, setEval, flash, onClose }) {
+function ReviewDrawer({ D, s, me, onReport, setEval, flash, onClose }) {
   const [edit, setEdit] = useState(null); // { id, score, reason }
   const [text, setText] = useState(s.text != null ? s.text : null);
   const locked = s.status === 'Confirmed';
@@ -98,7 +106,7 @@ function ReviewDrawer({ D, s, me, go, setEval, flash, onClose }) {
       footer={<div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
         <span style={{ fontSize: '12.5px', color: '#6b7280' }}>{locked ? 'Confirmed by ' + (s.confirmedBy || 'manager') + '.' : s.status === 'Submitted' ? 'Score the open-text answer before confirming.' : changed ? changed + ' competency adjusted.' : 'System scores will be used as the final scores.'}</span>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Btn onClick={() => { onClose(); go('report', null, s.id); }} icon="icon-file-text">Individual report</Btn>
+          <Btn onClick={onReport} icon="icon-file-text">Individual report</Btn>
           {locked ? <Btn onClick={() => { setEval(s.id, { confirmed: false }); flash('Result reopened for review'); }} icon="icon-unlock">Reopen</Btn>
             : <Btn kind="primary" icon="icon-badge-check" disabled={s.status === 'Submitted'} onClick={confirm}>Confirm result</Btn>}
         </div>

@@ -276,8 +276,9 @@ const TABS = {
   analytics: [{ key: 'overview', label: 'Overview', icon: 'icon-chart-column', view: 'dashboard' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'departments' }, { key: 'heatmap', label: 'Heatmap', icon: 'icon-grid-3x3', view: 'heatmap' }],
   training: [{ key: 'all', label: 'All Needs', icon: 'icon-graduation-cap', view: 'training' }, { key: 'top-needs', label: 'Top Training Needs', icon: 'icon-trending-up', view: 'topneeds' }],
   reports: [{ key: 'builder', label: 'Report Builder', icon: 'icon-file-spreadsheet', view: 'reports' }, { key: 'scheduled', label: 'Scheduled', icon: 'icon-calendar-clock', view: 'schedules' }],
-  framework: [{ key: 'competencies', label: 'Competencies', icon: 'icon-network', view: 'library' }, { key: 'targets', label: 'Target Profiles', icon: 'icon-crosshair', view: 'targets' },
-    { key: 'scales', label: 'Rating Scales', icon: 'icon-sliders-horizontal', view: 'scales' }],
+  framework: [{ key: 'competencies', label: 'Competencies', icon: 'icon-network', view: 'library' }, { key: 'targets', label: 'Target Profiles', icon: 'icon-crosshair', view: 'targets' }],
+  // Help & Guides: guides/FAQ plus the Rating Scales reference (moved here from the Skill Framework). Open to every role.
+  help: [{ key: 'guides', label: 'Help & Guides', icon: 'icon-life-buoy', view: 'help' }, { key: 'ratings', label: 'Rating Scales', icon: 'icon-sliders-horizontal', view: 'ratings' }],
   settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs' }],
   'staff-evals': [{ key: 'reviews', label: 'Reviews', icon: 'icon-users', view: 'staff-evals' }, { key: 'feedback', label: '360° Feedback', icon: 'icon-refresh-cw', view: 'feedback', feature: 'feedback360' },
     { key: 'approvals', label: 'Plan Approvals', icon: 'icon-badge-check', view: 'approvals', feature: 'planApprovals' }],
@@ -289,11 +290,11 @@ const profileTabs = role => ['account', ...(role === 'admin' ? [] : ['skills', '
 // ===== ROUTER · View groups (GROUP) =====
 // Maps each view to the page component that draws it (pAssess, pTeam, pAnalytics ... in PAGE ROUTER below).
 const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', departments: 'analytics', topneeds: 'training', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
-  training: 'training', library: 'framework', targets: 'framework', scales: 'framework', cycles: 'cycles', users: 'system', audit: 'system', settings: 'system', help: 'system', report: 'report' };
+  training: 'training', library: 'framework', targets: 'framework', ratings: 'system', cycles: 'cycles', users: 'system', audit: 'system', settings: 'system', help: 'system', report: 'report' };
 // ===== ROUTER · Old URL redirects (REDIRECT) =====
 // Old URLs (and the umbrella routes in app/) -> [page, tab]. A missing tab keeps whatever ?tab= the URL had.
 const REDIRECT = { heatmap: ['analytics', 'heatmap'], dashboard: ['analytics'], schedules: ['reports', 'scheduled'], users: ['settings', 'users'],
-  library: ['framework', 'competencies'], targets: ['framework', 'targets'], scales: ['framework', 'scales'],
+  library: ['framework', 'competencies'], targets: ['framework', 'targets'], scales: ['help', 'ratings'],
   audit: ['settings', 'audit'], system: ['settings'], feedback: ['staff-evals', 'feedback'], approvals: ['staff-evals', 'approvals'], team: ['staff-evals'], 'team-evals': ['staff-evals'],
   evidence: ['profile', 'evidence'], plan: ['profile', 'plan'], builder: ['cycles'], assess: ['assessments'] };
 // ===== ROUTER · Access guard (normalize) =====
@@ -308,9 +309,11 @@ function normalize(page, tab, role) {
   if (p === 'profile') return ['profile', t && t !== 'account' && profileTabs(role).includes(t) ? t : undefined];
   if (p === 'take' && role === 'admin') return ['home', undefined];
   if (p === 'report') return role === 'admin' || role === 'manager' ? ['report', undefined] : ['home', undefined];
-  if (ALWAYS.includes(p)) return [p, undefined];
+  // Tab check (used for always-open pages with tabs, e.g. Help & Guides > Rating Scales, and for sidebar pages).
+  const withTab = () => { const list = tabsFor(p, role), hit = list.find(x => x.key === t); return [p, hit && hit !== list[0] ? hit.key : undefined]; };
+  if (ALWAYS.includes(p)) return TABS[p] ? withTab() : [p, undefined];
   if (!navItems(role).some(i => i.key === p)) return ['home', undefined];
-  if (TABS[p]) { const list = tabsFor(p, role), hit = list.find(x => x.key === t); return [p, hit && hit !== list[0] ? hit.key : undefined]; }
+  if (TABS[p]) return withTab();
   return [p, undefined];
 }
 // ===== APP SHELL · localStorage & browser title helpers =====
@@ -466,7 +469,7 @@ class SkillMatrixApp extends React.Component {
     const curTab = tabList ? tabList.find(x => x.key === s.tab) || tabList[0] : null;
     const view = curTab ? curTab.view : s.page;
     const grp = GROUP[view] || view;
-    const tabsCtx = tabList ? { title: (PAGES.find(i => i.key === s.page) || {}).label, items: tabList, active: curTab && curTab.key, onSelect: this.selectTab } : null;
+    const tabsCtx = tabList ? { title: (PAGES.find(i => i.key === s.page) || {}).label || TITLES[s.page], items: tabList, active: curTab && curTab.key, onSelect: this.selectTab } : null;
     // ===== NOTES · Notes panel list =====
     const sel = s.notes.find(n => n.id === s.selId);
     const noteList = s.notes.map(n => ({ title: n.title || 'Untitled note', preview: n.body ? n.body.slice(0, 60) : 'Empty note',

@@ -3,11 +3,12 @@
 // SMStaffReport.jsx · one staff member's individual report and its export
 // Screen / URL: /report?id=<staff id> (opened from dashboards, heatmap, Training Needs, Staff Evaluations)
 // Who sees it: admin (anyone); manager (own department only)
-// Used by: SkillMatrixApp.jsx (report page); SMAnalytics.jsx (Report Builder preview)   Depends on: ./smUI, ./smModel (individualReport, CYCLES), xlsx
-// Sections (search for these markers): REPORT · Export helpers (XML escape), REPORT · Export one person's record, REPORT · Individual report view, REPORT · Details card, REPORT · Competencies table, REPORT · History + recommended training row, REPORT · History across cycles chart, REPORT · Recommended training list, REPORT · History by competency table (full page only), REPORT · Page (/report?id=), REPORT · Not found / not allowed card, REPORT · Render, REPORT · Page header with CSV / JSON / Excel export buttons, REPORT · Report body
+// Used by: SkillMatrixApp.jsx (report page); SMAnalytics.jsx (Report Builder preview); SMStaffEvals.jsx (staff details popup)   Depends on: ./smUI, ./smModel (individualReport, CYCLES), react-dom createPortal, xlsx
+// Sections (search for these markers): REPORT · Export helpers (XML escape), REPORT · Export one person's record, REPORT · Individual report view, REPORT · Details card, REPORT · Competencies table, REPORT · History + recommended training row, REPORT · History across cycles chart, REPORT · Recommended training list, REPORT · History by competency table (full page only), REPORT · Staff details popup, REPORT · Popup staff list (floating panel, left), REPORT · Popup header with export + close, REPORT · Popup body, REPORT · Page (/report?id=), REPORT · Not found / not allowed card, REPORT · Render, REPORT · Page header with CSV / JSON / Excel export buttons, REPORT · Report body
 // =============================================================================
-import React from 'react';
-import { Page, PageHeader, Card, Btn, Badge, GapBadge, StatusBadge, ScopeBadge, EmptyState, DataTable, download, toCSV, slugify } from './smUI';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Page, PageHeader, Card, Btn, Search, Badge, GapBadge, StatusBadge, ScopeBadge, EmptyState, DataTable, download, toCSV, slugify } from './smUI';
 import { CYCLES, CURRENT, individualReport } from './smModel';
 
 // ===== REPORT · Export helpers (XML escape) =====
@@ -92,6 +93,81 @@ export function IndividualReportView({ D, rep, compact }) {
         <DataTable minWidth={620} rows={rep.history} columns={[{ key: 'Competency', label: 'Competency' }, ...CYCLES.map(q => ({ key: q, label: q, align: 'center' }))]} />
       </Card> : null}
     </div>
+  );
+}
+
+// ===== REPORT · Staff details popup =====
+// Same report as /report?id=, shown in a pop-up over the current screen so the user stays where they were.
+// Close with the X, the Escape key or a click on the dimmed background. Used by SMStaffEvals.jsx.
+// `list` (optional) = staff to show down the left side; clicking one, or the Up / Down arrow keys, calls onSelect(id) to switch.
+export function StaffReportModal({ D, model, id, role, myDept, onClose, list, onSelect }) {
+  const rep = id ? individualReport(D, model, id) : null;
+  // Same guard as the page: managers only see staff in their own department.
+  const blocked = rep && role === 'manager' && rep.s.dept !== myDept;
+  // Escape closes the popup; the page behind it stops scrolling while it is open.
+  const [find, setFind] = useState('');
+  const bodyRef = useRef(null), listRef = useRef(null);
+  const ft = find.trim().toLowerCase();
+  const shown = (list || []).filter(x => !ft || (x.name + ' ' + x.staffNo + ' ' + x.designation).toLowerCase().includes(ft));
+  // On switching person: jump the report back to the top and keep the selected name visible in the list.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+    const el = listRef.current && listRef.current.querySelector('[aria-current="true"]');
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }, [id]);
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') onClose();
+      // Up / Down arrows move to the previous / next person in the list (not while typing in the list search).
+      if (onSelect && shown.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.tagName !== 'INPUT') {
+        e.preventDefault();
+        const i = shown.findIndex(x => x.id === id), n = e.key === 'ArrowDown' ? Math.min(shown.length - 1, i + 1) : Math.max(0, i - 1);
+        if (shown[n] && shown[n].id !== id) onSelect(shown[n].id);
+      }
+    };
+    const prev = document.body.style.overflow;
+    document.addEventListener('keydown', onKey); document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose, onSelect, shown, id]);
+  const name = rep ? 'individual-record-' + slugify(rep.s.name) + '-' + new Date().toISOString().slice(0, 10) : '';
+  return createPortal(
+    <div onClick={onClose} style={{ position: 'fixed', inset: '0', zIndex: '80', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px', background: 'rgba(255,255,255,.45)', backdropFilter: 'blur(10px) saturate(160%)', WebkitBackdropFilter: 'blur(10px) saturate(160%)' }}>
+      {/* Popup size: at least 40px clear space all round, up to 1720px wide; the staff list and the report sit side by side with a gap. */}
+      <div onClick={e => e.stopPropagation()} style={{ width: 'min(1720px,100%)', height: 'calc(100vh - 80px)', display: 'flex', gap: '16px' }}>
+      {/* ===== REPORT · Popup staff list (floating panel, left) ===== */}
+      {/* Its own floating card beside the report (not joined to it). Only shown when a list is passed in. Selected person uses the sidebar's active green. */}
+      {list ? <aside style={{ width: 'clamp(210px,22vw,290px)', flex: 'none', display: 'flex', flexDirection: 'column', borderRadius: '24px', background: 'linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.82))', backdropFilter: 'blur(36px) saturate(190%)', WebkitBackdropFilter: 'blur(36px) saturate(190%)', border: '1px solid rgba(255,255,255,.95)', boxShadow: 'inset 0 1px 0 #fff,0 0 0 1px rgba(15,35,65,.05),0 24px 60px rgba(15,35,65,.14)', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 14px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ font: '600 10.5px Inter,sans-serif', letterSpacing: '.4px', color: '#6b7280', textTransform: 'uppercase' }}>Staff · {shown.length}{ft ? ' of ' + list.length : ''}</div>
+            <Search value={find} onChange={setFind} placeholder="Find staff" style={{ flex: 'none' }} />
+          </div>
+          <div ref={listRef} style={{ flex: '1', overflowY: 'auto', padding: '0 8px 12px' }}>
+            {shown.length ? shown.map(x => { const on = x.id === id; return (
+              <button key={x.id} type="button" aria-current={on ? 'true' : undefined} onClick={() => onSelect(x.id)} style={{ width: '100%', display: 'block', textAlign: 'left', border: '0', cursor: 'pointer', borderRadius: '12px', padding: '9px 10px', marginBottom: '2px', background: on ? 'linear-gradient(180deg,#2fb36b,#15904c)' : 'transparent', boxShadow: on ? '0 8px 18px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)' : 'none' }}>
+                <div style={{ font: '600 13px Inter,sans-serif', color: on ? '#fff' : '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.name}</div>
+                <div style={{ fontSize: '11.5px', color: on ? 'rgba(255,255,255,.85)' : '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.designation} · {x.status}</div>
+              </button>); }) : <div style={{ fontSize: '12.5px', color: '#6b7280', padding: '8px 10px' }}>No staff match.</div>}
+          </div>
+      </aside> : null}
+      <div role="dialog" aria-modal="true" aria-labelledby="staff-report-title" style={{ flex: '1', minWidth: '0', height: '100%', display: 'flex', flexDirection: 'column', borderRadius: '28px', background: 'linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.82))', backdropFilter: 'blur(36px) saturate(190%)', WebkitBackdropFilter: 'blur(36px) saturate(190%)', border: '1px solid rgba(255,255,255,.95)', boxShadow: 'inset 0 1px 0 #fff,0 0 0 1px rgba(15,35,65,.05),0 24px 60px rgba(15,35,65,.14)', overflow: 'hidden' }}>
+        {/* ===== REPORT · Popup header with export + close ===== */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '18px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
+          <div style={{ flex: '1 1 240px', minWidth: '0' }}>
+            <div id="staff-report-title" style={{ fontSize: '17px', fontWeight: '700' }}>{rep && !blocked ? rep.s.name : 'Individual report'}</div>
+            <div style={{ fontSize: '12.5px', color: '#4b5563', marginTop: '2px' }}>{rep && !blocked ? 'Individual report · ' + rep.s.designation + ', ' + rep.s.dept : "One staff member's targets, results, history and recommended training"}</div>
+          </div>
+          {rep && !blocked ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}><Btn icon="icon-download" onClick={() => reportExport(rep, 'CSV', name)}>CSV</Btn><Btn icon="icon-file-json" onClick={() => reportExport(rep, 'JSON', name)}>JSON</Btn><Btn kind="primary" icon="icon-file-spreadsheet" onClick={() => reportExport(rep, 'Excel', name)}>Export Excel</Btn></div> : null}
+          <button onClick={onClose} aria-label="Close" type="button" style={{ width: '32px', height: '32px', borderRadius: '999px', border: '1px solid rgba(15,35,65,.08)', background: '#fff', cursor: 'pointer', color: '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}><i className="icon-x" style={{ fontSize: '15px' }}></i></button>
+        </div>
+        {/* ===== REPORT · Popup body ===== */}
+        <div ref={bodyRef} style={{ flex: '1', minWidth: '0', overflowY: 'auto', padding: '24px 28px' }}>
+          {rep && !blocked ? <IndividualReportView D={D} rep={rep} />
+            : <Card><EmptyState icon="icon-user-x" title={blocked ? 'Not in your department' : 'Staff member not found'} text={blocked ? 'Managers can only open reports for their own department.' : 'This staff member could not be found.'} /></Card>}
+        </div>
+      </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

@@ -58,8 +58,9 @@ Tabs (the same tab bar as Profile; a tab whose feature is off is removed, and a 
 | Analytics | Overview (executive dashboard) · Departments · Heatmap |
 | Training Needs | All Needs · Top Training Needs |
 | Reports | Report Builder · Scheduled |
-| Skill Framework | Competencies · Target Profiles · Rating Scales |
+| Skill Framework | Competencies · Target Profiles |
 | Settings | General · User Management · Audit Log (`auditLogs`) |
+| Help & Guides | Help & Guides · Rating Scales (open to every role) |
 | Staff Evaluations | Reviews · 360° Feedback (`feedback360`) · Plan Approvals (`planApprovals` + `developmentPlan`) |
 | Profile | Account · Skill Profile · History · Development Plan (`developmentPlan`) · Evidence (`evidence`) |
 
@@ -71,7 +72,7 @@ Tabs (the same tab bar as Profile; a tab whose feature is off is removed, and a 
 
 ## Routes
 
-`/` home · `/profile` (`?tab=skills|history|plan|evidence`) · `/take` · `/assessments` · `/analytics` (`?tab=departments|heatmap`) · `/training` (`?tab=top-needs`) · `/reports` (`?tab=scheduled`) · `/cycles` · `/forms` · `/staff-evals` (`?tab=feedback|approvals`) · `/framework` (`?tab=targets|scales`) · `/settings` (`?tab=users|audit`) · `/help` · `/report?id=<staffId>` (individual report) · `/signin`
+`/` home · `/profile` (`?tab=skills|history|plan|evidence`) · `/take` · `/assessments` · `/analytics` (`?tab=departments|heatmap`) · `/training` (`?tab=top-needs`) · `/reports` (`?tab=scheduled`) · `/cycles` · `/forms` · `/staff-evals` (`?tab=feedback|approvals`) · `/framework` (`?tab=targets`) · `/settings` (`?tab=users|audit`) · `/help` (`?tab=ratings`) · `/report?id=<staffId>` (individual report) · `/signin`
 
 The first tab of a page has no `?tab=`. Switching tabs updates `?tab=` and adds a history entry, so back/forward move between tabs.
 
@@ -82,7 +83,7 @@ Every route has its own folder under `app/`. Old URLs redirect, replacing the hi
 | `/heatmap` · `/dashboard` | `/analytics?tab=heatmap` · `/analytics` |
 | `/users` | `/settings?tab=users` |
 | `/schedules` | `/reports?tab=scheduled` |
-| `/library` · `/targets` · `/scales` | `/framework` · `/framework?tab=targets` · `/framework?tab=scales` |
+| `/library` · `/targets` · `/scales` | `/framework` · `/framework?tab=targets` · `/help?tab=ratings` |
 | `/audit` · `/system` | `/settings?tab=audit` · `/settings` |
 | `/feedback` · `/approvals` · `/team` · `/team-evals` | `/staff-evals?tab=feedback` · `/staff-evals?tab=approvals` · `/staff-evals` |
 | `/plan` · `/evidence` | `/profile?tab=plan` · `/profile?tab=evidence` |
@@ -118,7 +119,7 @@ components/
   SMStaffEvals.jsx      Staff Evaluations (review, confirm, adjust)
   SMTeam.jsx            routes Staff Evaluations; keeps the hidden 360° Feedback and Plan Approvals code
   SMCycles.jsx          Assessment Cycles: table, editor, SheetJS upload with validated preview
-  SMFramework.jsx       Competency Library, Target Profiles, Rating Scales
+  SMFramework.jsx       Competency Library, Target Profiles; exports the Rating Scales cards used on Help & Guides
   SMFormBuilder.jsx     Form Builder (WYSIWYG canvas, configurable Likert); exports form storage helpers
   SMAssessments.jsx · SMAssessmentSession.jsx · SMSystem.jsx · SMSignIn.jsx
   *.module.css          hover/focus states
@@ -147,6 +148,7 @@ Search the project for the marker text (e.g. `HOME · Welcome banner`) to jump s
 | Shared buttons, cards, tables, drawers, department filter | smUI.jsx | `UI KIT · ...` |
 | Dropdown (select) control | ui/select.jsx | `UI KIT · Select component` |
 | Sign-in and first-time password change | SMSignIn.jsx | `SIGN IN · Sign-in form`, `SIGN IN · Set your password` |
+| Sign-in page photo slideshow (3 DVLA photos in public/assets/dvla-login-1..3.jpg) | SMSignIn.jsx | `SIGN IN · DVLA photo slideshow`, `SIGN IN · Brand panel animations` |
 | Home welcome banner (photo, name, DVLA building) | SMHome.jsx | `HOME · Welcome banner` |
 | Home info row (Staff ID, department, designation) | SMHome.jsx | `HOME · Info row` |
 | Home assessment banner (Start / Resume) | SMHome.jsx | `HOME · Assessment banner` |
@@ -162,6 +164,8 @@ Search the project for the marker text (e.g. `HOME · Welcome banner`) to jump s
 | Assessment Cycles list, editor, uploads | SMCycles.jsx | `CYCLES · Cycles table`, `CYCLES · Cycle editor`, `CYCLES · Upload drawer` |
 | Forms library and builder | SMFormBuilder.jsx | `FORMS · Build tab`, `FORMS · Rubric & Scoring tab`, `FORMS · Preview tab` |
 | Staff Evaluations: reviews and review drawer | SMStaffEvals.jsx | `STAFF EVALS · Staff table`, `STAFF EVALS · Review drawer` |
+| Staff Evaluations: staff details popup (click a name) | SMStaffEvals.jsx, SMStaffReport.jsx | `STAFF EVALS · Staff details popup`, `REPORT · Staff details popup` |
+| Staff details popup: floating staff list on the left (switch person) | SMStaffReport.jsx | `REPORT · Popup staff list (floating panel, left)` |
 | 360 feedback and plan approvals | SMTeam.jsx | `STAFF EVALS · 360 Feedback tab`, `STAFF EVALS · Plan Approvals tab` |
 | Analytics Overview (KPIs, charts) | SMAnalytics.jsx | `ANALYTICS · Overview dashboard`, `ANALYTICS · KPI tiles` |
 | Analytics Departments tab | SMAnalytics.jsx | `ANALYTICS · Departments table` |
@@ -170,11 +174,12 @@ Search the project for the marker text (e.g. `HOME · Welcome banner`) to jump s
 | Training Needs · Top Training Needs | SMAnalytics.jsx | `TRAINING · Top Training Needs` |
 | Report Builder and Scheduled reports | SMAnalytics.jsx | `REPORTS · Report builder`, `REPORTS · Scheduled reports` |
 | Individual staff report (/report?id=) | SMStaffReport.jsx | `REPORT · Page` |
-| Skill Framework: competencies, target profiles, scales | SMFramework.jsx | `FRAMEWORK · Competencies tab`, `FRAMEWORK · Target Profiles tab`, `FRAMEWORK · Rating Scales tab` |
+| Skill Framework: competencies, target profiles | SMFramework.jsx | `FRAMEWORK · Competencies tab`, `FRAMEWORK · Target Profiles tab` |
 | Settings General tab | SMSystem.jsx | `SETTINGS · General tab` |
 | User Management: table, add/edit dialog, delete | SMSystem.jsx | `USERS · Users table`, `USERS · Add / edit user dialog`, `USERS · Delete confirmation dialog` |
 | Audit Log | SMSystem.jsx | `AUDIT LOG · Audit Log tab` |
-| Help & Guides | SMSystem.jsx | `HELP · Help & Guides tab` |
+| Help & Guides | SMSystem.jsx | `HELP · Help & Guides tab`, `HELP · Quick links, FAQ & support ticket` |
+| Help & Guides: Rating Scales tab | SMSystem.jsx, SMFramework.jsx | `HELP · Rating Scales tab`, `HELP · Rating Scales cards` |
 | Question banks (RBDI, HR) | dvlaBanks.js | `QUESTION BANKS` |
 | Route files (one per URL) | app/<route>/page.jsx | first line says what the URL opens |
 

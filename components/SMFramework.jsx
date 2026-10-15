@@ -1,10 +1,10 @@
 'use client';
 // =============================================================================
-// SMFramework.jsx · Skill Framework: Competencies library, Target Profiles and Rating Scales tabs
-// Screen / URL: /framework?tab=competencies (default), /framework?tab=targets, /framework?tab=scales (old /library, /targets, /scales redirect)
+// SMFramework.jsx · Skill Framework: Competencies library and Target Profiles tabs (+ the Rating Scales cards used on Help & Guides)
+// Screen / URL: /framework?tab=competencies (default), /framework?tab=targets (old /library, /targets redirect). Rating Scales moved to /help?tab=ratings.
 // Who sees it: admin / creator
-// Used by: components/SkillMatrixApp.jsx   Depends on: ./smUI, ./smModel (targetOf, resolveProfile, BANDS, TIERS), ./dvlaBanks (JOB_LEVELS), ./ui/select
-// Sections (search for these markers): FRAMEWORK · Constants, FRAMEWORK · Page wrapper, FRAMEWORK · Competencies tab · State & helpers, FRAMEWORK · Competencies tab · Render, FRAMEWORK · Departments list, FRAMEWORK · Competency list, FRAMEWORK · Add a competency row, FRAMEWORK · Helper · Bank question count, FRAMEWORK · Target Profiles tab · State & helpers, FRAMEWORK · Target Profiles tab · Render, FRAMEWORK · Profiles table, FRAMEWORK · Required proficiency matrix, FRAMEWORK · Profile drawer, FRAMEWORK · Rating Scales tab, FRAMEWORK · Scale cards
+// Used by: components/SkillMatrixApp.jsx; SMSystem.jsx (RatingScales on Help & Guides)   Depends on: ./smUI, ./smModel (targetOf, resolveProfile, BANDS, TIERS), ./dvlaBanks (JOB_LEVELS), ./ui/select
+// Sections (search for these markers): FRAMEWORK · Constants, FRAMEWORK · Page wrapper, FRAMEWORK · Competencies tab · State & helpers, FRAMEWORK · Competencies tab · Render, FRAMEWORK · Departments list, FRAMEWORK · Competency list, FRAMEWORK · Add a competency row, FRAMEWORK · Helper · Bank question count, FRAMEWORK · Target Profiles tab · State & helpers, FRAMEWORK · Target Profiles tab · Render, FRAMEWORK · Profiles table, FRAMEWORK · Required proficiency matrix, FRAMEWORK · Profile drawer, FRAMEWORK · Scale cards, HELP · Rating Scales cards (exported, shown on Help & Guides), HELP · Rating Scales · Scale cards
 // =============================================================================
 import React, { useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Field, Badge, ScopeBadge, EmptyState, DataTable, Toast, Drawer, ScopeSelect, INPUT, LABEL } from './smUI';
@@ -20,7 +20,7 @@ const LVL = JOB_LEVELS.map(title => ({ title }));
 const CELL_BG = ['#fff', '#eef6fc', '#edf7ef', '#fdf8e1', '#fef1e1', '#fdeaea'];
 
 // ===== FRAMEWORK · Page wrapper =====
-// view comes from the URL tab: library = Competencies, targets = Target Profiles, scales = Rating Scales.
+// view comes from the URL tab: library = Competencies, targets = Target Profiles.
 export default function SMFramework(props) {
   const { view = 'library' } = props;
   const [toast, setToast] = useState('');
@@ -29,7 +29,6 @@ export default function SMFramework(props) {
     <Page>
       {view === 'library' ? <Library {...props} flash={flash} /> : null}
       {view === 'targets' ? <Targets {...props} flash={flash} /> : null}
-      {view === 'scales' ? <Scales {...props} /> : null}
       <Toast text={toast} />
     </Page>
   );
@@ -209,9 +208,10 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
   );
 }
 
-// ===== FRAMEWORK · Rating Scales tab =====
+// ===== HELP · Rating Scales cards (exported, shown on Help & Guides) =====
 // Read-only reference: proficiency (PROF), importance (IMP), gap (GAP) and the DVLA scoring bands.
-function Scales({ data: d }) {
+// Moved out of the Skill Framework (15 Oct 2026); SMSystem.jsx shows it on the Help & Guides "Rating Scales" tab (/help?tab=ratings).
+export function RatingScales({ data: d }) {
   const scales = [
     { title: 'Skill Proficiency', sub: 'Used for self-assessment and manager review. Also the Form Builder’s default Likert preset.', rows: d.PROF.slice(1).map(p => ({ n: p.n, label: p.label, desc: p.desc, bg: ['', '#e6f2ea', '#e3e9f0', '#c9d5e3', '#3a5a80', '#0d3b2a'][p.n], fg: p.n >= 4 ? '#fff' : '#0d3b2a' })) },
     { title: 'Skill Importance Levels', sub: 'How critical a competency is to the role', rows: d.IMP.slice(1).map(p => ({ n: p.n, label: p.label, desc: p.desc, bg: p.bg, fg: p.fg })) },
@@ -220,9 +220,7 @@ function Scales({ data: d }) {
       desc: 'Maps to proficiency level ' + TIERS.filter(t => t.min >= b.min && (!i || t.min < BANDS[i - 1].min)).map(t => t.level + ' (' + t.name + (t.min !== b.min ? ', ' + t.min + '%+' : '') + ')').join(' or ') + '.' })) }];
   return (
     <>
-      {/* ===== FRAMEWORK · Rating Scales · Page header ===== */}
-      <PageHeader title="Rating Scales" description="The proficiency, importance and gap scales used across the platform" />
-      {/* ===== FRAMEWORK · Rating Scales · Scale cards ===== */}
+      {/* ===== HELP · Rating Scales · Scale cards ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,420px),1fr))', gap: '20px', alignItems: 'start' }}>
         {scales.map(sc => (
           <Card key={sc.title} title={sc.title} sub={sc.sub} flush style={{ overflow: 'hidden' }}>
