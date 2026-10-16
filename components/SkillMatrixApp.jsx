@@ -581,8 +581,9 @@ class SkillMatrixApp extends React.Component {
       {(__v.shell) ? (<>
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
           {/* ===== HEADER · Top bar ===== */}
+          {/* Solid DVLA dark green (#054218 to #043b16), the same as the DVLA website footer; not see-through, so it looks the same on every page. */}
           <div style={{ position: "sticky", top: "0", zIndex: "50", padding: "10px 12px 0" }}>
-            <header style={{ position: "relative", height: "58px", borderRadius: "20px", background: "rgba(10,52,36,.82)", backdropFilter: "blur(24px) saturate(180%)", WebkitBackdropFilter: "blur(24px) saturate(180%)", border: "1px solid rgba(255,255,255,.14)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.14),0 12px 30px rgba(10,52,36,.22)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "0 clamp(10px,1.6vw,18px)" }}>
+            <header style={{ position: "relative", height: "58px", borderRadius: "20px", background: "linear-gradient(135deg,#054218 0%,#043b16 100%)", border: "1px solid rgba(255,255,255,.10)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.10),0 12px 30px rgba(4,59,22,.28)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "0 clamp(10px,1.6vw,18px)" }}>
               {/* ===== HEADER · Logo & title ===== */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "0" }}>
                 {(__v.compact) ? (<>
