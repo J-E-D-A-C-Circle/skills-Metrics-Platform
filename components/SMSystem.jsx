@@ -95,9 +95,10 @@ const scopeText = (sc, depts) => sc === 'some' ? depts.join(', ') : (SCOPES.find
 const TYPEC = { Auth: ['#e0e7ff', '#3730a3'], Assessment: ['#dcfce7', '#15803d'], Integrity: ['#fee2e2', '#b91c1c'], Config: ['#fef3c7', '#92400e'], Export: ['#e0f2fe', '#0369a1'] };
 // ===== USERS · Tick box (used by the permission cards and department ticks) =====
 // on = ticked, mixed = some of the area's actions ticked (shows a dash), small = action-row size.
+// Ticked boxes use the app's green gradient (same as the header buttons, GREEN in smUI.jsx).
 function PermBox({ on, mixed, small }) {
   const sz = small ? '16px' : '18px', fill = on || mixed;
-  return <span style={{ flex: 'none', width: sz, height: sz, marginTop: small ? '1px' : '0', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fill ? '#15904c' : '#fff', border: fill ? '1px solid #15904c' : '1px solid rgba(15,35,65,.3)', color: '#fff' }}>
+  return <span style={{ flex: 'none', width: sz, height: sz, marginTop: small ? '1px' : '0', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fill ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#fff', border: fill ? '1px solid #15904c' : '1px solid rgba(15,35,65,.3)', color: '#fff' }}>
     {on ? <i className="icon-check" style={{ fontSize: small ? '11px' : '12px' }}></i> : mixed ? <span style={{ width: '8px', height: '2px', borderRadius: '1px', background: '#fff' }}></span> : null}</span>;
 }
 // ===== SETTINGS · Main component (state & helpers) =====
@@ -410,7 +411,7 @@ class SMSystem extends React.Component {
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                       {(__v.scopeOpts || []).map((o) => (
                         <button key={o.v} type={"button"} role={"radio"} aria-checked={o.on} onClick={o.pick} disabled={o.off} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", cursor: o.off ? "default" : "pointer", opacity: o.off && !o.on ? ".5" : "1", font: "500 13px Inter,sans-serif", color: "#111827", background: o.on ? "#e6f2ea" : "#fff", border: o.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
-                          <span style={{ width: "14px", height: "14px", borderRadius: "50%", border: o.on ? "4px solid #15904c" : "1px solid rgba(15,35,65,.3)", background: "#fff", boxSizing: "border-box" }}></span>{o.label}
+                          <span style={{ width: "14px", height: "14px", borderRadius: "50%", border: o.on ? "0" : "1px solid rgba(15,35,65,.3)", background: o.on ? "radial-gradient(circle,#fff 0 3px,transparent 3.5px),linear-gradient(180deg,#2fb36b,#15904c)" : "#fff", boxSizing: "border-box" }}></span>{o.label}
                         </button>))}
                     </div>
                     {/* Selected departments: one tick per department */}
