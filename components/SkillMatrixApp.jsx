@@ -2,7 +2,7 @@
 // =============================================================================
 // SkillMatrixApp.jsx · App shell: header, sidebar, notifications, footer and the page router for every screen
 // Screen / URL: every URL (/, /profile, /assessments, /take, /signin, /staff-evals, /analytics, /training, /reports, /framework, /cycles, /forms, /settings, /help, /report?id=...); old URLs are redirected here
-// Who sees it: admin / manager / creator / staff (participant); the sidebar and allowed pages depend on role
+// Who sees it: every signed-in user; the sidebar, tabs, pages and buttons follow their permissions (components/smAccess.js)
 // Used by: components/AppRouter.jsx (rendered from every app/<route>/page.jsx)   Depends on: SM* page components, smModel.js (buildModel), dvlaBanks.js (question banks), smUI.jsx (TabsContext, avatarKey), ui/select.jsx
 // Sections (search for these markers): APP SHELL, DATA MODEL, SIDEBAR, ROUTER, SIGNED-IN USER, NOTES, NOTIFICATIONS, HEADER, PAGE ROUTER, FOOTER
 // =============================================================================
@@ -25,7 +25,7 @@ import { buildModel, ALL } from './smModel';
 import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from './dvlaBanks';
 import { Select } from './ui/select';
 import { TabsContext, avatarKey } from './smUI';
-import { accessOf, scopeOf } from './smAccess';
+import { permsOf, pageKeys, defaultPerms, visibleDepts } from './smAccess';
 
 // ===== APP SHELL · Feature flags =====
 // Feature flags. A feature that is off is removed from the sidebar, routes, Profile tabs,
@@ -252,7 +252,7 @@ const DATA = buildData();
 
 // ===== SIDEBAR · Menu groups (NAV) =====
 // Sidebar menu. `feature` items only appear when that flag is on. `roles` is only the fallback when nobody is signed in:
-// a signed-in user sees the pages ticked for them in Settings > User Management (see navItems and components/smAccess.js).
+// a signed-in user sees the pages they hold any permission for in Settings > User Management (see navItems and components/smAccess.js).
 const NAV = [
   { label: 'Overview', items: [{ label: 'Home', icon: 'icon-house', key: 'home' }] },
   { label: 'Assessments', items: [
@@ -272,19 +272,20 @@ const FOOTER_PAGES = [{ label: 'Settings', icon: 'icon-settings', key: 'settings
 const PAGES = [...NAV.flatMap(g => g.items), ...FOOTER_PAGES];
 // ===== ROUTER · Tabbed pages (TABS) =====
 // Pages whose sub-pages are tabs. `view` is what the host component renders; a tab can have its own
-// `roles` and `feature` flag, and a tab that is off or not allowed is left out (the first allowed tab is the default).
+// `roles` and `feature` flag and a `perm` (permission key, see smAccess.js); a tab that is off or not allowed is left out
+// (the first allowed tab is the default).
 const TABS = {
-  analytics: [{ key: 'overview', label: 'Overview', icon: 'icon-chart-column', view: 'dashboard' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'departments' }, { key: 'heatmap', label: 'Heatmap', icon: 'icon-grid-3x3', view: 'heatmap' }],
-  training: [{ key: 'all', label: 'All Needs', icon: 'icon-graduation-cap', view: 'training' }, { key: 'top-needs', label: 'Top Training Needs', icon: 'icon-trending-up', view: 'topneeds' }],
-  reports: [{ key: 'builder', label: 'Report Builder', icon: 'icon-file-spreadsheet', view: 'reports' }, { key: 'scheduled', label: 'Scheduled', icon: 'icon-calendar-clock', view: 'schedules' }],
+  analytics: [{ key: 'overview', label: 'Overview', icon: 'icon-chart-column', view: 'dashboard', perm: 'analytics.view' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'departments', perm: 'analytics.departments' }, { key: 'heatmap', label: 'Heatmap', icon: 'icon-grid-3x3', view: 'heatmap', perm: 'analytics.heatmap' }],
+  training: [{ key: 'all', label: 'All Needs', icon: 'icon-graduation-cap', view: 'training', perm: 'training.view' }, { key: 'top-needs', label: 'Top Training Needs', icon: 'icon-trending-up', view: 'topneeds', perm: 'training.top' }],
+  reports: [{ key: 'builder', label: 'Report Builder', icon: 'icon-file-spreadsheet', view: 'reports', perm: 'reports.view' }, { key: 'scheduled', label: 'Scheduled', icon: 'icon-calendar-clock', view: 'schedules', perm: 'reports.schedule' }],
   framework: [{ key: 'competencies', label: 'Competencies', icon: 'icon-network', view: 'library' }, { key: 'targets', label: 'Target Profiles', icon: 'icon-crosshair', view: 'targets' }],
   // Help & Guides: guides/FAQ plus the Rating Scales reference (moved here from the Skill Framework). Open to every role.
   help: [{ key: 'guides', label: 'Help & Guides', icon: 'icon-life-buoy', view: 'help' }, { key: 'ratings', label: 'Rating Scales', icon: 'icon-sliders-horizontal', view: 'ratings' }],
-  settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs' }],
+  settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings', perm: 'settings.general' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users', perm: 'settings.users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs', perm: 'settings.audit' }],
   'staff-evals': [{ key: 'reviews', label: 'Reviews', icon: 'icon-users', view: 'staff-evals' }, { key: 'feedback', label: '360° Feedback', icon: 'icon-refresh-cw', view: 'feedback', feature: 'feedback360' },
     { key: 'approvals', label: 'Plan Approvals', icon: 'icon-badge-check', view: 'approvals', feature: 'planApprovals' }],
 };
-const tabsFor = (page, role) => (TABS[page] || []).filter(t => (!t.feature || FT[t.feature]) && (!t.roles || t.roles.includes(role)));
+const tabsFor = (page, role) => { const perms = myPerms(role); return (TABS[page] || []).filter(t => (!t.feature || FT[t.feature]) && (!t.roles || t.roles.includes(role)) && (!t.perm || perms.includes(t.perm))); };
 // Profile tabs; Development Plan and Evidence only while their features are on. Administrators have no
 // assessment results, so they get no Skill Profile or Assessment History.
 const profileTabs = role => ['account', ...(role === 'admin' ? [] : ['skills', 'history']), ...(FT.developmentPlan ? ['plan'] : []), ...(FT.evidence ? ['evidence'] : [])];
@@ -301,23 +302,26 @@ const REDIRECT = { heatmap: ['analytics', 'heatmap'], dashboard: ['analytics'], 
 // ===== ROUTER · Access guard (normalize) =====
 // ALWAYS: pages any role may open; everything else must be in that role's sidebar (navItems).
 const ALWAYS = ['home', 'profile', 'take', 'signin', 'help'];
-// ===== ROUTER · Allowed pages (navItems) =====
-// Signed-in user: the pages ticked in their access checkboxes (role defaults for older accounts). Nobody signed in: role list.
+// ===== ROUTER · Permissions & allowed pages (myPerms, navItems) =====
+// myPerms: the signed-in user's permission keys (Settings > User Management); nobody signed in: the role's defaults.
+// navItems: a page shows in the sidebar (and can be opened) when the user holds at least one permission for it.
+const ROLE_LABEL = { admin: 'Administrator', creator: 'Assessment Creator', manager: 'Manager / Supervisor', staff: 'Participant' };
+const myPerms = role => { const me = readMe(); return me ? permsOf(me) : defaultPerms(ROLE_LABEL[role]); };
 const navItems = role => {
-  const me = readMe(), on = i => !i.feature || FT[i.feature];
-  if (me) { const acc = accessOf(me); return PAGES.filter(i => on(i) && acc.includes(i.key)); }
-  return PAGES.filter(i => on(i) && (!i.roles || i.roles.includes(role)));
+  const perms = myPerms(role), on = i => !i.feature || FT[i.feature];
+  return PAGES.filter(i => on(i) && pageKeys(i.key).some(k => perms.includes(k)));
 };
 const can = (role, key) => navItems(role).some(i => i.key === key);
+const hasPerm = (role, k) => myPerms(role).includes(k);
 // Returns the page and tab to show for a URL. A page the role cannot see goes Home; a tab that is off or
 // not allowed falls back to the page's first tab (returned as undefined so the URL stays clean).
 function normalize(page, tab, role) {
   let p = page || 'home', t = tab;
   const r = REDIRECT[p]; if (r) { p = r[0]; if (r[1]) t = r[1]; }
   if (p === 'profile') return ['profile', t && t !== 'account' && profileTabs(role).includes(t) ? t : undefined];
-  // Take Assessment needs the "Take assessments" box; the individual report needs Staff Evaluations, Analytics or Training Needs.
+  // Take Assessment needs the "Take assessments" box; the individual report needs "Open individual reports".
   if (p === 'take' && !can(role, 'assessments')) return ['home', undefined];
-  if (p === 'report') return ['staff-evals', 'analytics', 'training'].some(k => can(role, k)) ? ['report', undefined] : ['home', undefined];
+  if (p === 'report') return hasPerm(role, 'staff-evals.report') ? ['report', undefined] : ['home', undefined];
   // Tab check (used for always-open pages with tabs, e.g. Help & Guides > Rating Scales, and for sidebar pages).
   const withTab = () => { const list = tabsFor(p, role), hit = list.find(x => x.key === t); return [p, hit && hit !== list[0] ? hit.key : undefined]; };
   if (ALWAYS.includes(p)) return TABS[p] ? withTab() : [p, undefined];
@@ -452,11 +456,17 @@ class SkillMatrixApp extends React.Component {
     const user = userFor(s.me), data = { ...DATA, user };
     const myDept = user.deptName;
     // No department selector in the header. "Departments they can see" (Settings > User Management) decides:
-    // Own department only locks every page to the user's department; All departments starts on all and filters per page.
+    // vis = the department names this user may see (null = all). Results pages get rdata / rmodel, which only hold
+    // those departments and their staff. One department locks the page filters to it.
     const meNow = s.me ? readMe() || s.me : null;
-    const deptLocked = meNow ? scopeOf(meNow) === 'own' : role === 'manager';
-    const scope = deptLocked ? myDept : ALL;
-    const scopeStaff = model.staff.filter(x => scope === ALL || x.dept === scope);
+    const perms = myPerms(role), can = k => perms.includes(k);
+    const vis = meNow ? visibleDepts(meNow, myDept) : role === 'manager' ? [myDept] : null;
+    const rdata = vis ? { ...data, depts: data.depts.filter(d => vis.includes(d.name)), staff: data.staff.filter(x => vis.includes(x.dept)) } : data;
+    const rStaff = vis ? model.staff.filter(x => vis.includes(x.dept)) : model.staff;
+    const rmodel = vis ? { ...model, staff: rStaff, byId: Object.fromEntries(rStaff.map(x => [x.id, x])) } : model;
+    const deptLocked = rdata.depts.length === 1;
+    const scope = deptLocked ? rdata.depts[0].name : ALL;
+    const scopeStaff = rStaff.filter(x => scope === ALL || x.dept === scope);
     // ===== SIDEBAR · Menu items & badges =====
     // Staff Evaluations badge = results waiting for review (Submitted or Auto-scored) in the visible scope.
     const awaiting = scopeStaff.filter(x => x.status === 'Submitted' || x.status === 'Auto-scored').length;
@@ -497,7 +507,7 @@ class SkillMatrixApp extends React.Component {
       FT.developmentPlan ? { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('profile', 'plan') } : null,
     ].filter(Boolean);
     // ===== APP SHELL · Values passed to render =====
-    const common = { data, role, vw, go: this.go, features: FT, model, scope, myDept, deptLocked };
+    const common = { data, role, vw, go: this.go, features: FT, model, scope, myDept, deptLocked, can, rdata, rmodel };
     return {
       avatar: s.avatar, meShort: user.short, meInitials: user.initials,
       ...common, page: s.page, view, tabsCtx, tab: s.tab, id: s.id, onTab: this.selectTab, status: s.status,
@@ -549,11 +559,15 @@ class SkillMatrixApp extends React.Component {
     };
   }
   // ===== APP SHELL · Render =====
-  // P = the props every page component receives (data, role, vw, go, features, model, scope, myDept, deptLocked).
-  // deptLocked = the user may only see their own department (from "Departments they can see").
+  // P = the props every page component receives (data, role, vw, go, features, model, scope, myDept, deptLocked, can).
+  // deptLocked = the user may only see one department (from "Departments they can see").
+  // can(key) = the signed-in user holds that permission (e.g. can('staff-evals.confirm'); keys in smAccess.js).
+  // R = P for results pages (Home, Staff Evaluations, Analytics, Training, Individual report): data and model only
+  // hold the departments the user may see.
   render() {
     const __v = this.renderVals() || {};
-    const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept, deptLocked: __v.deptLocked };
+    const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept, deptLocked: __v.deptLocked, can: __v.can };
+    const R = { ...P, data: __v.rdata, model: __v.rmodel };
     return (
       <>
       {/* ===== PAGE ROUTER · Full-screen pages (sign in, take assessment) ===== */}
@@ -705,17 +719,17 @@ class SkillMatrixApp extends React.Component {
                 <TabsContext.Provider value={__v.tabsCtx}>
                 {/* ===== PAGE ROUTER · Page component per route ===== */}
                 {/* home: SMHome · profile: SMProfile · assessments: SMAssessments · staff-evals: SMTeam · analytics, reports: SMAnalytics · training: SMTraining (Top Needs tab: SMAnalytics) · framework: SMFramework · cycles: SMCycles · forms: SMFormBuilder · settings, help: SMSystem · report?id=: SMStaffReport */}
-                {(__v.pHome) ? (<SMHome {...P} status={__v.status} />) : null}
+                {(__v.pHome) ? (<SMHome {...R} status={__v.status} />) : null}
                 {(__v.pProfile) ? (<SMProfile {...P} tab={__v.tab} onTab={__v.onTab} />) : null}
                 {(__v.pAssess) ? (<SMAssessments {...P} view={__v.view} status={__v.status} />) : null}
-                {(__v.pTeam) ? (<SMTeam {...P} view={__v.view} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
-                {(__v.pAnalytics) ? (<SMAnalytics key={__v.view} {...P} view={__v.view} />) : null}
-                {(__v.pTraining) ? (__v.view === 'topneeds' ? <SMAnalytics key={__v.view} {...P} view={__v.view} /> : <SMTraining {...P} />) : null}
+                {(__v.pTeam) ? (<SMTeam {...R} view={__v.view} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
+                {(__v.pAnalytics) ? (<SMAnalytics key={__v.view} {...R} view={__v.view} />) : null}
+                {(__v.pTraining) ? (__v.view === 'topneeds' ? <SMAnalytics key={__v.view} {...R} view={__v.view} /> : <SMTraining {...R} />) : null}
                 {(__v.pFramework) ? (<SMFramework {...P} view={__v.view} profiles={__v.profiles} setProfiles={__v.setProfiles} />) : null}
                 {(__v.pCycles) ? (<SMCycles {...P} />) : null}
-                {(__v.pForms) ? (<SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} />) : null}
+                {(__v.pForms) ? (<SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} can={__v.can} />) : null}
                 {(__v.pSystem) ? (<SMSystem {...P} view={__v.view} />) : null}
-                {(__v.pReport) ? (<SMStaffReport key={__v.id} {...P} id={__v.id} />) : null}
+                {(__v.pReport) ? (<SMStaffReport key={__v.id} {...R} id={__v.id} />) : null}
                 </TabsContext.Provider>
               </div>
               {/* ===== FOOTER · Page footer ===== */}

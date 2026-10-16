@@ -2,7 +2,8 @@
 // =============================================================================
 // SMStaffReport.jsx · one staff member's individual report and its export
 // Screen / URL: /report?id=<staff id> (opened from dashboards, heatmap, Training Needs, Staff Evaluations)
-// Who sees it: admin (anyone); manager (own department only)
+// Who sees it: users with the "Open individual reports" permission, for staff in the departments they can see;
+//   the CSV / JSON / Excel buttons need "Export results" (Settings > User Management)
 // Used by: SkillMatrixApp.jsx (report page); SMAnalytics.jsx (Report Builder preview); SMStaffEvals.jsx (staff details popup)   Depends on: ./smUI, ./smModel (individualReport, CYCLES), react-dom createPortal, xlsx
 // Sections (search for these markers): REPORT · Export helpers (XML escape), REPORT · Export one person's record, REPORT · Individual report view, REPORT · Details card, REPORT · Competencies table, REPORT · History + recommended training row, REPORT · History across cycles chart, REPORT · Recommended training list, REPORT · History by competency table (full page only), REPORT · Staff details popup, REPORT · Popup staff list (floating panel, left), REPORT · Popup header with export + close, REPORT · Popup body, REPORT · Page (/report?id=), REPORT · Not found / not allowed card, REPORT · Render, REPORT · Page header with CSV / JSON / Excel export buttons, REPORT · Report body
 // =============================================================================
@@ -100,10 +101,10 @@ export function IndividualReportView({ D, rep, compact }) {
 // Same report as /report?id=, shown in a pop-up over the current screen so the user stays where they were.
 // Close with the X, the Escape key or a click on the dimmed background. Used by SMStaffEvals.jsx.
 // `list` (optional) = staff to show down the left side; clicking one, or the Up / Down arrow keys, calls onSelect(id) to switch.
-export function StaffReportModal({ D, model, id, role, myDept, deptLocked, onClose, list, onSelect }) {
+// canExport = the user holds "Export results"; without it the CSV / JSON / Excel buttons are hidden.
+export function StaffReportModal({ D, model, id, role, canExport = true, onClose, list, onSelect }) {
+  // model only holds staff in the departments this user can see, so anyone else comes back as not found.
   const rep = id ? individualReport(D, model, id) : null;
-  // Same guard as the page: users limited to their own department only see staff in it.
-  const blocked = rep && (deptLocked ?? role === 'manager') && rep.s.dept !== myDept;
   // Escape closes the popup; the page behind it stops scrolling while it is open.
   const [find, setFind] = useState('');
   const bodyRef = useRef(null), listRef = useRef(null);
@@ -153,16 +154,16 @@ export function StaffReportModal({ D, model, id, role, myDept, deptLocked, onClo
         {/* ===== REPORT · Popup header with export + close ===== */}
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', padding: '18px 20px', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
           <div style={{ flex: '1 1 240px', minWidth: '0' }}>
-            <div id="staff-report-title" style={{ fontSize: '17px', fontWeight: '700' }}>{rep && !blocked ? rep.s.name : 'Individual report'}</div>
-            <div style={{ fontSize: '12.5px', color: '#4b5563', marginTop: '2px' }}>{rep && !blocked ? 'Individual report · ' + rep.s.designation + ', ' + rep.s.dept : "One staff member's targets, results, history and recommended training"}</div>
+            <div id="staff-report-title" style={{ fontSize: '17px', fontWeight: '700' }}>{rep ? rep.s.name : 'Individual report'}</div>
+            <div style={{ fontSize: '12.5px', color: '#4b5563', marginTop: '2px' }}>{rep ? 'Individual report · ' + rep.s.designation + ', ' + rep.s.dept : "One staff member's targets, results, history and recommended training"}</div>
           </div>
-          {rep && !blocked ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}><Btn icon="icon-download" onClick={() => reportExport(rep, 'CSV', name)}>CSV</Btn><Btn icon="icon-file-json" onClick={() => reportExport(rep, 'JSON', name)}>JSON</Btn><Btn kind="primary" icon="icon-file-spreadsheet" onClick={() => reportExport(rep, 'Excel', name)}>Export Excel</Btn></div> : null}
+          {rep && canExport ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}><Btn icon="icon-download" onClick={() => reportExport(rep, 'CSV', name)}>CSV</Btn><Btn icon="icon-file-json" onClick={() => reportExport(rep, 'JSON', name)}>JSON</Btn><Btn kind="primary" icon="icon-file-spreadsheet" onClick={() => reportExport(rep, 'Excel', name)}>Export Excel</Btn></div> : null}
           <button onClick={onClose} aria-label="Close" type="button" style={{ width: '32px', height: '32px', borderRadius: '999px', border: '1px solid rgba(15,35,65,.08)', background: '#fff', cursor: 'pointer', color: '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}><i className="icon-x" style={{ fontSize: '15px' }}></i></button>
         </div>
         {/* ===== REPORT · Popup body ===== */}
         <div ref={bodyRef} style={{ flex: '1', minWidth: '0', overflowY: 'auto', padding: '24px 28px' }}>
-          {rep && !blocked ? <IndividualReportView D={D} rep={rep} />
-            : <Card><EmptyState icon="icon-user-x" title={blocked ? 'Not in your department' : 'Staff member not found'} text={blocked ? 'Managers can only open reports for their own department.' : 'This staff member could not be found.'} /></Card>}
+          {rep ? <IndividualReportView D={D} rep={rep} />
+            : <Card><EmptyState icon="icon-user-x" title="Staff member not found" text="This staff member could not be found, or is not in a department you can see." /></Card>}
         </div>
       </div>
       </div>
@@ -172,14 +173,14 @@ export function StaffReportModal({ D, model, id, role, myDept, deptLocked, onClo
 }
 
 // ===== REPORT · Page (/report?id=) =====
-export default function SMStaffReport({ data: D, model, go, id, role, myDept, deptLocked }) {
+export default function SMStaffReport({ data: D, model, go, id, role, can = () => true }) {
+  // Guard: model only holds staff in the departments this user can see; anyone else shows the message card.
   const rep = id ? individualReport(D, model, id) : null;
-  // Guard: managers can only open reports for staff in their own department; otherwise show a message card.
-  const blocked = rep && (deptLocked ?? role === 'manager') && rep.s.dept !== myDept;
-  if (!rep || blocked) {
+  const canExport = can('staff-evals.export');
+  if (!rep) {
     // ===== REPORT · Not found / not allowed card =====
     return <Page><PageHeader title="Individual report" description="One staff member's targets, results, history and recommended training" />
-      <Card><EmptyState icon="icon-user-x" title={blocked ? 'Not in your department' : 'Staff member not found'} text={blocked ? 'Managers can only open reports for their own department.' : 'Open a report from a dashboard, the heatmap or Staff Evaluations.'} action={<Btn onClick={() => go('dashboard')}>Go to the dashboard</Btn>} /></Card></Page>;
+      <Card><EmptyState icon="icon-user-x" title="Staff member not found" text="This staff member could not be found, or is not in a department you can see. Open a report from Staff Evaluations." action={<Btn onClick={() => go('home')}>Go to Home</Btn>} /></Card></Page>;
   }
   // ===== REPORT · Render =====
   const name = 'individual-record-' + slugify(rep.s.name) + '-' + new Date().toISOString().slice(0, 10);
@@ -187,7 +188,7 @@ export default function SMStaffReport({ data: D, model, go, id, role, myDept, de
     <Page>
       {/* ===== REPORT · Page header with CSV / JSON / Excel export buttons ===== */}
       <PageHeader title={rep.s.name} description={'Individual report · ' + rep.s.designation + ', ' + rep.s.dept}
-        actions={<><Btn icon="icon-download" onClick={() => reportExport(rep, 'CSV', name)}>CSV</Btn><Btn icon="icon-file-json" onClick={() => reportExport(rep, 'JSON', name)}>JSON</Btn><Btn kind="primary" icon="icon-file-spreadsheet" onClick={() => reportExport(rep, 'Excel', name)}>Export Excel</Btn></>} />
+        actions={canExport ? <><Btn icon="icon-download" onClick={() => reportExport(rep, 'CSV', name)}>CSV</Btn><Btn icon="icon-file-json" onClick={() => reportExport(rep, 'JSON', name)}>JSON</Btn><Btn kind="primary" icon="icon-file-spreadsheet" onClick={() => reportExport(rep, 'Excel', name)}>Export Excel</Btn></> : null} />
       {/* ===== REPORT · Report body ===== */}
       <IndividualReportView D={D} rep={rep} />
     </Page>

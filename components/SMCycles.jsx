@@ -2,7 +2,7 @@
 // =============================================================================
 // SMCycles.jsx · Assessment Cycles admin: schedule, edit, close and archive cycles; upload assessments/questions
 // Screen / URL: /cycles (old /builder redirects here)
-// Who sees it: admin only
+// Who sees it: users with any Assessment Cycles permission; each button needs its own permission (see CYCLES · Permissions)
 // Used by: components/SkillMatrixApp.jsx   Depends on: ./smUI, ./smModel (ALL), ./SMFormBuilder (forms + question bank), ./ui/select, xlsx (loaded on demand)
 // Sections (search for these markers): CYCLES · Constants & storage helpers, CYCLES · Main page · State & helpers, CYCLES · Main page · Render, CYCLES · Page header, CYCLES · Cycles table, CYCLES · Cycle editor drawer, CYCLES · Upload drawer, CYCLES · Toast message, CYCLES · Cycle editor · State & rules, CYCLES · Cycle editor · Validation & save, CYCLES · Cycle editor · Render, CYCLES · Upload · Sample rows, CYCLES · Upload · Download template, CYCLES · Upload · Row parsing, checks & conversion, CYCLES · Upload drawer · State & file reading, CYCLES · Upload drawer · Checks & import, CYCLES · Upload drawer · Render
 // =============================================================================
@@ -27,7 +27,10 @@ const splitList = v => String(v || '').split('|').map(x => x.trim()).filter(Bool
 const yes = v => { const t = String(v == null ? '' : v).trim().toLowerCase(); return t === '' ? true : ['yes', 'y', 'true', '1', 'required'].includes(t); };
 
 // ===== CYCLES · Main page · State & helpers =====
-export default function SMCycles({ data: D, model, vw }) {
+export default function SMCycles({ data: D, model, vw, can = () => true }) {
+  // ===== CYCLES · Permissions =====
+  // From Settings > User Management: create/duplicate, edit/schedule, upload, close, archive/restore. Without "edit" a cycle opens read-only.
+  const may = { create: can('cycles.create'), edit: can('cycles.edit'), import: can('cycles.import'), close: can('cycles.close'), archive: can('cycles.archive') };
   const [cycles, setCycles] = useState(() => load(D));
   const [forms, setForms] = useState([]);
   const [q, setQ] = useState('');
@@ -60,9 +63,9 @@ export default function SMCycles({ data: D, model, vw }) {
       {/* ===== CYCLES · Page header (Upload questions / Upload assessment / New cycle, search, status filter) ===== */}
       <PageHeader title="Assessment Cycles" description="Schedule assessments for one, several or all departments. Upload an assessment or questions from Excel, CSV or JSON."
         actions={<>
-          <Btn icon="icon-file-up" onClick={() => setUpload({ mode: 'questions' })}>Upload questions</Btn>
-          <Btn icon="icon-upload" onClick={() => setUpload({ mode: 'assessment' })}>Upload assessment</Btn>
-          <Btn kind="primary" icon="icon-plus" onClick={() => setEdit({ ...blankCycle(), _orig: null })}>New cycle</Btn></>}
+          {may.import ? <><Btn icon="icon-file-up" onClick={() => setUpload({ mode: 'questions' })}>Upload questions</Btn>
+          <Btn icon="icon-upload" onClick={() => setUpload({ mode: 'assessment' })}>Upload assessment</Btn></> : null}
+          {may.create ? <Btn kind="primary" icon="icon-plus" onClick={() => setEdit({ ...blankCycle(), _orig: null })}>New cycle</Btn> : null}</>}
         filters={<>
           <Search value={q} onChange={setQ} placeholder="Search cycle or form" />
           <Sel value={st} onChange={setSt} options={[[ALL, 'All active (' + (cycles.length - counts.Archived) + ')'], ...Object.keys(SC).map(k => [k, k + ' (' + counts[k] + ')'])]} />
@@ -70,7 +73,7 @@ export default function SMCycles({ data: D, model, vw }) {
       {/* ===== CYCLES · Cycles table (name, form, departments, window, duration, status, participants, actions) ===== */}
       <Card title="Cycles" sub={rows.length + ' shown · participants are counted from each department’s staff list'} flush>
         <DataTable minWidth={1000} rows={rows} rowKey={c => c.id}
-          empty={<EmptyState icon="icon-calendar-x" title="No cycles match" text={st === 'Archived' ? 'Nothing has been archived.' : 'Create a cycle or upload an assessment.'} action={<Btn kind="primary" icon="icon-plus" onClick={() => setEdit({ ...blankCycle(), _orig: null })}>New cycle</Btn>} />}
+          empty={<EmptyState icon="icon-calendar-x" title="No cycles match" text={st === 'Archived' ? 'Nothing has been archived.' : 'Create a cycle or upload an assessment.'} action={may.create ? <Btn kind="primary" icon="icon-plus" onClick={() => setEdit({ ...blankCycle(), _orig: null })}>New cycle</Btn> : null} />}
           columns={[
             { key: 'name', label: 'Cycle', render: c => <div style={{ maxWidth: '240px' }}><button type="button" onClick={() => setEdit({ ...c, _orig: c })} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', font: '600 13.5px Inter,sans-serif', color: '#111827', textAlign: 'left' }}>{c.name}</button>{c.description ? <div style={{ fontSize: '11.5px', color: '#6b7280', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.description}</div> : null}</div> },
             { key: 'form', label: 'Form / template', render: c => <span title={forms.some(f => f.name === c.form) ? 'Form Builder form' : 'Template (not in the Form Builder)'} style={{ fontSize: '12.5px', display: 'block', maxWidth: '170px' }}>{c.form}</span> },
@@ -80,20 +83,21 @@ export default function SMCycles({ data: D, model, vw }) {
             { key: 'status', label: 'Status', render: c => <Badge bg={SC[c.status][0]} fg={SC[c.status][1]}>{c.status}</Badge> },
             { key: 'p', label: 'Participants', align: 'center', render: c => <div><b>{participants(c)}</b>{submitted(c) != null ? <div style={{ fontSize: '11px', color: '#6b7280' }}>{submitted(c)} submitted</div> : null}</div> },
             { key: 'a', label: '', align: 'right', render: c => <span style={{ display: 'inline-flex', gap: '6px' }}>
-              <Btn small icon={c.status === 'Closed' || c.status === 'Archived' ? 'icon-eye' : 'icon-pencil'} onClick={() => setEdit({ ...c, _orig: c })}>{c.status === 'Closed' || c.status === 'Archived' ? 'View' : 'Edit'}</Btn>
-              <Btn small icon="icon-copy" onClick={() => act(c, 'dup')} title="Duplicate as a new draft" />
-              {c.status === 'Open' ? <Btn small kind="danger" icon="icon-lock" onClick={() => act(c, 'close')}>Close</Btn>
+              <Btn small icon={!may.edit || c.status === 'Closed' || c.status === 'Archived' ? 'icon-eye' : 'icon-pencil'} onClick={() => setEdit({ ...c, _orig: c })}>{!may.edit || c.status === 'Closed' || c.status === 'Archived' ? 'View' : 'Edit'}</Btn>
+              {may.create ? <Btn small icon="icon-copy" onClick={() => act(c, 'dup')} title="Duplicate as a new draft" /> : null}
+              {c.status === 'Open' ? (may.close ? <Btn small kind="danger" icon="icon-lock" onClick={() => act(c, 'close')}>Close</Btn> : null)
+                : !may.archive ? null
                 : c.status === 'Archived' ? <Btn small icon="icon-archive-restore" onClick={() => act(c, 'restore')}>Restore</Btn>
                 : <Btn small kind="danger" icon="icon-archive" onClick={() => act(c, 'archive')}>Archive</Btn>}
             </span> },
           ]} />
       </Card>
       {/* ===== CYCLES · Cycle editor drawer (New / Edit / View) ===== */}
-      {edit ? <CycleEditor D={D} c={edit} formNames={formNames} participants={participants} onClose={() => setEdit(null)}
+      {edit ? <CycleEditor D={D} c={edit} viewOnly={!!edit._orig && !may.edit} formNames={formNames} participants={participants} onClose={() => setEdit(null)}
         onSave={(c, msg) => { const { _orig, ...clean } = c; const exists = cycles.some(x => x.id === clean.id); const v = exists ? clean : { ...clean, id: 'cy' + Date.now().toString(36) }; save(exists ? cycles.map(x => x.id === v.id ? v : x) : [...cycles, v]); setEdit(null); flash(msg); }} /> : null}
       {/* ===== CYCLES · Upload drawer (questions or whole assessment) ===== */}
       {/* Import assessment = new draft form + Draft cycle. Import questions = add to a form (published forms get a new draft version) or to the skm-qbank question bank. */}
-      {upload ? <UploadDrawer D={D} mode={upload.mode} forms={forms} onClose={() => setUpload(null)}
+      {upload && may.import ? <UploadDrawer D={D} mode={upload.mode} forms={forms} onClose={() => setUpload(null)}
         onImportAssessment={(meta, items) => { const f = newForm(meta.name, items, 'Imported from ' + meta.file); const fl = [...loadForms(D), f]; saveForms(fl); setForms(fl);
           const c = { id: 'cy' + Date.now().toString(36), name: meta.name, form: f.name, depts: meta.depts, start: meta.start, end: meta.end, open: meta.open, close: meta.close, duration: meta.duration, attempts: meta.attempts, notify: { invite: true, reminder: true, results: true }, status: 'Draft', description: meta.description || 'Imported from ' + meta.file };
           save([...cycles, c]); setUpload(null); setSt(ALL); flash('Draft "' + meta.name + '" created with ' + items.filter(x => x.type !== 'section').length + ' questions. Its form is in the Form Builder.'); }}
@@ -114,16 +118,16 @@ export default function SMCycles({ data: D, model, vw }) {
 
 // ===== CYCLES · Cycle editor · State & rules =====
 // Draft/Scheduled: everything editable. Open: only the end date/closing time (extend only) and the description.
-// Closed/Archived: read-only (duplicate to reuse).
-function CycleEditor({ D, c, formNames, participants, onClose, onSave }) {
+// Closed/Archived: read-only (duplicate to reuse). viewOnly (no "Edit & schedule cycles" permission): read-only too.
+function CycleEditor({ D, c, viewOnly, formNames, participants, onClose, onSave }) {
   const [f, setF] = useState(c);
   const [err, setErr] = useState('');
   const o = c._orig, isNew = !o;
   const status = o ? o.status : 'Draft';
-  const full = status === 'Draft' || status === 'Scheduled';
-  const isOpen = status === 'Open', readOnly = status === 'Closed' || status === 'Archived';
+  const full = (status === 'Draft' || status === 'Scheduled') && !viewOnly;
+  const isOpen = status === 'Open', readOnly = status === 'Closed' || status === 'Archived' || !!viewOnly;
   const set = (k, v) => setF({ ...f, [k]: v });
-  const lockTip = isOpen ? 'Locked while the cycle is open: staff may already have started.' : readOnly ? 'This cycle is ' + status.toLowerCase() + '.' : '';
+  const lockTip = viewOnly ? 'View only' : isOpen ? 'Locked while the cycle is open: staff may already have started.' : readOnly ? 'This cycle is ' + status.toLowerCase() + '.' : '';
   const dis = !full;
   const allDepts = f.depts === 'all';
   // ===== CYCLES · Cycle editor · Validation & save =====
@@ -141,7 +145,7 @@ function CycleEditor({ D, c, formNames, participants, onClose, onSave }) {
     setErr('');
     onSave({ ...f, name: f.name.trim(), status: target || f.status }, isNew ? (target === 'Scheduled' ? 'Cycle scheduled. Staff will be invited.' : 'Draft cycle created') : isOpen ? 'Window updated' : target === 'Scheduled' && status === 'Draft' ? 'Cycle scheduled. Staff will be invited.' : 'Cycle saved');
   };
-  const lockNote = isOpen ? 'This cycle is open, so staff may already have started. Only the closing date/time (to extend the window) and the description can change. The form, departments, duration and attempt limit are locked so every participant is assessed on the same terms.'
+  const lockNote = viewOnly ? 'View only. You do not have permission to edit cycles.' : isOpen ? 'This cycle is open, so staff may already have started. Only the closing date/time (to extend the window) and the description can change. The form, departments, duration and attempt limit are locked so every participant is assessed on the same terms.'
     : readOnly ? 'This cycle is ' + status.toLowerCase() + ' and cannot be edited. Duplicate it to reuse its settings.' : '';
   // ===== CYCLES · Cycle editor · Render =====
   return (

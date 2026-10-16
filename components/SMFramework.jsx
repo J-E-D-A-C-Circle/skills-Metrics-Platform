@@ -2,7 +2,7 @@
 // =============================================================================
 // SMFramework.jsx · Skill Framework: Competencies library and Target Profiles tabs (+ the Rating Scales cards used on Help & Guides)
 // Screen / URL: /framework?tab=competencies (default), /framework?tab=targets (old /library, /targets redirect). Rating Scales moved to /help?tab=ratings.
-// Who sees it: admin / creator
+// Who sees it: users with "View framework"; adding / removing competencies and editing target profiles are separate permissions
 // Used by: components/SkillMatrixApp.jsx; SMSystem.jsx (RatingScales on Help & Guides)   Depends on: ./smUI, ./smModel (targetOf, resolveProfile, BANDS, TIERS), ./dvlaBanks (JOB_LEVELS), ./ui/select
 // Sections (search for these markers): FRAMEWORK · Constants, FRAMEWORK · Page wrapper, FRAMEWORK · Competencies tab · State & helpers, FRAMEWORK · Competencies tab · Render, FRAMEWORK · Departments list, FRAMEWORK · Competency list, FRAMEWORK · Add a competency row, FRAMEWORK · Helper · Bank question count, FRAMEWORK · Target Profiles tab · State & helpers, FRAMEWORK · Target Profiles tab · Render, FRAMEWORK · Profiles table, FRAMEWORK · Required proficiency matrix, FRAMEWORK · Profile drawer, FRAMEWORK · Scale cards, HELP · Rating Scales cards (exported, shown on Help & Guides), HELP · Rating Scales · Scale cards
 // =============================================================================
@@ -37,7 +37,9 @@ export default function SMFramework(props) {
 // ===== FRAMEWORK · Competencies tab · State & helpers =====
 // General skills have no dept (apply to everyone); technical skills belong to one department.
 // Adding/removing competencies only changes this screen's state (not saved).
-function Library({ data: D, flash }) {
+// can('framework.competencies') = may add / remove competencies; otherwise the library is read-only.
+function Library({ data: D, flash, can = () => true }) {
+  const mayEdit = can('framework.competencies');
   const CORE = 'General skills (all departments)';
   const [sel, setSel] = useState(CORE);
   const [extra, setExtra] = useState({});
@@ -72,15 +74,15 @@ function Library({ data: D, flash }) {
                     {c.areas ? <span style={{ display: 'block', fontSize: '11.5px', color: '#6b7280', marginTop: '3px', lineHeight: 1.45 }}>Skill areas: {c.areas.join(' · ')}</span> : null}</span>
                   <Badge bg={D.IMP[c.importance].bg} fg={D.IMP[c.importance].fg} style={{ borderRadius: '6px' }}>Importance {c.importance} · {D.IMP[c.importance].short}</Badge>
                   <span style={{ fontSize: '11.5px', color: '#9ca3af', width: '150px' }}>{qCount(D, c.id)}</span>
-                  <button type="button" title="Remove" onClick={() => { if (c.custom) setExtra({ ...extra, [sel]: extra[sel].filter(x => x.id !== c.id) }); else setRemoved({ ...removed, [c.id]: true }); flash('Competency removed from the library'); }} style={{ background: 'none', border: '0', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: '4px' }}><i className="icon-trash-2" style={{ fontSize: '14px' }}></i></button>
+                  {mayEdit ? <button type="button" title="Remove" onClick={() => { if (c.custom) setExtra({ ...extra, [sel]: extra[sel].filter(x => x.id !== c.id) }); else setRemoved({ ...removed, [c.id]: true }); flash('Competency removed from the library'); }} style={{ background: 'none', border: '0', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: '4px' }}><i className="icon-trash-2" style={{ fontSize: '14px' }}></i></button> : null}
                 </div>))}
               {/* ===== FRAMEWORK · Competencies · Add a competency row ===== */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '10px 20px 14px 46px' }}>
+              {mayEdit ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '10px 20px 14px 46px' }}>
                 <input value={(draft[g] || {}).name || ''} onChange={e => setDraft({ ...draft, [g]: { ...(draft[g] || {}), name: e.target.value } })} placeholder="Add a competency" style={{ ...INPUT, flex: '1 1 200px', border: '1px dashed #c7ccd4' }} />
                 <Sel value={(draft[g] || {}).imp || '3'} onChange={v => setDraft({ ...draft, [g]: { ...(draft[g] || {}), imp: v } })} options={[1, 2, 3, 4, 5].map(n => [String(n), n + ' · ' + D.IMP[n].short])} />
                 <Btn icon="icon-plus" onClick={() => { const dr = draft[g] || {}; if (!(dr.name || '').trim()) return; const cat = comps.find(c => c.group === g).category;
                   setExtra({ ...extra, [sel]: [...(extra[sel] || []), { id: 'x' + Date.now(), name: dr.name.trim(), group: g, category: cat, importance: +(dr.imp || 3), custom: true }] }); setDraft({ ...draft, [g]: {} }); flash('Competency added'); }}>Add</Btn>
-              </div>
+              </div> : null}
             </div>)) : <EmptyState icon="icon-network" title="No competencies yet" />}
         </Card>
       </div>
@@ -97,7 +99,9 @@ function qCount(D, id) {
 
 // ===== FRAMEWORK · Target Profiles tab · State & helpers =====
 // Profiles are saved by SkillMatrixApp (setProfiles -> localStorage "skm-target-profiles"). The department picker starts at the global scope.
-function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
+// can('framework.profiles') = may create, edit, remove and apply target profiles; otherwise read-only.
+function Targets({ data: D, model, profiles, setProfiles, scope, flash, can = () => true }) {
+  const mayEdit = can('framework.profiles');
   const [local, setLocal] = useState(null);
   const dept = local ?? scope;
   const [edit, setEdit] = useState(null);
@@ -137,20 +141,20 @@ function Targets({ data: D, model, profiles, setProfiles, scope, flash }) {
     <>
       {/* ===== FRAMEWORK · Target Profiles · Page header, New profile, department filter ===== */}
       <PageHeader title="Target Profiles" description="The proficiency each job level requires. Org-wide profiles apply everywhere; a department override replaces them for that department."
-        actions={<Btn kind="primary" icon="icon-plus" onClick={openNew}>New profile</Btn>}
+        actions={mayEdit ? <Btn kind="primary" icon="icon-plus" onClick={openNew}>New profile</Btn> : null}
         filters={<><ScopeSelect depts={D.depts} value={dept} globalValue={scope} onChange={setLocal} /><span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>Changes recalculate every gap, dashboard and training need straight away</span></>} />
       {/* ===== FRAMEWORK · Target Profiles · Profiles table ===== */}
       <Card title={dept === ALL ? 'All target profiles' : 'Profiles that apply in ' + dept} sub="Mapped by job level and career track" flush>
-        <DataTable minWidth={860} rows={listed} rowKey={p => p.id} empty={<EmptyState icon="icon-crosshair" title="No profiles" action={<Btn onClick={openNew}>New profile</Btn>} />} columns={[
+        <DataTable minWidth={860} rows={listed} rowKey={p => p.id} empty={<EmptyState icon="icon-crosshair" title="No profiles" action={mayEdit ? <Btn onClick={openNew}>New profile</Btn> : null} />} columns={[
           { key: 'title', label: 'Job level · track', render: p => <div><div style={{ fontWeight: 600 }}>{p.title}</div><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{p.track} track</div></div> },
           { key: 'scope', label: 'Scope', render: p => { const over = p.scope !== 'all'; const shadowed = dept !== ALL && !over && profiles.some(x => x.level === p.level && Array.isArray(x.scope) && x.scope.includes(dept));
             return <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}><ScopeBadge override={over} />{over ? <span style={{ fontSize: '11.5px', color: '#6b7280' }}>{p.scope.join(', ')}</span> : null}{shadowed ? <span style={{ fontSize: '11.5px', color: '#b45309' }}>Overridden in {dept}</span> : null}</div>; } },
           { key: 'targets', label: 'Category targets', render: p => <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>{D.categories.map(c => <span key={c} title={c} style={{ fontSize: '11px', background: CELL_BG[p.targets[c]], border: '1px solid rgba(15,35,65,.08)', borderRadius: '6px', padding: '2px 6px' }}>{c.split(' ')[0]} <b>{p.targets[c]}</b></span>)}</div> },
           { key: 'staff', label: 'Staff', align: 'center', render: p => <b>{staffOn(p)}</b> },
           { key: 'a', label: '', align: 'right', render: p => <span style={{ display: 'inline-flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {p.scope !== 'all' ? <Btn small icon="icon-globe" onClick={() => applyAll(p)} title="Make this profile apply to every department">Apply to all departments</Btn> : null}
+            {!mayEdit ? null : <>{p.scope !== 'all' ? <Btn small icon="icon-globe" onClick={() => applyAll(p)} title="Make this profile apply to every department">Apply to all departments</Btn> : null}
             <Btn small icon="icon-pencil" onClick={() => openEdit(p)}>Edit</Btn>
-            {p.scope !== 'all' ? <Btn small kind="danger" onClick={() => { save(profiles.filter(x => x.id !== p.id)); flash('Override removed. The org-wide profile applies again.'); }}>Remove</Btn> : null}</span> },
+            {p.scope !== 'all' ? <Btn small kind="danger" onClick={() => { save(profiles.filter(x => x.id !== p.id)); flash('Override removed. The org-wide profile applies again.'); }}>Remove</Btn> : null}</>}</span> },
         ]} />
       </Card>
       {/* ===== FRAMEWORK · Target Profiles · Required proficiency matrix (cell falls back to the category target unless set) ===== */}

@@ -2,7 +2,8 @@
 // =============================================================================
 // SMStaffEvals.jsx · Staff Evaluations Reviews: review auto-scored results, score open text, confirm or adjust
 // Screen / URL: /staff-evals (Reviews tab)
-// Who sees it: admin (all departments); manager (own department only)
+// Who sees it: users with Staff Evaluations permissions, for the departments they can see (Settings > User Management).
+//   Score & adjust, Confirm & reopen, Open individual reports and Export are separate permissions (see `may` below)
 // Used by: SMTeam.jsx   Depends on: ./smUI (Drawer, DataTable...), ./smModel (STATUSES, bandOf, inScope), ./SMStaffReport (StaffReportModal)
 // Sections (search for these markers): STAFF EVALS · Reviews page (/staff-evals), STAFF EVALS · State & filters, STAFF EVALS · CSV export, STAFF EVALS · Row action button rules, STAFF EVALS · Render, STAFF EVALS · Page header (scope, search, status filter, Reset demo reviews, Export CSV), STAFF EVALS · Status KPI tiles (click to filter), STAFF EVALS · Staff table, STAFF EVALS · Review drawer & toast, STAFF EVALS · Staff details popup, STAFF EVALS · Status sort order, STAFF EVALS · Review drawer, STAFF EVALS · Review drawer render, STAFF EVALS · Review drawer body, STAFF EVALS · Score summary tiles, STAFF EVALS · How scoring works note, STAFF EVALS · Open-text answer & rubric score, STAFF EVALS · Competency results & adjust, STAFF EVALS · Question bank answers, STAFF EVALS · Pass band badge, STAFF EVALS · Stat tile
 // =============================================================================
@@ -14,12 +15,15 @@ import { ALL, STATUSES, STATUS_HINT, PASS, TIERS_TEXT, bandOf, inScope } from '.
 // ===== STAFF EVALS · Reviews page (/staff-evals) =====
 // Staff Evaluations: results are scored automatically on submission.
 // Reviewers score the open-text answer, then confirm, or adjust a competency with a reason.
-export default function StaffEvaluations({ data: D, model, go, role, scope, myDept, deptLocked, setEval, resetEvals }) {
+export default function StaffEvaluations({ data: D, model, go, role, scope, myDept, deptLocked, setEval, resetEvals, can = () => true }) {
   // ===== STAFF EVALS · State & filters =====
   // Managers are locked to their own department; admins pick one here (defaults to the global scope).
   const [local, setLocal] = useState(null);
-  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
-  const dept = locked ? myDept : (local ?? scope);
+  // D.depts only holds the departments this user may see (Settings > User Management > Departments they can see); one = locked.
+  const locked = deptLocked ?? role === 'manager';
+  const dept = locked ? (D.depts.length === 1 ? D.depts[0].name : myDept) : (local ?? scope);
+  // Permissions (Settings > User Management): score/adjust, confirm/reopen, open reports, export.
+  const may = { score: can('staff-evals.score'), confirm: can('staff-evals.confirm'), report: can('staff-evals.report'), export: can('staff-evals.export') };
   const [q, setQ] = useState('');
   const [st, setSt] = useState(ALL);
   const [openId, setOpenId] = useState(null);
@@ -44,14 +48,15 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
   };
   // ===== STAFF EVALS · Row action button rules =====
   // Submitted -> score open text; Auto-scored -> review & confirm; Confirmed -> view result; others -> no button.
-  const action = s => s.status === 'Submitted' ? ['Score open text', 'primary'] : s.status === 'Auto-scored' ? ['Review & confirm', 'primary'] : s.status === 'Confirmed' ? ['View result', 'secondary'] : [null];
+  // Without the score / confirm permission the button just opens the result read-only ("View result").
+  const action = s => s.status === 'Submitted' ? (may.score ? ['Score open text', 'primary'] : ['View result', 'secondary']) : s.status === 'Auto-scored' ? (may.confirm || may.score ? ['Review & confirm', 'primary'] : ['View result', 'secondary']) : s.status === 'Confirmed' ? ['View result', 'secondary'] : [null];
   const cur = openId ? model.byId[openId] : null;
   // ===== STAFF EVALS · Render =====
   return (
     <Page>
       {/* ===== STAFF EVALS · Page header (scope, search, status filter, Reset demo reviews, Export CSV) ===== */}
-      <PageHeader title="Staff Evaluations" description={'Scoring is automatic when staff submit. You review the open-text answer, then confirm the result or adjust a competency with a reason.' + (locked ? ' You see ' + myDept + ' only.' : '')}
-        actions={<><Btn kind="ghost" icon="icon-rotate-ccw" onClick={() => { resetEvals(); flash('Review changes reset to the sample data'); }}>Reset demo reviews</Btn><Btn kind="primary" icon="icon-download" onClick={exportCsv}>Export CSV</Btn></>}
+      <PageHeader title="Staff Evaluations" description={'Scoring is automatic when staff submit. You review the open-text answer, then confirm the result or adjust a competency with a reason.' + (locked ? ' You see ' + dept + ' only.' : '')}
+        actions={<>{may.score || may.confirm ? <Btn kind="ghost" icon="icon-rotate-ccw" onClick={() => { resetEvals(); flash('Review changes reset to the sample data'); }}>Reset demo reviews</Btn> : null}{may.export ? <Btn kind="primary" icon="icon-download" onClick={exportCsv}>Export CSV</Btn> : null}</>}
         filters={<>
           <ScopeSelect depts={D.depts} value={dept} globalValue={scope} onChange={setLocal} locked={locked} />
           <Search value={q} onChange={setQ} placeholder="Search name, staff ID or role" />
@@ -64,7 +69,7 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
       {/* ===== STAFF EVALS · Staff table ===== */}
       <Card title={(st === ALL ? 'All staff' : st) + ' · ' + (dept === ALL ? 'all departments' : dept)} sub={rows.length + ' of ' + staff.length + ' staff · ' + D.cycle.name} flush>
         <DataTable minWidth={980} rows={rows} rowKey={s => s.id} empty={<EmptyState icon="icon-users" title="No staff match" text="Change the status filter or search." />} columns={[
-          { key: 'name', label: 'Staff', render: s => <div><button type="button" onClick={() => setReportId(s.id)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', color: '#127a42', font: '600 13px Inter,sans-serif', textAlign: 'left' }}>{s.name}</button><div style={{ fontSize: '11.5px', color: '#6b7280' }}>{s.staffNo} · {s.designation}</div></div> },
+          { key: 'name', label: 'Staff', render: s => <div>{may.report ? <button type="button" onClick={() => setReportId(s.id)} style={{ background: 'none', border: '0', padding: '0', cursor: 'pointer', color: '#127a42', font: '600 13px Inter,sans-serif', textAlign: 'left' }}>{s.name}</button> : <span style={{ font: '600 13px Inter,sans-serif' }}>{s.name}</span>}<div style={{ fontSize: '11.5px', color: '#6b7280' }}>{s.staffNo} · {s.designation}</div></div> },
           { key: 'dept', label: 'Department' },
           { key: 'status', label: 'Status', render: s => <StatusBadge status={s.status} /> },
           { key: 'score', label: 'System score', render: s => s.overallPct == null ? <span style={{ color: '#9ca3af' }}>—</span> : <span><b style={{ fontFamily: "'JetBrains Mono',monospace" }}>{s.overallPct}%</b> <BandBadge pct={s.overallPct} />{s.pending ? <div style={{ fontSize: '11px', color: '#3730a3', marginTop: '3px' }}>+ open text pending</div> : null}</span> },
@@ -73,11 +78,11 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
         ]} />
       </Card>
       {/* ===== STAFF EVALS · Review drawer & toast ===== */}
-      {cur ? <ReviewDrawer key={cur.id} D={D} s={cur} me={me} onReport={() => setReportId(cur.id)} setEval={setEval} flash={flash} onClose={() => setOpenId(null)} /> : null}
+      {cur ? <ReviewDrawer key={cur.id} D={D} s={cur} me={me} may={may} onReport={() => setReportId(cur.id)} setEval={setEval} flash={flash} onClose={() => setOpenId(null)} /> : null}
       {/* ===== STAFF EVALS · Staff details popup ===== */}
       {/* Opens over this page (from the staff name or the drawer's Individual report button), so there is no page change. */}
       {/* The left-hand list is the same staff as the table (same filters and order), so you can switch person without closing. */}
-      {reportId ? <StaffReportModal D={D} model={model} id={reportId} role={role} myDept={myDept} deptLocked={locked} list={rows} onSelect={setReportId} onClose={closeReport} /> : null}
+      {reportId && may.report ? <StaffReportModal D={D} model={model} id={reportId} role={role} canExport={may.export} list={rows} onSelect={setReportId} onClose={closeReport} /> : null}
       <Toast text={toast} />
     </Page>
   );
@@ -86,10 +91,11 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
 const rank = st => ({ Submitted: 0, 'Auto-scored': 1, 'In progress': 2, 'Not started': 3, Confirmed: 4 })[st];
 
 // ===== STAFF EVALS · Review drawer =====
-function ReviewDrawer({ D, s, me, onReport, setEval, flash, onClose }) {
+// may = the reviewer's permissions: without "score" the rubric and Adjust are read-only; without "confirm" there is no Confirm / Reopen.
+function ReviewDrawer({ D, s, me, may = {}, onReport, setEval, flash, onClose }) {
   const [edit, setEdit] = useState(null); // { id, score, reason }
   const [text, setText] = useState(s.text != null ? s.text : null);
-  const locked = s.status === 'Confirmed';
+  const locked = s.status === 'Confirmed' || !may.score;
   const tc = s.comps.find(c => c.id === s.textItem.comp);
   // setEval saves review changes to localStorage "skm-evals" (handled in SkillMatrixApp.jsx).
   const saveText = () => { if (text == null) return; setEval(s.id, { text }); flash('Open-text answer scored · ' + s.name + ' is ready to confirm'); };
@@ -104,10 +110,10 @@ function ReviewDrawer({ D, s, me, onReport, setEval, flash, onClose }) {
   return (
     <Drawer open title={'Review · ' + s.name} sub={s.designation + ' · ' + s.dept + ' · submitted ' + (s.submittedAt || '')} onClose={onClose} width={860}
       footer={<div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-        <span style={{ fontSize: '12.5px', color: '#6b7280' }}>{locked ? 'Confirmed by ' + (s.confirmedBy || 'manager') + '.' : s.status === 'Submitted' ? 'Score the open-text answer before confirming.' : changed ? changed + ' competency adjusted.' : 'System scores will be used as the final scores.'}</span>
+        <span style={{ fontSize: '12.5px', color: '#6b7280' }}>{!may.score && !may.confirm ? 'View only. You do not have permission to score or confirm results.' : s.status === 'Confirmed' ? 'Confirmed by ' + (s.confirmedBy || 'manager') + '.' : s.status === 'Submitted' ? 'Score the open-text answer before confirming.' : changed ? changed + ' competency adjusted.' : 'System scores will be used as the final scores.'}</span>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <Btn onClick={onReport} icon="icon-file-text">Individual report</Btn>
-          {locked ? <Btn onClick={() => { setEval(s.id, { confirmed: false }); flash('Result reopened for review'); }} icon="icon-unlock">Reopen</Btn>
+          {may.report ? <Btn onClick={onReport} icon="icon-file-text">Individual report</Btn> : null}
+          {!may.confirm ? null : s.status === 'Confirmed' ? <Btn onClick={() => { setEval(s.id, { confirmed: false }); flash('Result reopened for review'); }} icon="icon-unlock">Reopen</Btn>
             : <Btn kind="primary" icon="icon-badge-check" disabled={s.status === 'Submitted'} onClick={confirm}>Confirm result</Btn>}
         </div>
       </div>}>

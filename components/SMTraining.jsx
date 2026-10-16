@@ -2,7 +2,7 @@
 // =============================================================================
 // SMTraining.jsx · Training Needs: who needs which training, by competency or by staff
 // Screen / URL: /training (tab "All Needs"; the "Top Training Needs" tab is drawn by SMAnalytics.jsx)
-// Who sees it: admin (all departments); manager (own department only)
+// Who sees it: users with "All training needs", for the departments they can see; Export CSV needs training.export
 // Used by: SkillMatrixApp.jsx (training page, view "training")   Depends on: ./smUI, ./smModel (inScope)
 // Sections (search for these markers): TRAINING · All Needs page (/training), TRAINING · State & filters, TRAINING · Grouping needs (by competency / by staff), TRAINING · CSV export, TRAINING · Small UI helpers (name link, mode switch), TRAINING · Render, TRAINING · Page header (scope, mode switch, min gap, search), TRAINING · KPI tiles, TRAINING · By competency list or By staff table, TRAINING · Competency rows (click to expand), TRAINING · Expanded list of staff for a competency, TRAINING · By staff table, TRAINING · Toast
 // =============================================================================
@@ -12,12 +12,14 @@ import { ALL, inScope } from './smModel';
 
 // ===== TRAINING · All Needs page (/training) =====
 // Who needs which training, grouped by competency or by person.
-export default function SMTraining({ data: D, model, go, role, scope, myDept, deptLocked }) {
+export default function SMTraining({ data: D, model, go: go0, role, scope, myDept, deptLocked, can = () => true }) {
   // ===== TRAINING · State & filters =====
-  // Managers are locked to their own department; admins pick one here (defaults to the global scope).
+  // D.depts / model only hold the departments this user can see (Settings > User Management); with one, the filter is locked.
   const [local, setLocal] = useState(null);
-  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
-  const dept = locked ? myDept : (local ?? scope);
+  const locked = deptLocked ?? role === 'manager';
+  const dept = locked ? (D.depts.length === 1 ? D.depts[0].name : myDept) : (local ?? scope);
+  // Permissions: Export CSV needs training.export; a staff name opens their report only with staff-evals.report.
+  const go = (p, ...a) => (p === 'report' && !can('staff-evals.report') ? undefined : go0(p, ...a));
   const [mode, setMode] = useState('comp');
   const [minGap, setMinGap] = useState('1');
   const [q, setQ] = useState('');
@@ -55,7 +57,7 @@ export default function SMTraining({ data: D, model, go, role, scope, myDept, de
     <Page>
       {/* ===== TRAINING · Page header (scope, mode switch, min gap, search) ===== */}
       <PageHeader title="Training Needs" description="Who needs which training, ranked by gap severity × how important the skill is to the role"
-        actions={<Btn kind="primary" icon="icon-download" onClick={exportCsv}>Export CSV</Btn>}
+        actions={can('training.export') ? <Btn kind="primary" icon="icon-download" onClick={exportCsv}>Export CSV</Btn> : null}
         filters={<>
           <ScopeSelect depts={D.depts} value={dept} globalValue={scope} onChange={setLocal} locked={locked} />
           <div style={{ display: 'flex', background: 'rgba(118,118,128,.12)', borderRadius: '10px', padding: '3px', gap: '3px' }}>{seg('comp', 'By competency', 'icon-layers')}{seg('staff', 'By staff', 'icon-users')}</div>

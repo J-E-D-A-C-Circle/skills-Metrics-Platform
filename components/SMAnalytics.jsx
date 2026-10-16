@@ -2,7 +2,8 @@
 // =============================================================================
 // SMAnalytics.jsx · analytics dashboards, top training needs, report builder and scheduled reports
 // Screen / URL: /analytics (Overview), /analytics?tab=departments, /analytics?tab=heatmap, /training?tab=top-needs, /reports (Report Builder), /reports?tab=scheduled
-// Who sees it: admin (all); manager (Analytics + Training, own department only); Reports is admin only
+// Who sees it: each tab needs its own permission (Overview, Departments, Heatmap, Top training needs, Report builder,
+//   Scheduled reports); Export needs reports.export. Data covers only the departments the user can see
 // Used by: SkillMatrixApp.jsx (analytics + training pages)   Depends on: ./smUI, ./smModel, ./SMStaffReport (IndividualReportView, reportExport), xlsx
 // Sections (search for these markers): ANALYTICS · Constants, ANALYTICS · Helpers (toast, XML escape), ANALYTICS · Gap legend, ANALYTICS · Main component (view switcher), ANALYTICS · Page titles & descriptions, ANALYTICS · Render, ANALYTICS · Selected view (only one renders), ANALYTICS · Staff drawer & toast, ANALYTICS · Overview dashboard (/analytics), ANALYTICS · Overview render, ANALYTICS · Overview page header, ANALYTICS · KPI tiles, ANALYTICS · Proficiency by department card, ANALYTICS · Trend over time chart, ANALYTICS · Largest gaps by competency card, ANALYTICS · Gap distribution card, ANALYTICS · Departments tab (/analytics?tab=departments), ANALYTICS · Departments page header, ANALYTICS · Departments table, TRAINING · Top Training Needs (/training?tab=top-needs), TRAINING · Top needs page header, TRAINING · Top needs table, ANALYTICS · Heat grid (shared coloured grid), ANALYTICS · Heat grid column headers, ANALYTICS · Heat grid rows, ANALYTICS · Heat grid legend, ANALYTICS · Heatmap tab (/analytics?tab=heatmap), ANALYTICS · Heatmap · all departments view, ANALYTICS · Heatmap page header, ANALYTICS · Department x category grid, ANALYTICS · Heatmap · single department view, ANALYTICS · Heatmap page header + category filter, ANALYTICS · Person x competency grid, REPORTS · Report builder (/reports), REPORTS · Builder state, REPORTS · Rows from filters, REPORTS · Export, REPORTS · Type switch & preview columns, REPORTS · Render, REPORTS · Report builder page header, REPORTS · Build a report panel, REPORTS · Report type switch, REPORTS · Staff picker (individual) or filters (records / summary), REPORTS · Filters (date, gap band, source, status), REPORTS · Column picker (staff records only), REPORTS · Format picker & export button, REPORTS · Preview + recent exports column, REPORTS · Preview, REPORTS · Recent exports, REPORTS · Scheduled reports (/reports?tab=scheduled), REPORTS · Scheduled reports page header, REPORTS · Scheduled reports list card, REPORTS · New schedule form, REPORTS · Schedule rows (toggle / delete)
 // =============================================================================
@@ -43,12 +44,15 @@ function GapLegend({ D, counts, onPick }) {
 
 // ===== ANALYTICS · Main component (view switcher) =====
 // `view` comes from the URL tab (dashboard, departments, topneeds, heatmap, reports, schedules).
-// Managers are locked to their own department; admins can pick one here (defaults to the global scope).
+// D.depts / model only hold the departments this user can see (Settings > User Management); with one, the filter is locked.
+// can(key) = permission check: Build a report needs reports.view, Export needs reports.export, opening a person needs staff-evals.report.
 export default function SMAnalytics(props) {
-  const { data: D, model, go, view = 'dashboard', role, scope, myDept, deptLocked } = props;
+  const { data: D, model, go: go0, view = 'dashboard', role, scope, myDept, deptLocked, can = () => true } = props;
   const [local, setLocal] = useState(null);
-  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
-  const dept = locked ? myDept : (local ?? scope);
+  const locked = deptLocked ?? role === 'manager';
+  const dept = locked ? (D.depts.length === 1 ? D.depts[0].name : myDept) : (local ?? scope);
+  // Links to an individual report do nothing without "Open individual reports".
+  const go = (p, ...a) => (p === 'report' && !can('staff-evals.report') ? undefined : go0(p, ...a));
   const [drawer, setDrawer] = useState(null);
   const [toast, flash] = useToast();
   const staff = useMemo(() => inScope(model, dept), [model, dept]);
@@ -67,11 +71,11 @@ export default function SMAnalytics(props) {
   return (
     <Page>
       {/* ===== ANALYTICS · Selected view (only one renders) ===== */}
-      {view === 'dashboard' ? <Dashboard {...{ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }} /> : null}
+      {view === 'dashboard' ? <Dashboard {...{ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter, canReports: can('reports.view') }} /> : null}
       {view === 'departments' ? <Departments {...{ D, model, staff, dept, openStaff, title, desc, deptFilter }} /> : null}
       {view === 'topneeds' ? <TopNeeds {...{ D, staff, scopeLabel, openRecords, go, title, desc, deptFilter }} /> : null}
       {view === 'heatmap' ? <Heatmap {...{ D, model, staff, dept, scopeLabel, openRecords, go, title, desc, deptFilter, setLocal: locked ? null : setLocal }} /> : null}
-      {view === 'reports' ? <Reports {...{ D, model, dept, go, title, desc, deptFilter, flash }} /> : null}
+      {view === 'reports' ? <Reports {...{ D, model, dept, go, title, desc, deptFilter, flash, canExport: can('reports.export') }} /> : null}
       {view === 'schedules' ? <Schedules {...{ title, desc, flash }} /> : null}
       {/* ===== ANALYTICS · Staff drawer & toast ===== */}
       <StaffDrawer ctx={drawer} D={D} go={go} onClose={() => setDrawer(null)} />
@@ -81,7 +85,7 @@ export default function SMAnalytics(props) {
 }
 
 // ===== ANALYTICS · Overview dashboard (/analytics) =====
-function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter }) {
+function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, go, title, desc, deptFilter, canReports = true }) {
   const assessed = staff.filter(s => s.scored), outstanding = staff.filter(s => !s.scored), review = staff.filter(s => s.status === 'Submitted' || s.status === 'Auto-scored');
   const recs = staff.flatMap(s => s.comps.map(c => ({ s, c })));
   const avgGap = avg(recs.map(r => r.c.gap)), severe = recs.filter(r => r.c.gap >= 4);
@@ -104,7 +108,7 @@ function Dashboard({ D, model, staff, dept, scopeLabel, openStaff, openRecords, 
   return (
     <>
       {/* ===== ANALYTICS · Overview page header ===== */}
-      <PageHeader title={title} description={desc} actions={<Btn icon="icon-file-spreadsheet" onClick={() => go('reports')}>Build a report</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{D.cycle.name} · actual = latest scored result</span></>} />
+      <PageHeader title={title} description={desc} actions={canReports ? <Btn icon="icon-file-spreadsheet" onClick={() => go('reports')}>Build a report</Btn> : null} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{D.cycle.name} · actual = latest scored result</span></>} />
       {/* ===== ANALYTICS · KPI tiles ===== */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '12px' }}>
         <KpiTile label="Staff in scope" value={staff.length} sub={(dept === ALL ? D.depts.length + ' departments' : dept)} onClick={() => openStaff('Staff in scope', staff)} />
@@ -300,7 +304,7 @@ function Heatmap({ D, model, staff, dept, scopeLabel, openRecords, go, title, de
 }
 
 // ===== REPORTS · Report builder (/reports) =====
-function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
+function Reports({ D, model, dept, go, title, desc, deptFilter, flash, canExport = true }) {
   // ===== REPORTS · Builder state =====
   const [rtype, setRtype] = useState('individual');
   const [pid, setPid] = useState(null);
@@ -343,6 +347,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
   // ===== REPORTS · Export =====
   // CSV / Excel / JSON / XML download in the browser; PDF only shows a message (no file is made).
   const generate = () => {
+    if (!canExport) return;
     const stamp = new Date().toISOString().slice(0, 10);
     if (rtype === 'individual') {
       if (!rep) { flash('Pick a staff member first'); return; }
@@ -368,7 +373,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
   return (
     <>
       {/* ===== REPORTS · Report builder page header ===== */}
-      <PageHeader title={title} description={desc} actions={<Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff in scope</span></>} />
+      <PageHeader title={title} description={desc} actions={canExport ? <Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn> : null} filters={<>{deptFilter}<span style={{ fontSize: '12.5px', color: '#6b7280', marginLeft: 'auto' }}>{staff.length} staff in scope</span></>} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start' }}>
         {/* ===== REPORTS · Build a report panel ===== */}
         <Card title="Build a report" style={{ flex: '1 1 320px', maxWidth: '420px' }} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -413,7 +418,7 @@ function Reports({ D, model, dept, go, title, desc, deptFilter, flash }) {
               {['CSV', 'Excel', 'JSON', 'XML', 'PDF'].map(f => <button key={f} type="button" onClick={() => setFmt(f)} style={{ height: '30px', padding: '0 12px', borderRadius: '10px', cursor: 'pointer', font: '600 12px Inter,sans-serif', background: fmt === f ? '#e6f2ea' : '#fff', color: fmt === f ? '#0d3b2a' : '#4b5563', border: '1px solid ' + (fmt === f ? '#0d3b2a' : 'rgba(15,35,65,.14)') }}>{f}</button>)}
             </div>
           </div>
-          <Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn>
+          {canExport ? <Btn kind="primary" icon="icon-download" onClick={generate}>Export {fmt}</Btn> : <span style={{ fontSize: '12.5px', color: '#6b7280' }}>Preview only. You do not have permission to export reports.</span>}
         </Card>
         {/* ===== REPORTS · Preview + recent exports column ===== */}
         <div style={{ flex: '2 1 520px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '20px' }}>

@@ -2,7 +2,8 @@
 // =============================================================================
 // SMFormBuilder · Form library and drag-and-drop assessment form builder (build, score, preview, version)
 // Screen / URL: "/forms" (tabs inside the page: Build, Rubric & Scoring, Preview, Versions)
-// Who sees it: admin, creator (Forms is hidden from managers and staff in the sidebar)
+// Who sees it: users with any Forms permission. Without "Edit forms" the builder is view-only; New form, Publish,
+//   Duplicate and Archive each need their own permission (props.can, Settings > User Management)
 // Used by: SkillMatrixApp.jsx (page "forms"); SMCycles.jsx imports loadForms/saveForms/newForm/makeQuestion/loadBank/QBANK_KEY
 //   Depends on: smUI (PageHeader, Btn), ui/select (Select), SMFormBuilder.module.css, props.data (framework, BANKS, PROF, IMP, depts)
 // Sections (search for these markers): FORMS · Constants, Likert scale helpers, Likert scale display, Question factory,
@@ -181,8 +182,12 @@ class SMFormBuilder extends React.Component {
   // Every state change saves the forms list to localStorage "skm-forms" when it has changed.
   setState(u, cb) { return super.setState(u, () => { const fm = this.state.forms; if (fm && fm !== this._saved) { this._saved = fm; try { localStorage.setItem(KEY, JSON.stringify(fm)); } catch (e) {} } cb && cb(); }); }
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  // ===== FORMS · Permissions =====
+  // props.can(key) from SkillMatrixApp.jsx; every change to a form goes through edit(), so "View forms" only = read-only builder.
+  can(k) { return (this.props.can || (() => true))(k); }
   // Editing a Published/Archived form starts a new Draft version (version number +1, logged in history).
   edit(fn) {
+    if (!this.can('forms.edit')) { this.flash('View only. You do not have permission to edit forms.'); return; }
     this.setState(s => ({ forms: s.forms.map((f, i) => {
       if (i !== s.sel) return f; let g = fn(f);
       if (f.status !== 'Draft') { const v = Math.max(...f.history.map(h => h.v), f.version) + 1; g = { ...g, status: 'Draft', version: v, history: [...g.history, { v, status: 'Draft', date: today(), note: 'New draft based on v' + f.version, items: null }] }; }
@@ -333,16 +338,17 @@ class SMFormBuilder extends React.Component {
       // ===== FORMS · Form picker, new form, name & status =====
       selValue: String(s.sel), onPickForm: e => this.setState({ sel: +e.target.value, selQ: null, ans: {}, tried: false, submitMsg: '' }),
       formOptions: s.forms.map((x, i) => ({ value: String(i), label: x.name + ' (' + x.status + ')' })),
-      newForm: () => { const nf = { id: 'f' + Date.now(), name: 'Untitled assessment form', status: 'Draft', version: 1, items: [blank('section', { text: 'Section 1' })], scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: 'Created', items: null }] };
+      newForm: () => { if (!this.can('forms.create')) return; const nf = { id: 'f' + Date.now(), name: 'Untitled assessment form', status: 'Draft', version: 1, items: [blank('section', { text: 'Section 1' })], scoring: { pass: 60, mode: 'weighted', tiers: TIERS() }, history: [{ v: 1, status: 'Draft', date: today(), note: 'Created', items: null }] };
         this.setState({ forms: [...s.forms, nf], sel: s.forms.length, selQ: null, tab: 'build', ans: {} }); },
-      formName: f.name, onFormName: e => { const val = e.target.value; this.setState(st => ({ forms: st.forms.map((x, i) => i === st.sel ? { ...x, name: val } : x) })); },
+      formName: f.name, onFormName: e => { if (!this.can('forms.edit')) return; const val = e.target.value; this.setState(st => ({ forms: st.forms.map((x, i) => i === st.sel ? { ...x, name: val } : x) })); },
       status: f.status, version: f.version, statusBg: SC[f.status][0], statusFg: SC[f.status][1], qCountText: qCount + ' questions · ' + items.filter(q => q.type === 'section').length + ' sections',
       lockedNote: f.status === 'Published' ? 'v' + f.version + ' is published and locked. Any change you make starts draft v' + (Math.max(...f.history.map(h => h.v)) + 1) + '.' : f.status === 'Archived' ? 'This form is archived. Editing it creates a new draft.' : '',
+      mayCreate: this.can('forms.create'), mayEdit: this.can('forms.edit'), mayPublish: this.can('forms.publish'), mayArchive: this.can('forms.archive'),
       publishBg: f.status === 'Draft' ? '#16a34a' : '#9ca3af', publishText: f.status === 'Draft' ? 'Publish v' + f.version : 'Published',
       // ===== FORMS · Save draft & publish =====
       // Publish needs at least one question and a scoring option on every choice question; older published versions become "Superseded".
       saveDraft: () => { if (f.status !== 'Draft') { this.flash('Nothing to save. Make an edit to start a new draft.'); return; } this.flash('Draft v' + f.version + ' saved'); },
-      publish: () => { if (f.status !== 'Draft') return; if (!qCount) { this.flash('Add at least one question before publishing'); return; }
+      publish: () => { if (!this.can('forms.publish')) return; if (f.status !== 'Draft') return; if (!qCount) { this.flash('Add at least one question before publishing'); return; }
         const bad = items.find(q => (q.type === 'single' || q.type === 'multi') && !q.options.some(o => +o.score > 0) && q.weight > 0);
         if (bad) { this.setState({ selQ: bad.id, tab: 'build' }); this.flash('Q' + numOf[bad.id] + ' needs at least one option with a score'); return; }
         this.setState(st => ({ forms: st.forms.map((x, i) => { if (i !== st.sel) return x;
@@ -393,9 +399,9 @@ class SMFormBuilder extends React.Component {
       // ===== FORMS · Version history actions =====
       history: [...f.history].sort((a, b) => b.v - a.v).map(h => ({ ...h, bg: SC[h.status][0], fg: SC[h.status][1], canRestore: !!h.items && h.v !== f.version,
         restore: () => { this.edit(x => ({ ...x, items: clone(h.items).map(q => ({ ...q })), scoring: h.scoring ? clone(h.scoring) : x.scoring })); this.setState({ tab: 'build', selQ: null }); this.flash('Restored v' + h.v + ' as a new draft'); } })),
-      duplicate: () => { const nf = { ...clone(f), id: 'f' + Date.now(), name: f.name + ' (copy)', status: 'Draft', version: 1, history: [{ v: 1, status: 'Draft', date: today(), note: 'Duplicated from ' + f.name + ' v' + f.version, items: null }] };
+      duplicate: () => { if (!this.can('forms.create')) return; const nf = { ...clone(f), id: 'f' + Date.now(), name: f.name + ' (copy)', status: 'Draft', version: 1, history: [{ v: 1, status: 'Draft', date: today(), note: 'Duplicated from ' + f.name + ' v' + f.version, items: null }] };
         this.setState({ forms: [...s.forms, nf], sel: s.forms.length, tab: 'build', selQ: null }); this.flash('Duplicated as a new draft'); },
-      archive: () => { this.setState(st => ({ forms: st.forms.map((x, i) => i === st.sel ? { ...x, status: 'Archived', history: x.history.map(h => h.v === x.version ? { ...h, status: 'Archived' } : h) } : x) })); this.flash('Form archived'); },
+      archive: () => { if (!this.can('forms.archive')) return; this.setState(st => ({ forms: st.forms.map((x, i) => i === st.sel ? { ...x, status: 'Archived', history: x.history.map(h => h.v === x.version ? { ...h, status: 'Archived' } : h) } : x) })); this.flash('Form archived'); },
       toast: s.toast,
     };
   }
@@ -413,7 +419,7 @@ class SMFormBuilder extends React.Component {
             <Select value={__v.selValue} onChange={__v.onPickForm} aria-label={"Form"} style={{ height: "36px", maxWidth: "280px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "500 13px Inter,sans-serif", background: "#fff", color: "#111827" }}>
               {(__v.formOptions || []).map((o, $index) => (<option key={$index} value={o?.value}>{o?.label}</option>))}
             </Select>
-            <Btn kind={"primary"} icon={"icon-file-plus"} onClick={__v.newForm}>New form</Btn>
+            {__v.mayCreate ? <Btn kind={"primary"} icon={"icon-file-plus"} onClick={__v.newForm}>New form</Btn> : null}
           </>} />
         {/* ===== FORMS · Form toolbar (name, status, Save draft, Publish) ===== */}
         <div style={{ background: "rgba(255,255,255,.62)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", border: "1px solid rgba(255,255,255,.85)", borderRadius: "22px", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)" }}>
@@ -422,8 +428,8 @@ class SMFormBuilder extends React.Component {
             <span style={{ font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "4px 10px", background: __v.statusBg, color: __v.statusFg }}>{__v.status} · v{__v.version}</span>
             <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{__v.qCountText}</span>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginLeft: "auto" }}>
-              <button onClick={__v.saveDraft} style={{ height: "34px", padding: "0 14px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#374151", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Save draft</button>
-              <button onClick={__v.publish} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.publishBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-rocket"} style={{ fontSize: "14px" }}></i>{__v.publishText}</button>
+              {__v.mayEdit ? <button onClick={__v.saveDraft} style={{ height: "34px", padding: "0 14px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#374151", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Save draft</button> : <span style={{ fontSize: "12.5px", color: "#6b7280", alignSelf: "center" }}>View only</span>}
+              {__v.mayPublish ? <button onClick={__v.publish} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 16px", border: "0", borderRadius: "999px", background: __v.publishBg, color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-rocket"} style={{ fontSize: "14px" }}></i>{__v.publishText}</button> : null}
             </div>
           </div>
           {/* ===== FORMS · Locked (published) notice ===== */}
@@ -974,8 +980,8 @@ class SMFormBuilder extends React.Component {
                 <div style={{ fontSize: "12.5px", color: "#6b7280", marginTop: "4px" }}>Published versions are locked. Editing one starts a new draft.</div>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={__v.duplicate} style={{ height: "34px", padding: "0 12px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#374151", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Duplicate form</button>
-                <button onClick={__v.archive} style={{ height: "34px", padding: "0 12px", border: "1px solid #fecaca", borderRadius: "10px", background: "#fff", color: "#b91c1c", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Archive</button>
+                {__v.mayCreate ? <button onClick={__v.duplicate} style={{ height: "34px", padding: "0 12px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#374151", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Duplicate form</button> : null}
+                {__v.mayArchive ? <button onClick={__v.archive} style={{ height: "34px", padding: "0 12px", border: "1px solid #fecaca", borderRadius: "10px", background: "#fff", color: "#b91c1c", font: "500 13px Inter,sans-serif", cursor: "pointer" }}>Archive</button> : null}
               </div>
             </div>
             {/* ===== FORMS · Version row ===== */}
@@ -987,7 +993,7 @@ class SMFormBuilder extends React.Component {
                   <div style={{ fontSize: "13.5px", color: "#111827" }}>{h?.note}</div>
                   <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>{h?.date}</div>
                 </div>
-                {(h?.canRestore) ? (<>
+                {(h?.canRestore && __v.mayEdit) ? (<>
                   <button onClick={h?.restore} style={{ height: "32px", padding: "0 12px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", background: "#fff", color: "#0d3b2a", font: "500 12.5px Inter,sans-serif", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}><i className={"icon-rotate-ccw"} style={{ fontSize: "13px" }}></i>Restore as draft</button>
                 </>) : null}
               </div>

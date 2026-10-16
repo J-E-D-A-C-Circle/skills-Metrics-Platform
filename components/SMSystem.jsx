@@ -3,16 +3,17 @@
 // SMSystem · Settings area: General settings, User Management, Audit Log, plus Help & Guides
 // Screen / URL: "/settings" (General), "/settings?tab=users" (User Management), "/settings?tab=audit" (Audit Log),
 //   "/help" (Help & Guides) and "/help?tab=ratings" (Rating Scales, moved from the Skill Framework). Old URLs /users, /audit and /system redirect here.
-// Who sees it: admin (General, Users, Audit Log); everyone (Help & Guides)
+// Who sees it: General, User Management and Audit Log each need their own permission; every button in User Management
+//   (Add, Edit, Change roles & permissions, Reset password, Delete, Export audit log) is a separate permission; everyone sees Help & Guides
 // Used by: SkillMatrixApp.jsx (rendered when the page group is "system", with props.view)
 //   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), smAccess (access checkboxes), SMFramework (RatingScales cards), ui/select (Select), SMSystem.module.css
-// Sections (search for these markers): USERS · Seed data, AUDIT LOG · Sample log entries, HELP · FAQ content,
+// Sections (search for these markers): USERS · Seed data, AUDIT LOG · Sample log entries, AUDIT LOG · Saved entries (permission and account changes), HELP · FAQ content,
 //   USERS · Storage & helpers, SETTINGS · Main component, SETTINGS · View values, USERS · Search & role filter,
-//   USERS · Add / edit user dialog, USERS · Access checkboxes (what the user can open) & department scope, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
+//   USERS · Add / edit user dialog, USERS · Permission rules (who may grant what), USERS · Tick box, USERS · Permission ticks (what the user can open and do) & department scope, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
 //   AUDIT LOG · Filters, rows & CSV export, SETTINGS · General settings values, HELP · Quick links, FAQ & support ticket,
 //   HELP · Rating Scales tab,
 //   SETTINGS · Render, SETTINGS · Page header, USERS · User Management tab, USERS · "User created" card, USERS · Users table,
-//   USERS · Access checkboxes & department scope, USERS · Delete confirmation dialog, AUDIT LOG · Audit Log tab, SETTINGS · General tab, HELP · Help & Guides tab, Toast
+//   USERS · Permissions (what the user can open and do) & department scope, USERS · Delete confirmation dialog, AUDIT LOG · Audit Log tab, SETTINGS · General tab, HELP · Help & Guides tab, Toast
 // =============================================================================
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -20,7 +21,7 @@ import __css from './SMSystem.module.css';
 import { PageHeader } from './smUI';
 import { RatingScales } from './SMFramework';
 import { Select } from './ui/select';
-import { ACCESS_AREAS, SCOPES, defaultAccess, defaultScope, accessOf, scopeOf, isCustom } from './smAccess';
+import { PERM_AREAS, PERM_INFO, FREE_TO_GRANT, SCOPES, defaultPerms, defaultScope, permsOf, scopeOf, deptsOf, visibleDepts, withKey, withoutKey, isCustom, permSummary } from './smAccess';
 
 
 // ===== USERS · Seed data (roles & starting user list) =====
@@ -75,12 +76,35 @@ const STATUSES = ['Active', 'Must change password', 'Suspended'];
 const isAdmin = u => u.role === 'Administrator';
 // Username of whoever is signed in (the seeded administrator when nobody has signed in yet).
 function meName() { try { return localStorage.getItem('skm-me') || 'denzilasiam.adjei'; } catch (e) { return 'denzilasiam.adjei'; } }
+// ===== AUDIT LOG · Saved entries (permission and account changes) =====
+// Changes made in User Management are written to localStorage "skm-audit" (newest first, last 200 kept) and shown
+// above the sample entries in the Audit Log tab.
+const AKEY = 'skm-audit';
+function loadAudit() { try { const a = JSON.parse(localStorage.getItem(AKEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function addAudit(user, type, event) {
+  const t = new Date(), pad = n => String(n).padStart(2, '0');
+  try { localStorage.setItem(AKEY, JSON.stringify([{ time: t.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()), user, type, event }, ...loadAudit()].slice(0, 200))); } catch (e) {}
+}
+// Plain-English list of what changed between two permission lists, e.g. "added Confirm & reopen results; removed Export results".
+function permDiff(before, after) {
+  const name = k => PERM_INFO[k].areaLabel + ': ' + PERM_INFO[k].label;
+  const add = after.filter(k => !before.includes(k)).map(name), del = before.filter(k => !after.includes(k)).map(name);
+  return [add.length ? 'added ' + add.join(', ') : '', del.length ? 'removed ' + del.join(', ') : ''].filter(Boolean).join('; ');
+}
+const scopeText = (sc, depts) => sc === 'some' ? depts.join(', ') : (SCOPES.find(x => x[0] === sc) || [, sc])[1];
 const TYPEC = { Auth: ['#e0e7ff', '#3730a3'], Assessment: ['#dcfce7', '#15803d'], Integrity: ['#fee2e2', '#b91c1c'], Config: ['#fef3c7', '#92400e'], Export: ['#e0f2fe', '#0369a1'] };
+// ===== USERS · Tick box (used by the permission cards and department ticks) =====
+// on = ticked, mixed = some of the area's actions ticked (shows a dash), small = action-row size.
+function PermBox({ on, mixed, small }) {
+  const sz = small ? '16px' : '18px', fill = on || mixed;
+  return <span style={{ flex: 'none', width: sz, height: sz, marginTop: small ? '1px' : '0', borderRadius: '5px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: fill ? '#15904c' : '#fff', border: fill ? '1px solid #15904c' : '1px solid rgba(15,35,65,.3)', color: '#fff' }}>
+    {on ? <i className="icon-check" style={{ fontSize: small ? '11px' : '12px' }}></i> : mixed ? <span style={{ width: '8px', height: '2px', borderRadius: '1px', background: '#fff' }}></span> : null}</span>;
+}
 // ===== SETTINGS · Main component (state & helpers) =====
 // st = General settings values (kept in memory only, not saved to storage).
 class SMSystem extends React.Component {
   state = { toast: '', uq: '', uRole: 'All', users: loadUsers(),
-    adding: false, editId: null, nStatus: 'Active', confirmDel: null, nName: '', nEmail: '', nDept: 'IT Department', nRole: 'Participant', nAccess: defaultAccess('Participant'), nScope: defaultScope('Participant'), nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, mustChange: true, sendEmail: true, created: null, nErr: '', aType: 'All',
+    adding: false, editId: null, nStatus: 'Active', confirmDel: null, nName: '', nEmail: '', nDept: 'IT Department', nRole: 'Participant', nPerms: defaultPerms('Participant'), nScope: defaultScope('Participant'), nDepts: [], nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, mustChange: true, sendEmail: true, created: null, nErr: '', aType: 'All',
     st: { duration: 45, start: '09:00', end: '17:00', tabLimit: 3, retention: '5', mfa: true, offline: true, encrypt: true, notify: true, anon: true }, sDirty: false,
     hq: '', open: { 0: true }, tSubject: '', tMsg: '' };
   // Writes the seeded users to "skm-users" on first visit so other screens (e.g. Sign In) see the same accounts.
@@ -89,8 +113,26 @@ class SMSystem extends React.Component {
   setState(u, cb) { return super.setState(u, () => { this.persistUsers(); cb && cb(); }); }
   persistUsers() { const u = this.state.users; if (u && u !== this._savedUsers) { this._savedUsers = u; try { localStorage.setItem(UKEY, JSON.stringify(u)); } catch (e) {} } }
   // One pop-up for both: Add user starts empty, Edit user starts from the chosen row.
-  openAdd() { this.setState({ adding: true, editId: null, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, nDept: 'IT Department', nRole: 'Participant', nAccess: defaultAccess('Participant'), nScope: defaultScope('Participant'), nStatus: 'Active', tried: false, nErr: '', created: null }); }
-  openEdit(u) { this.setState({ adding: true, editId: u.id, nName: u.name, nEmail: u.email, nUser: u.username || '', userTouched: true, emailTouched: true, nDept: u.dept, nRole: u.role, nAccess: accessOf(u), nScope: scopeOf(u), nStatus: u.status, tried: false, nErr: '', created: null }); }
+  openAdd() { this.setState({ adding: true, editId: null, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, nDept: 'IT Department', nRole: 'Participant', nPerms: this.roleDefaults('Participant', []), nScope: defaultScope('Participant'), nDepts: [], nStatus: 'Active', tried: false, nErr: '', created: null }); }
+  openEdit(u) { this.setState({ adding: true, editId: u.id, nName: u.name, nEmail: u.email, nUser: u.username || '', userTouched: true, emailTouched: true, nDept: u.dept, nRole: u.role, nPerms: permsOf(u), nScope: scopeOf(u), nDepts: deptsOf(u), nStatus: u.status, tried: false, nErr: '', created: null }); }
+  // ===== USERS · Permission rules (who may grant what) =====
+  // mayGrant(k): you can only give (or take away) a permission you hold yourself, so nobody can hand out more than they have.
+  // permLocked(): the permission ticks are read-only when you edit your own account, or lack "Change roles & permissions".
+  // roleDefaults(role, current): the role's usual ticks you are allowed to give, plus any ticks you cannot change.
+  mayGrant(k) { return FREE_TO_GRANT.includes(k) || (this.props.can ? this.props.can(k) : true); }
+  isSelf() { const u = this.state.editId != null ? this.state.users.find(x => x.id === this.state.editId) : null; return !!u && (u.username || '') === meName(); }
+  permLocked() { return this.isSelf() || !this.mayGrant('settings.access'); }
+  roleDefaults(role, current) { return [...defaultPerms(role).filter(k => this.mayGrant(k)), ...current.filter(k => !this.mayGrant(k))].filter((k, i, a) => a.indexOf(k) === i); }
+  togglePerm(k) {
+    if (this.permLocked() || !this.mayGrant(k)) return;
+    this.setState(st => ({ nPerms: st.nPerms.includes(k) ? withoutKey(st.nPerms, k) : withKey(st.nPerms, k).filter(x => st.nPerms.includes(x) || this.mayGrant(x)) }));
+  }
+  // Area tick: all of the area's permissions you may give on, or all of them off.
+  toggleArea(keys, allOn) {
+    if (this.permLocked()) return;
+    const mine = keys.filter(k => this.mayGrant(k));
+    this.setState(st => ({ nPerms: allOn ? st.nPerms.filter(k => !mine.includes(k)) : [...st.nPerms, ...mine.filter(k => !st.nPerms.includes(k))] }));
+  }
   closeModal() { this.setState({ adding: false, editId: null, tried: false, nErr: '' }); }
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
   // ===== SETTINGS · View values (renderVals) =====
@@ -101,7 +143,10 @@ class SMSystem extends React.Component {
     const rawView = this.props.view;
     const view = (rawView === 'system' ? 'settings' : rawView) || 'users';
     const q = s.uq.trim().toLowerCase();
-    const users = s.users.filter(u => (s.uRole === 'All' || u.role === s.uRole) && (!q || (u.name + u.email).toLowerCase().includes(q)));
+    // Editor's own department visibility: someone limited to some departments only sees (and can only give) those.
+    const meU = s.users.find(u => (u.username || '') === meName()), editorVis = meU ? visibleDepts(meU, meU.dept) : null, actor = meU ? meU.name : 'Administrator';
+    const may = k => this.mayGrant(k);
+    const users = s.users.filter(u => (!editorVis || editorVis.includes(u.dept)) && (s.uRole === 'All' || u.role === s.uRole) && (!q || (u.name + u.email).toLowerCase().includes(q)));
     // A work email can be typed in full, or just the part before the @ (completed with @dvla.gov.gh).
     const rawEmail = s.nEmail.trim(), email = (rawEmail && !rawEmail.includes('@') ? rawEmail + DOMAIN : rawEmail).toLowerCase();
     const emailOk = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email), uname = s.nUser.trim().toLowerCase();
@@ -113,19 +158,19 @@ class SMSystem extends React.Component {
     // adminCount is used for the last-admin guard; me is the signed-in username (self-delete block).
     const adminCount = s.users.filter(isAdmin).length, me = meName();
     const canAdd = nameOk && emailOk && userOk && !userTaken && !emailTaken && (editing || passOk);
-    const logs = LOGS.filter(l => s.aType === 'All' || l[2] === s.aType);
+    const logs = [...loadAudit().map(e => [e.time, e.user, e.type, e.event]), ...LOGS].filter(l => s.aType === 'All' || l[2] === s.aType);
     const setSt = (k, v) => this.setState({ st: { ...this.state.st, [k]: v }, sDirty: true });
     const hq = s.hq.trim().toLowerCase(), faqs = FAQ.map((f, i) => ({ f, i })).filter(({ f }) => !hq || (f[0] + f[1]).toLowerCase().includes(hq));
     const canSend = s.tSubject.trim() && s.tMsg.trim().length > 5;
     // ===== SETTINGS · Values handed to the screen =====
     return {
-      headerActions: view === 'users' ? <button onClick={() => this.openAdd()} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-user-plus"} style={{ fontSize: "14px" }}></i>Add user</button>
+      headerActions: view === 'users' ? (!may('settings.add-user') ? null : <button onClick={() => this.openAdd()} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-user-plus"} style={{ fontSize: "14px" }}></i>Add user</button>)
         : view === 'settings' ? <button onClick={() => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); }} style={{ height: "36px", padding: "0 18px", border: "0", borderRadius: "999px", background: s.sDirty ? '#15904c' : '#a3acb9', color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>{s.sDirty ? 'Save settings' : 'All changes saved'}</button> : null,
       title: { users: 'User Management', audit: 'Audit Logs', settings: 'System Settings', help: 'Help & Guides', ratings: 'Help & Guides' }[view],
       subtitle: { users: 'Manage who can sign in and what each role can do, across every department', audit: 'A tamper-evident record of sign-ins, assessments, integrity events and changes', settings: 'Platform-wide defaults for assessments, security and data', help: 'Answers about the timed assessment, scoring and your results', ratings: 'The proficiency, importance, gap and scoring scales used across the platform' }[view],
       isUsers: view === 'users', isAudit: view === 'audit', isSettings: view === 'settings', isHelp: view === 'help', isRatings: view === 'ratings',
       // ===== USERS · Search & role filter =====
-      uq: s.uq, onUq: e => this.setState({ uq: e.target.value }), uRole: s.uRole, onURole: e => this.setState({ uRole: e.target.value }), roleNames: ROLES, deptNames: d.depts.map(x => x.name),
+      uq: s.uq, onUq: e => this.setState({ uq: e.target.value }), uRole: s.uRole, onURole: e => this.setState({ uRole: e.target.value }), roleNames: ROLES, deptNames: d.depts.map(x => x.name).filter(n => !editorVis || editorVis.includes(n)),
       // ===== USERS · Add / edit user dialog values =====
       adding: s.adding, toggleAdd: () => this.closeModal(), editing, nStatus: s.nStatus, onNStatus: e => this.setState({ nStatus: e.target.value }), statusNames: STATUSES,
       mTitle: editing ? 'Edit user' : 'Add a new user', mSub: editing ? 'Changes apply the next time they sign in. Use Reset password to change their password.' : 'They sign in with a username or email, plus a temporary password',
@@ -136,13 +181,24 @@ class SMSystem extends React.Component {
       nameHint: s.tried && !nameOk ? (s.nName.trim() ? 'Enter both the first and last name, e.g. Isaac Addy' : 'Enter the full name') : 'First and last name, as held by HR', nameHintColor: s.tried && !nameOk ? '#b91c1c' : '#6b7280',
       emailBorder: (rawEmail && (!emailOk || emailTaken)) || (s.tried && !emailOk) ? '#fca5a5' : 'rgba(15,35,65,.14)',
       emailHint: !rawEmail ? (s.tried ? 'Enter a work email' : 'Filled in from the name. You can type just the part before the @.') : !emailOk ? 'Use a work email like isaac.addy@dvla.gov.gh' : emailTaken ? 'A user with this email already exists' : !rawEmail.includes('@') ? 'Will be saved as ' + email : 'Looks good',
-      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => { const r = e.target.value; this.setState({ nRole: r, nAccess: defaultAccess(r), nScope: defaultScope(r) }); },
-      // ===== USERS · Access checkboxes (what the user can open) & department scope =====
-      // Picking a role ticks its usual boxes; the admin can then tick or untick any of them (a user can mix roles, e.g. admin + take assessments).
-      accessGroups: ACCESS_AREAS.map(g => ({ group: g.group, items: g.items.map(it => { const on = s.nAccess.includes(it.key); return { ...it, on,
-        toggle: () => this.setState({ nAccess: on ? this.state.nAccess.filter(k => k !== it.key) : [...this.state.nAccess, it.key] }) }; }) })),
-      accessCount: s.nAccess.length, nScope: s.nScope, scopeOpts: SCOPES.map(([v, label]) => ({ v, label, on: s.nScope === v, pick: () => this.setState({ nScope: v }) })),
-      resetAccess: () => this.setState({ nAccess: defaultAccess(s.nRole), nScope: defaultScope(s.nRole) }),
+      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => { if (this.permLocked()) return; const r = e.target.value; this.setState({ nRole: r, nPerms: this.roleDefaults(r, s.nPerms), nScope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), nDepts: [] }); },
+      // Edit user: details need "Edit users"; role and ticks need "Change roles & permissions" (never on your own account).
+      detailsLocked: editing && !may('settings.edit-user'), roleLocked: this.permLocked(),
+      // ===== USERS · Permission ticks (what the user can open and do) & department scope =====
+      // One card per area (Assessment Cycles, Forms ...) with a tick for each action. Picking a role ticks its usual set;
+      // any single tick can then be changed. Ticks you may not give are greyed out (see USERS · Permission rules).
+      permLocked: this.permLocked(), permLockedText: this.isSelf() ? 'You cannot change your own permissions. Another user with "Change roles & permissions" must do it.' : 'You can see these permissions but not change them. That needs "Change roles & permissions".',
+      permGroups: [...new Set(PERM_AREAS.map(a => a.group))].map(group => ({ group, areas: PERM_AREAS.filter(a => a.group === group).map(a => {
+        const keys = a.actions.map(([x]) => a.area + '.' + x), n = keys.filter(k => s.nPerms.includes(k)).length;
+        return { area: a.area, label: a.label, icon: a.icon, count: n + ' of ' + keys.length, on: n === keys.length, mixed: n > 0 && n < keys.length, toggle: () => this.toggleArea(keys, n === keys.length),
+          items: a.actions.map(([x, label, desc]) => { const k = a.area + '.' + x; return { k, label, desc, on: s.nPerms.includes(k), locked: this.permLocked() || !may(k), toggle: () => this.togglePerm(k) }; }) }; }) })),
+      permCount: s.nPerms.length + ' of ' + Object.keys(PERM_INFO).length + ' ticked',
+      resetAccess: () => { if (this.permLocked()) return; this.setState({ nPerms: this.roleDefaults(s.nRole, s.nPerms), nScope: editorVis && defaultScope(s.nRole) === 'all' ? 'own' : defaultScope(s.nRole), nDepts: [] }); },
+      clearAccess: () => { if (this.permLocked()) return; this.setState({ nPerms: s.nPerms.filter(k => !may(k)) }); },
+      // Departments they can see: All (only if you see all yourself), Own department, or Selected departments (ticks below).
+      nScope: s.nScope, scopeOpts: SCOPES.map(([v, label]) => { const off = this.permLocked() || (v === 'all' && !!editorVis); return { v, label, on: s.nScope === v, off, pick: () => { if (!off) this.setState({ nScope: v }); } }; }),
+      deptPicks: s.nScope === 'some' ? d.depts.map(x => x.name).filter(n => !editorVis || editorVis.includes(n)).map(n => { const on = s.nDepts.includes(n); return { n, on,
+        toggle: () => { if (!this.permLocked()) this.setState({ nDepts: on ? this.state.nDepts.filter(x => x !== n) : [...this.state.nDepts, n] }); } }; }) : null,
       nSaveBg: 'linear-gradient(180deg,#2fb36b,#15904c)',
       nUser: s.nUser, onNUser: e => this.setState({ nUser: e.target.value.replace(/\s/g, '').toLowerCase(), userTouched: true, nErr: '' }),
       userBorder: (uname && (!userOk || userTaken)) || (s.tried && !userOk) ? '#fca5a5' : 'rgba(15,35,65,.14)',
@@ -162,18 +218,28 @@ class SMSystem extends React.Component {
           // Last-admin guard: the only Administrator cannot be given another role or be suspended.
           if (isAdmin(editUser) && adminCount === 1 && s.nRole !== 'Administrator') { this.setState({ nErr: editUser.name + ' is the only Administrator. Make someone else an Administrator first.' }); return; }
           if (isAdmin(editUser) && adminCount === 1 && s.nStatus === 'Suspended') { this.setState({ nErr: 'The only Administrator cannot be suspended.' }); return; }
-          // Lock-out guard: the only Administrator must keep Settings & User Management, or nobody could manage users.
-          if (isAdmin(editUser) && adminCount === 1 && !s.nAccess.includes('settings')) { this.setState({ nErr: editUser.name + ' is the only Administrator, so they must keep Settings & User Management.' }); return; }
-          const next = { ...editUser, name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, access: s.nAccess, scope: s.nScope, status: s.nStatus, mustChange: s.nStatus === 'Must change password' };
+          if (s.nScope === 'some' && !s.nDepts.length) { this.setState({ nErr: 'Tick at least one department under Selected departments.' }); return; }
+          const { access: _old, ...base } = editUser;
+          const next = { ...base, name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [], status: s.nStatus, mustChange: s.nStatus === 'Must change password' };
+          // Lock-out guard: at least one active user must keep "Change roles & permissions", or nobody could manage access again.
+          const after = s.users.map(x => x.id === editUser.id ? next : x);
+          if (!after.some(x => x.status !== 'Suspended' && permsOf(x).includes('settings.access') && permsOf(x).includes('settings.users'))) { this.setState({ nErr: 'At least one active user must keep "View users" and "Change roles & permissions", or nobody could manage access.' }); return; }
+          // Audit log: record role, permission and department changes.
+          const pd = permDiff(permsOf(editUser), next.perms);
+          if (editUser.role !== next.role) addAudit(actor, 'Config', 'Changed role: ' + next.name + ' → ' + next.role);
+          if (pd) addAudit(actor, 'Config', 'Changed permissions for ' + next.name + ': ' + pd);
+          if (scopeText(scopeOf(editUser), deptsOf(editUser)) !== scopeText(next.scope, next.depts)) addAudit(actor, 'Config', 'Changed departments ' + next.name + ' can see: ' + scopeText(next.scope, next.depts));
           // Keep the signed-in person signed in if they renamed their own username.
           if ((editUser.username || '') === me && uname !== me) { try { localStorage.setItem('skm-me', uname); } catch (e) {} }
-          this.setState({ users: s.users.map(x => x.id === editUser.id ? next : x), adding: false, editId: null, tried: false, nErr: '' });
+          this.setState({ users: after, adding: false, editId: null, tried: false, nErr: '' });
           this.flash('Changes saved for ' + next.name);
           return;
         }
         // New user: added to the top of the list; the "User created" card then shows the sign-in details once.
-        const u = { id: Date.now(), name: nameParts.join(' '), email, username: uname, password: s.nPass, mustChange: s.mustChange, dept: s.nDept, role: s.nRole, access: s.nAccess, scope: s.nScope, status: s.mustChange ? 'Must change password' : 'Active', last: 'Never signed in' };
+        if (s.nScope === 'some' && !s.nDepts.length) { this.setState({ nErr: 'Tick at least one department under Selected departments.' }); return; }
+        const u = { id: Date.now(), name: nameParts.join(' '), email, username: uname, password: s.nPass, mustChange: s.mustChange, dept: s.nDept, role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [], status: s.mustChange ? 'Must change password' : 'Active', last: 'Never signed in' };
         const note = (s.sendEmail ? 'Sign-in details have been emailed to ' + u.email + '. ' : 'Share these details with them securely. ') + (s.mustChange ? 'They will be asked to set their own password the first time they sign in.' : 'They can sign in with this password straight away.');
+        addAudit(actor, 'Config', 'Created user ' + u.name + ' (' + u.role + ', ' + permSummary(u) + ', ' + scopeText(u.scope, u.depts) + ')');
         this.setState({ users: [u, ...s.users], adding: false, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, nErr: '', created: { ...u, title: u.name + ' has been added', note } });
         this.flash('User created' + (s.sendEmail ? ', details emailed' : '')); },
       created: s.created, dismissCreated: () => this.setState({ created: null }),
@@ -181,23 +247,32 @@ class SMSystem extends React.Component {
       trySignIn: () => go('signin'),
       // ===== USERS · Table rows & row actions =====
       users: users.map(u => ({ ...u, initials: u.name.split(' ').map(x => x[0]).slice(0, 2).join(''), sBg: u.status === 'Active' ? '#dcfce7' : u.status === 'Suspended' ? '#fee2e2' : '#fef3c7', sFg: u.status === 'Active' ? '#15803d' : u.status === 'Suspended' ? '#b91c1c' : '#92400e', username: u.username || '—',
-        reset: () => { const p = genPass(); this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, password: p, mustChange: true, status: x.status === 'Suspended' ? 'Suspended' : 'Must change password' } : x), created: { ...u, password: p, title: 'Password reset for ' + u.name, note: 'Give ' + u.name.split(' ')[0] + ' this temporary password. They will set a new one the next time they sign in.' } }); this.flash('Temporary password generated'); },
+        // Row buttons follow the signed-in user's permissions; your own role and ticks cannot be changed from here.
+        self: (u.username || '') === me, mayEdit: may('settings.edit-user') || may('settings.access'), mayReset: may('settings.password'), mayDel: may('settings.delete-user'),
+        mayRole: may('settings.access') && (u.username || '') !== me, mayStatus: may('settings.edit-user') && (u.username || '') !== me, summary: permSummary(u),
+        reset: () => { if (!may('settings.password')) return; addAudit(actor, 'Config', 'Reset password for ' + u.name); const p = genPass(); this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, password: p, mustChange: true, status: x.status === 'Suspended' ? 'Suspended' : 'Must change password' } : x), created: { ...u, password: p, title: 'Password reset for ' + u.name, note: 'Give ' + u.name.split(' ')[0] + ' this temporary password. They will set a new one the next time they sign in.' } }); this.flash('Temporary password generated'); },
         // Last-admin guard (table role dropdown): changing the only Administrator's role is refused.
-        onRole: e => { const r = e.target.value; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; } this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, role: r, access: defaultAccess(r), scope: defaultScope(r) } : x) }); this.flash(u.name + ' is now ' + r); },
+        onRole: e => { const r = e.target.value; if (!may('settings.access') || (u.username || '') === me) return; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; }
+          const { access: _old, ...base } = u, perms = this.roleDefaults(r, permsOf(u)), next = { ...base, role: r, perms, scope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), depts: [] };
+          const after = this.state.users.map(x => x.id === u.id ? next : x);
+          if (!after.some(x => x.status !== 'Suspended' && permsOf(x).includes('settings.access') && permsOf(x).includes('settings.users'))) { this.flash('At least one active user must keep "Change roles & permissions".'); return; }
+          addAudit(actor, 'Config', 'Changed role: ' + u.name + ' → ' + r + ' (permissions reset to the role defaults)');
+          this.setState({ users: after }); this.flash(u.name + ' is now ' + r); },
         edit: () => this.openEdit(u), custom: isCustom(u),
         // Delete is blocked for your own account (self-delete) and for the last Administrator; the reason shows as the button tooltip.
         delBlock: (u.username || '') === me ? 'You cannot delete your own account while signed in' : isAdmin(u) && adminCount === 1 ? 'The only Administrator cannot be deleted' : '',
-        del: () => { if ((u.username || '') === me || (isAdmin(u) && adminCount === 1)) return; this.setState({ confirmDel: u }); },
-        toggle: () => this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, status: x.status === 'Suspended' ? (x.mustChange ? 'Must change password' : 'Active') : 'Suspended' } : x) }) })),
+        del: () => { if (!may('settings.delete-user') || (u.username || '') === me || (isAdmin(u) && adminCount === 1)) return; this.setState({ confirmDel: u }); },
+        toggle: () => (!may('settings.edit-user') || (u.username || '') === me) ? undefined : this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, status: x.status === 'Suspended' ? (x.mustChange ? 'Must change password' : 'Active') : 'Suspended' } : x) }) })),
       userCount: users.length + ' of ' + s.users.length + ' users',
       // ===== USERS · Delete confirmation =====
       confirmDel: s.confirmDel, cancelDel: () => this.setState({ confirmDel: null }),
-      doDel: () => { const u = s.confirmDel; if (!u) return; this.setState({ users: s.users.filter(x => x.id !== u.id), confirmDel: null, created: s.created && s.created.id === u.id ? null : s.created }); this.flash(u.name + ' has been deleted'); },
+      doDel: () => { const u = s.confirmDel; if (!u || !may('settings.delete-user')) return; addAudit(actor, 'Config', 'Deleted user ' + u.name); this.setState({ users: s.users.filter(x => x.id !== u.id), confirmDel: null, created: s.created && s.created.id === u.id ? null : s.created }); this.flash(u.name + ' has been deleted'); },
       // ===== AUDIT LOG · Filters, rows & CSV export =====
       // IP addresses are generated for the demo; Export downloads the filtered rows as CSV.
       aTypes: ['All', 'Auth', 'Assessment', 'Integrity', 'Config', 'Export'].map(t => { const on = s.aType === t; return { label: t, pick: () => this.setState({ aType: t }), bg: on ? '#0d3b2a' : '#fff', fg: on ? '#fff' : '#374151', border: on ? '#0d3b2a' : 'rgba(15,35,65,.14)' }; }),
       logs: logs.map((l, i) => ({ time: l[0], user: l[1], type: l[2], event: l[3], ip: '10.20.' + (4 + i) + '.' + (17 + i * 13), bg: TYPEC[l[2]][0], fg: TYPEC[l[2]][1] })),
-      exportAudit: () => { try { const csv = ['Time,User,Type,Event', ...logs.map(l => l.map(x => '"' + x + '"').join(','))].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'audit-log.csv'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} this.flash('Audit log exported'); },
+      mayAuditExport: may('settings.audit-export'),
+      exportAudit: () => { if (!may('settings.audit-export')) return; try { const csv = ['Time,User,Type,Event', ...logs.map(l => l.map(x => '"' + x + '"').join(','))].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'audit-log.csv'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} this.flash('Audit log exported'); },
       // ===== SETTINGS · General settings values =====
       // sDirty turns on the Save button after any change.
       st: s.st, on: Object.fromEntries(['duration', 'start', 'end', 'tabLimit', 'retention'].map(k => [k, e => setSt(k, ['duration', 'tabLimit'].includes(k) ? +e.target.value : e.target.value)])),
@@ -243,7 +318,7 @@ class SMSystem extends React.Component {
             {/* ===== USERS · Add / edit user dialog (pop-up, rendered into document.body) ===== */}
             {(__v.adding) ? createPortal(<>
               <div onClick={__v.toggleAdd} onKeyDown={e => { if (e.key === 'Escape') __v.toggleAdd(); }} style={{ position: "fixed", inset: "0", zIndex: "80", display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", background: "rgba(255,255,255,.45)", backdropFilter: "blur(10px) saturate(160%)", WebkitBackdropFilter: "blur(10px) saturate(160%)" }}>
-              <div role={"dialog"} aria-modal={"true"} aria-labelledby={"new-user-title"} onClick={e => e.stopPropagation()} style={{ width: "min(720px,100%)", maxHeight: "calc(100vh - 32px)", display: "flex", flexDirection: "column", borderRadius: "28px", background: "linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.82))", backdropFilter: "blur(36px) saturate(190%)", WebkitBackdropFilter: "blur(36px) saturate(190%)", border: "1px solid rgba(255,255,255,.95)", boxShadow: "inset 0 1px 0 #fff,0 0 0 1px rgba(15,35,65,.05),0 24px 60px rgba(15,35,65,.14)", overflow: "hidden" }}>
+              <div role={"dialog"} aria-modal={"true"} aria-labelledby={"new-user-title"} onClick={e => e.stopPropagation()} style={{ width: "min(900px,100%)", maxHeight: "calc(100vh - 32px)", display: "flex", flexDirection: "column", borderRadius: "28px", background: "linear-gradient(180deg,rgba(255,255,255,.92),rgba(255,255,255,.82))", backdropFilter: "blur(36px) saturate(190%)", WebkitBackdropFilter: "blur(36px) saturate(190%)", border: "1px solid rgba(255,255,255,.95)", boxShadow: "inset 0 1px 0 #fff,0 0 0 1px rgba(15,35,65,.05),0 24px 60px rgba(15,35,65,.14)", overflow: "hidden" }}>
                 {/* ===== USERS · Dialog header ===== */}
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "18px 20px", borderBottom: "1px solid rgba(15,35,65,.07)" }}>
                   <span style={{ width: "40px", height: "40px", borderRadius: "12px", background: "linear-gradient(180deg,#2fb36b,#15904c)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)" }}><i className={__v.mIcon} style={{ fontSize: "18px" }}></i></span>
@@ -256,21 +331,21 @@ class SMSystem extends React.Component {
                 {/* ===== USERS · Dialog form fields (name, email, username, department, role, status / password) ===== */}
                 <div style={{ flex: "1", minHeight: "0", overflowY: "auto", padding: "18px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: "12px" }}>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FULL NAME<input autoFocus value={__v.nName} onChange={__v.onNName} placeholder={"e.g. Isaac Addy"} aria-invalid={__v.nameHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.nameBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.nameHintColor }}>{__v.nameHint}</span></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EMAIL<input value={__v.nEmail} onChange={__v.onNEmail} placeholder={"firstname.lastname@dvla.gov.gh"} aria-invalid={__v.emailHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.emailBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.emailHintColor }}>{__v.emailHint}</span></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DEPARTMENT<Select value={__v.nDept} onChange={__v.onNDept} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>FULL NAME<input autoFocus value={__v.nName} onChange={__v.onNName} disabled={!!__v.detailsLocked} placeholder={"e.g. Isaac Addy"} aria-invalid={__v.nameHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.nameBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.nameHintColor }}>{__v.nameHint}</span></label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>EMAIL<input value={__v.nEmail} onChange={__v.onNEmail} disabled={!!__v.detailsLocked} placeholder={"firstname.lastname@dvla.gov.gh"} aria-invalid={__v.emailHintColor === '#b91c1c'} style={{ height: "36px", border: `1px solid ${__v.emailBorder}`, borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0" }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.emailHintColor }}>{__v.emailHint}</span></label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>DEPARTMENT<Select value={__v.nDept} onChange={__v.onNDept} disabled={!!__v.detailsLocked} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
                       {(__v.deptNames || []).map((n, $index) => (<React.Fragment key={$index}>
                         <option value={n}>{n}</option>
                       </React.Fragment>))}
                     </Select></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ROLE<Select value={__v.nRole} onChange={__v.onNRole} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>ROLE<Select value={__v.nRole} onChange={__v.onNRole} disabled={!!__v.roleLocked} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
                       {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                         <option value={r}>{r}</option>
                       </React.Fragment>))}
                     </Select></label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>USERNAME<input value={__v.nUser} onChange={__v.onNUser} placeholder={"firstname.lastname"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", fontFamily: "'JetBrains Mono',monospace", borderColor: __v.userBorder }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.userHintColor }}>{__v.userHint}</span></label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>USERNAME<input value={__v.nUser} onChange={__v.onNUser} disabled={!!__v.detailsLocked} placeholder={"firstname.lastname"} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", fontFamily: "'JetBrains Mono',monospace", borderColor: __v.userBorder }} /><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.userHintColor }}>{__v.userHint}</span></label>
                   {(__v.editing) ? (
-                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>STATUS<Select value={__v.nStatus} onChange={__v.onNStatus} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: "5px", font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280" }}>STATUS<Select value={__v.nStatus} onChange={__v.onNStatus} disabled={!!__v.detailsLocked} style={{ height: "36px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 10px", font: "400 13.5px Inter,sans-serif", minWidth: "0", background: "#fff" }}>
                       {(__v.statusNames || []).map((n, $index) => (<React.Fragment key={$index}>
                         <option value={n}>{n}</option>
                       </React.Fragment>))}
@@ -288,37 +363,63 @@ class SMSystem extends React.Component {
                     </div><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.passHintColor }}>{__v.passHint}</span></label>
                   </>)}
                 </div>
-                {/* ===== USERS · Access checkboxes & department scope ===== */}
+                {/* ===== USERS · Permissions (what the user can open and do) & department scope ===== */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid rgba(15,35,65,.07)", paddingTop: "14px" }}>
+                  {/* Section heading with the tick count and the Reset / Clear buttons */}
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "8px" }}>
                     <div>
-                      <div style={{ font: "600 13.5px Inter,sans-serif", color: "#111827" }}>What this user can open</div>
-                      <div style={{ font: "400 12px Inter,sans-serif", color: "#6b7280", marginTop: "2px" }}>The role ticks its usual boxes. Tick or untick to change. Home, My Profile and Help & Guides are always open.</div>
+                      <div style={{ font: "600 13.5px Inter,sans-serif", color: "#111827" }}>Permissions <span style={{ font: "500 12px Inter,sans-serif", color: "#6b7280", marginLeft: "6px" }}>{__v.permCount}</span></div>
+                      <div style={{ font: "400 12px Inter,sans-serif", color: "#6b7280", marginTop: "2px" }}>Tick exactly what this user can see and do. The role ticks its usual set. Home, My Profile and Help & Guides are always open.</div>
                     </div>
-                    <button onClick={__v.resetAccess} type={"button"} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "600 12px Inter,sans-serif", color: "#127a42" }}>Reset to role defaults</button>
+                    {(!__v.permLocked) ? <div style={{ display: "flex", gap: "14px" }}>
+                      <button onClick={__v.resetAccess} type={"button"} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "600 12px Inter,sans-serif", color: "#127a42" }}>Reset to role defaults</button>
+                      <button onClick={__v.clearAccess} type={"button"} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "600 12px Inter,sans-serif", color: "#b91c1c" }}>Clear all</button>
+                    </div> : null}
                   </div>
-                  {(__v.accessGroups || []).map((g) => (<div key={g.group} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {(__v.permLocked) ? <div style={{ padding: "9px 12px", borderRadius: "10px", background: "#fffbeb", border: "1px solid #fde68a", color: "#92400e", fontSize: "12.5px" }}>{__v.permLockedText}</div> : null}
+                  {/* One group (Assessments / Analytics / Administration), each with a card per area */}
+                  {(__v.permGroups || []).map((g) => (<div key={g.group} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", textTransform: "uppercase" }}>{g.group}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "8px" }}>
-                      {g.items.map((it) => (
-                        <button key={it.key} type={"button"} role={"checkbox"} aria-checked={it.on} onClick={it.toggle} style={{ display: "flex", alignItems: "flex-start", gap: "10px", textAlign: "left", padding: "10px 12px", borderRadius: "12px", cursor: "pointer", background: it.on ? "#e6f2ea" : "#fff", border: it.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
-                          <span style={{ flex: "none", width: "18px", height: "18px", marginTop: "1px", borderRadius: "5px", display: "flex", alignItems: "center", justifyContent: "center", background: it.on ? "#15904c" : "#fff", border: it.on ? "1px solid #15904c" : "1px solid rgba(15,35,65,.3)", color: "#fff" }}>{it.on ? <i className={"icon-check"} style={{ fontSize: "12px" }}></i> : null}</span>
-                          <span style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "0" }}>
-                            <span style={{ font: "600 13px Inter,sans-serif", color: "#111827" }}>{it.label}</span>
-                            <span style={{ font: "400 11.5px Inter,sans-serif", color: "#6b7280" }}>{it.desc}</span>
-                          </span>
-                        </button>))}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: "8px", alignItems: "start" }}>
+                      {g.areas.map((a) => (
+                        <div key={a.area} style={{ borderRadius: "12px", background: a.on || a.mixed ? "#f3f9f5" : "#fff", border: a.on || a.mixed ? "1px solid rgba(21,144,76,.35)" : "1px solid rgba(15,35,65,.12)", overflow: "hidden" }}>
+                          {/* Area tick: ticks or clears every action in the area */}
+                          <button type={"button"} role={"checkbox"} aria-checked={a.mixed ? "mixed" : a.on} onClick={a.toggle} disabled={__v.permLocked} style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", textAlign: "left", padding: "9px 12px", border: "0", borderBottom: "1px solid rgba(15,35,65,.07)", background: "transparent", cursor: __v.permLocked ? "default" : "pointer" }}>
+                            <PermBox on={a.on} mixed={a.mixed} />
+                            <i className={a.icon} style={{ fontSize: "14px", color: "#0d3b2a" }}></i>
+                            <span style={{ flex: "1", font: "600 13px Inter,sans-serif", color: "#111827" }}>{a.label}</span>
+                            <span style={{ font: "500 11px Inter,sans-serif", color: "#6b7280" }}>{a.count}</span>
+                          </button>
+                          {/* Action ticks */}
+                          <div style={{ display: "flex", flexDirection: "column", padding: "4px 0" }}>
+                            {a.items.map((it) => (
+                              <button key={it.k} type={"button"} role={"checkbox"} aria-checked={it.on} onClick={it.toggle} disabled={it.locked} title={it.locked && !__v.permLocked ? "You do not hold this permission yourself, so you cannot give or remove it" : it.desc} style={{ display: "flex", alignItems: "flex-start", gap: "10px", textAlign: "left", padding: "6px 12px", border: "0", background: "transparent", cursor: it.locked ? "default" : "pointer", opacity: it.locked && !__v.permLocked ? ".5" : "1" }}>
+                                <PermBox on={it.on} small />
+                                <span style={{ display: "flex", flexDirection: "column", minWidth: "0" }}>
+                                  <span style={{ font: "500 12.5px Inter,sans-serif", color: "#111827" }}>{it.label}</span>
+                                  <span style={{ font: "400 11px Inter,sans-serif", color: "#6b7280" }}>{it.desc}</span>
+                                </span>
+                              </button>))}
+                          </div>
+                        </div>))}
                     </div>
                   </div>))}
-                  {/* Department scope: which departments' staff and results they can see. */}
+                  {/* Department scope: which departments' staff and results they can see */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", textTransform: "uppercase" }}>Departments they can see</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                       {(__v.scopeOpts || []).map((o) => (
-                        <button key={o.v} type={"button"} role={"radio"} aria-checked={o.on} onClick={o.pick} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#111827", background: o.on ? "#e6f2ea" : "#fff", border: o.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
+                        <button key={o.v} type={"button"} role={"radio"} aria-checked={o.on} onClick={o.pick} disabled={o.off} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", cursor: o.off ? "default" : "pointer", opacity: o.off && !o.on ? ".5" : "1", font: "500 13px Inter,sans-serif", color: "#111827", background: o.on ? "#e6f2ea" : "#fff", border: o.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
                           <span style={{ width: "14px", height: "14px", borderRadius: "50%", border: o.on ? "4px solid #15904c" : "1px solid rgba(15,35,65,.3)", background: "#fff", boxSizing: "border-box" }}></span>{o.label}
                         </button>))}
                     </div>
+                    {/* Selected departments: one tick per department */}
+                    {(__v.deptPicks) ? <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "2px" }}>
+                      {__v.deptPicks.map((dp) => (
+                        <button key={dp.n} type={"button"} role={"checkbox"} aria-checked={dp.on} onClick={dp.toggle} disabled={__v.permLocked} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 11px", borderRadius: "10px", cursor: __v.permLocked ? "default" : "pointer", font: "500 12.5px Inter,sans-serif", color: "#111827", background: dp.on ? "#e6f2ea" : "#fff", border: dp.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
+                          <PermBox on={dp.on} small />{dp.n}
+                        </button>))}
+                    </div> : null}
                   </div>
                 </div>
                 {/* ===== USERS · New-user options (toggles) ===== */}
@@ -405,20 +506,20 @@ class SMSystem extends React.Component {
                     <span style={{ font: "500 12.5px 'JetBrains Mono',monospace", color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u?.username}</span>
                     <span style={{ fontSize: "13px", color: "#374151" }}>{u?.dept}</span>
                     <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: "0" }}>
-                    <Select value={u?.role} onChange={u?.onRole} style={{ height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 12.5px Inter,sans-serif", background: "#fff" }}>
+                    {(u?.mayRole) ? <Select value={u?.role} onChange={u?.onRole} style={{ height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 12.5px Inter,sans-serif", background: "#fff" }}>
                       {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                         <option value={r}>{r}</option>
                       </React.Fragment>))}
-                    </Select>
-                    {/* "Custom access" = this user's ticked boxes differ from their role's defaults (Edit to see them). */}
-                    {(u?.custom) ? <button onClick={u?.edit} type={"button"} style={{ alignSelf: "flex-start", background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 11px Inter,sans-serif", color: "#127a42" }}>Custom access</button> : null}
+                    </Select> : <span style={{ fontSize: "13px", color: "#374151" }}>{u?.role}</span>}
+                    {/* "Custom access" = this user's ticks differ from their role's defaults (Edit to see them); the tooltip gives the count. */}
+                    {(u?.custom) ? <button onClick={u?.mayEdit ? u?.edit : undefined} title={u?.summary} type={"button"} style={{ alignSelf: "flex-start", background: "none", border: "0", padding: "0", cursor: u?.mayEdit ? "pointer" : "default", font: "500 11px Inter,sans-serif", color: "#127a42" }}>Custom access</button> : null}
                     </div>
-                    <button onClick={u?.toggle} style={{ justifySelf: "start", font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "4px 10px", border: "0", cursor: "pointer", background: u?.sBg, color: u?.sFg }}>{u?.status}</button>
+                    <button onClick={u?.toggle} disabled={!u?.mayStatus} style={{ justifySelf: "start", font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "4px 10px", border: "0", cursor: u?.mayStatus ? "pointer" : "default", background: u?.sBg, color: u?.sFg }}>{u?.status}</button>
                     <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{u?.last}</span>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      <button onClick={u?.edit} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "7px", background: "#fff", color: "#374151", font: "500 12px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}><i className={"icon-pencil"} style={{ fontSize: "12px" }}></i>Edit</button>
-                      <button onClick={u?.reset} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "7px", background: "#fff", color: "#374151", font: "500 12px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}><i className={"icon-key-round"} style={{ fontSize: "12px" }}></i>Reset password</button>
-                      <button onClick={u?.del} disabled={!!u?.delBlock} title={u?.delBlock || ('Delete ' + u?.name)} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(220,38,38,.25)", borderRadius: "7px", background: "#fff", color: "#b91c1c", font: "500 12px Inter,sans-serif", cursor: u?.delBlock ? "not-allowed" : "pointer", opacity: u?.delBlock ? ".45" : "1", whiteSpace: "nowrap" }}><i className={"icon-trash-2"} style={{ fontSize: "12px" }}></i>Delete</button>
+                      {(u?.mayEdit) ? <button onClick={u?.edit} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "7px", background: "#fff", color: "#374151", font: "500 12px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}><i className={"icon-pencil"} style={{ fontSize: "12px" }}></i>Edit</button> : null}
+                      {(u?.mayReset) ? <button onClick={u?.reset} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "7px", background: "#fff", color: "#374151", font: "500 12px Inter,sans-serif", cursor: "pointer", whiteSpace: "nowrap" }}><i className={"icon-key-round"} style={{ fontSize: "12px" }}></i>Reset password</button> : null}
+                      {(u?.mayDel) ? <button onClick={u?.del} disabled={!!u?.delBlock} title={u?.delBlock || ('Delete ' + u?.name)} style={{ display: "flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 10px", border: "1px solid rgba(220,38,38,.25)", borderRadius: "7px", background: "#fff", color: "#b91c1c", font: "500 12px Inter,sans-serif", cursor: u?.delBlock ? "not-allowed" : "pointer", opacity: u?.delBlock ? ".45" : "1", whiteSpace: "nowrap" }}><i className={"icon-trash-2"} style={{ fontSize: "12px" }}></i>Delete</button> : null}
                     </div>
                   </div>
                 </React.Fragment>))}
@@ -456,7 +557,7 @@ class SMSystem extends React.Component {
                   <button onClick={t?.pick} style={{ height: "30px", padding: "0 12px", borderRadius: "999px", cursor: "pointer", font: "500 12.5px Inter,sans-serif", background: t?.bg, color: t?.fg, border: `1px solid ${t?.border ?? ""}` }}>{t?.label}</button>
                 </React.Fragment>))}
               </div>
-              <button onClick={__v.exportAudit} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 12px", border: "1px solid #e5e7eb", borderRadius: "10px", background: "#fff", cursor: "pointer", font: "500 12.5px Inter,sans-serif", color: "#374151" }}><i className={"icon-download"} style={{ fontSize: "13px" }}></i>Export CSV</button>
+              {(__v.mayAuditExport) ? <button onClick={__v.exportAudit} style={{ display: "flex", alignItems: "center", gap: "6px", height: "34px", padding: "0 12px", border: "1px solid #e5e7eb", borderRadius: "10px", background: "#fff", cursor: "pointer", font: "500 12.5px Inter,sans-serif", color: "#374151" }}><i className={"icon-download"} style={{ fontSize: "13px" }}></i>Export CSV</button> : null}
             </div>
             {/* ===== AUDIT LOG · Log table ===== */}
             <div style={{ overflowX: "auto" }}>
