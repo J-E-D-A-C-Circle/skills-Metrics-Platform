@@ -64,6 +64,7 @@ Tabs (the same tab bar as Profile; a tab whose feature is off is removed, and a 
 | Staff Evaluations | Reviews · 360° Feedback (`feedback360`) · Plan Approvals (`planApprovals` + `developmentPlan`) |
 | Profile | Account · Skill Profile · History · Development Plan (`developmentPlan`) · Evidence (`evidence`) |
 
+- **User access:** when creating or editing a user (Settings > User Management), the role ticks a default set of boxes for the pages they can open, plus whether they see all departments or only their own. Any box can be ticked or unticked, so one person can combine roles (e.g. an administrator who also takes assessments). The sidebar and every page follow these boxes; older accounts without saved boxes keep their role's defaults (`components/smAccess.js`).
 - Tabs are defined in `TABS` in `components/SkillMatrixApp.jsx`. A tab can also have its own `roles`; a role that cannot see a tab does not get it.
 - Take Assessment is not a sidebar item. Start an assessment from the Home card, from My Assessments, or from the notification.
 - Profile opens from the avatar/name in the header.
@@ -177,6 +178,8 @@ Search the project for the marker text (e.g. `HOME · Welcome banner`) to jump s
 | Skill Framework: competencies, target profiles | SMFramework.jsx | `FRAMEWORK · Competencies tab`, `FRAMEWORK · Target Profiles tab` |
 | Settings General tab | SMSystem.jsx | `SETTINGS · General tab` |
 | User Management: table, add/edit dialog, delete | SMSystem.jsx | `USERS · Users table`, `USERS · Add / edit user dialog`, `USERS · Delete confirmation dialog` |
+| User access checkboxes (what each user can open) & departments they can see | SMSystem.jsx, smAccess.js | `USERS · Access checkboxes & department scope`, `ACCESS · Areas (checkbox list)`, `ACCESS · Role defaults` |
+| Sidebar & page guard follow each user's access | SkillMatrixApp.jsx | `ROUTER · Allowed pages (navItems)`, `ROUTER · Access guard (normalize)` |
 | Audit Log | SMSystem.jsx | `AUDIT LOG · Audit Log tab` |
 | Help & Guides | SMSystem.jsx | `HELP · Help & Guides tab`, `HELP · Quick links, FAQ & support ticket` |
 | Help & Guides: Rating Scales tab | SMSystem.jsx, SMFramework.jsx | `HELP · Rating Scales tab`, `HELP · Rating Scales cards` |

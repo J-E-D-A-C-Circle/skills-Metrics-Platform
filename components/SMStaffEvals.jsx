@@ -14,11 +14,11 @@ import { ALL, STATUSES, STATUS_HINT, PASS, TIERS_TEXT, bandOf, inScope } from '.
 // ===== STAFF EVALS · Reviews page (/staff-evals) =====
 // Staff Evaluations: results are scored automatically on submission.
 // Reviewers score the open-text answer, then confirm, or adjust a competency with a reason.
-export default function StaffEvaluations({ data: D, model, go, role, scope, myDept, setEval, resetEvals }) {
+export default function StaffEvaluations({ data: D, model, go, role, scope, myDept, deptLocked, setEval, resetEvals }) {
   // ===== STAFF EVALS · State & filters =====
   // Managers are locked to their own department; admins pick one here (defaults to the global scope).
   const [local, setLocal] = useState(null);
-  const locked = role === 'manager';
+  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
   const dept = locked ? myDept : (local ?? scope);
   const [q, setQ] = useState('');
   const [st, setSt] = useState(ALL);
@@ -77,7 +77,7 @@ export default function StaffEvaluations({ data: D, model, go, role, scope, myDe
       {/* ===== STAFF EVALS · Staff details popup ===== */}
       {/* Opens over this page (from the staff name or the drawer's Individual report button), so there is no page change. */}
       {/* The left-hand list is the same staff as the table (same filters and order), so you can switch person without closing. */}
-      {reportId ? <StaffReportModal D={D} model={model} id={reportId} role={role} myDept={myDept} list={rows} onSelect={setReportId} onClose={closeReport} /> : null}
+      {reportId ? <StaffReportModal D={D} model={model} id={reportId} role={role} myDept={myDept} deptLocked={locked} list={rows} onSelect={setReportId} onClose={closeReport} /> : null}
       <Toast text={toast} />
     </Page>
   );

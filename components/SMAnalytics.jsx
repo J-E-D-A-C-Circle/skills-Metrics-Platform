@@ -45,9 +45,9 @@ function GapLegend({ D, counts, onPick }) {
 // `view` comes from the URL tab (dashboard, departments, topneeds, heatmap, reports, schedules).
 // Managers are locked to their own department; admins can pick one here (defaults to the global scope).
 export default function SMAnalytics(props) {
-  const { data: D, model, go, view = 'dashboard', role, scope, myDept } = props;
+  const { data: D, model, go, view = 'dashboard', role, scope, myDept, deptLocked } = props;
   const [local, setLocal] = useState(null);
-  const locked = role === 'manager';
+  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
   const dept = locked ? myDept : (local ?? scope);
   const [drawer, setDrawer] = useState(null);
   const [toast, flash] = useToast();

@@ -12,11 +12,11 @@ import { ALL, inScope } from './smModel';
 
 // ===== TRAINING · All Needs page (/training) =====
 // Who needs which training, grouped by competency or by person.
-export default function SMTraining({ data: D, model, go, role, scope, myDept }) {
+export default function SMTraining({ data: D, model, go, role, scope, myDept, deptLocked }) {
   // ===== TRAINING · State & filters =====
   // Managers are locked to their own department; admins pick one here (defaults to the global scope).
   const [local, setLocal] = useState(null);
-  const locked = role === 'manager';
+  const locked = deptLocked ?? role === 'manager'; // own department only (Settings > User Management > Departments they can see)
   const dept = locked ? myDept : (local ?? scope);
   const [mode, setMode] = useState('comp');
   const [minGap, setMinGap] = useState('1');

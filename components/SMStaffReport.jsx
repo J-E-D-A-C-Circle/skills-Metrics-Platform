@@ -100,10 +100,10 @@ export function IndividualReportView({ D, rep, compact }) {
 // Same report as /report?id=, shown in a pop-up over the current screen so the user stays where they were.
 // Close with the X, the Escape key or a click on the dimmed background. Used by SMStaffEvals.jsx.
 // `list` (optional) = staff to show down the left side; clicking one, or the Up / Down arrow keys, calls onSelect(id) to switch.
-export function StaffReportModal({ D, model, id, role, myDept, onClose, list, onSelect }) {
+export function StaffReportModal({ D, model, id, role, myDept, deptLocked, onClose, list, onSelect }) {
   const rep = id ? individualReport(D, model, id) : null;
-  // Same guard as the page: managers only see staff in their own department.
-  const blocked = rep && role === 'manager' && rep.s.dept !== myDept;
+  // Same guard as the page: users limited to their own department only see staff in it.
+  const blocked = rep && (deptLocked ?? role === 'manager') && rep.s.dept !== myDept;
   // Escape closes the popup; the page behind it stops scrolling while it is open.
   const [find, setFind] = useState('');
   const bodyRef = useRef(null), listRef = useRef(null);
@@ -172,10 +172,10 @@ export function StaffReportModal({ D, model, id, role, myDept, onClose, list, on
 }
 
 // ===== REPORT · Page (/report?id=) =====
-export default function SMStaffReport({ data: D, model, go, id, role, myDept }) {
+export default function SMStaffReport({ data: D, model, go, id, role, myDept, deptLocked }) {
   const rep = id ? individualReport(D, model, id) : null;
   // Guard: managers can only open reports for staff in their own department; otherwise show a message card.
-  const blocked = rep && role === 'manager' && rep.s.dept !== myDept;
+  const blocked = rep && (deptLocked ?? role === 'manager') && rep.s.dept !== myDept;
   if (!rep || blocked) {
     // ===== REPORT · Not found / not allowed card =====
     return <Page><PageHeader title="Individual report" description="One staff member's targets, results, history and recommended training" />

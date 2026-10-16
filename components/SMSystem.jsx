@@ -5,14 +5,14 @@
 //   "/help" (Help & Guides) and "/help?tab=ratings" (Rating Scales, moved from the Skill Framework). Old URLs /users, /audit and /system redirect here.
 // Who sees it: admin (General, Users, Audit Log); everyone (Help & Guides)
 // Used by: SkillMatrixApp.jsx (rendered when the page group is "system", with props.view)
-//   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), SMFramework (RatingScales cards), ui/select (Select), SMSystem.module.css
+//   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), smAccess (access checkboxes), SMFramework (RatingScales cards), ui/select (Select), SMSystem.module.css
 // Sections (search for these markers): USERS · Seed data, AUDIT LOG · Sample log entries, HELP · FAQ content,
 //   USERS · Storage & helpers, SETTINGS · Main component, SETTINGS · View values, USERS · Search & role filter,
-//   USERS · Add / edit user dialog, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
+//   USERS · Add / edit user dialog, USERS · Access checkboxes (what the user can open) & department scope, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
 //   AUDIT LOG · Filters, rows & CSV export, SETTINGS · General settings values, HELP · Quick links, FAQ & support ticket,
 //   HELP · Rating Scales tab,
 //   SETTINGS · Render, SETTINGS · Page header, USERS · User Management tab, USERS · "User created" card, USERS · Users table,
-//   USERS · Delete confirmation dialog, AUDIT LOG · Audit Log tab, SETTINGS · General tab, HELP · Help & Guides tab, Toast
+//   USERS · Access checkboxes & department scope, USERS · Delete confirmation dialog, AUDIT LOG · Audit Log tab, SETTINGS · General tab, HELP · Help & Guides tab, Toast
 // =============================================================================
 import React from 'react';
 import { createPortal } from 'react-dom';
@@ -20,6 +20,7 @@ import __css from './SMSystem.module.css';
 import { PageHeader } from './smUI';
 import { RatingScales } from './SMFramework';
 import { Select } from './ui/select';
+import { ACCESS_AREAS, SCOPES, defaultAccess, defaultScope, accessOf, scopeOf, isCustom } from './smAccess';
 
 
 // ===== USERS · Seed data (roles & starting user list) =====
@@ -79,7 +80,7 @@ const TYPEC = { Auth: ['#e0e7ff', '#3730a3'], Assessment: ['#dcfce7', '#15803d']
 // st = General settings values (kept in memory only, not saved to storage).
 class SMSystem extends React.Component {
   state = { toast: '', uq: '', uRole: 'All', users: loadUsers(),
-    adding: false, editId: null, nStatus: 'Active', confirmDel: null, nName: '', nEmail: '', nDept: 'IT Department', nRole: 'Participant', nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, mustChange: true, sendEmail: true, created: null, nErr: '', aType: 'All',
+    adding: false, editId: null, nStatus: 'Active', confirmDel: null, nName: '', nEmail: '', nDept: 'IT Department', nRole: 'Participant', nAccess: defaultAccess('Participant'), nScope: defaultScope('Participant'), nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, mustChange: true, sendEmail: true, created: null, nErr: '', aType: 'All',
     st: { duration: 45, start: '09:00', end: '17:00', tabLimit: 3, retention: '5', mfa: true, offline: true, encrypt: true, notify: true, anon: true }, sDirty: false,
     hq: '', open: { 0: true }, tSubject: '', tMsg: '' };
   // Writes the seeded users to "skm-users" on first visit so other screens (e.g. Sign In) see the same accounts.
@@ -88,8 +89,8 @@ class SMSystem extends React.Component {
   setState(u, cb) { return super.setState(u, () => { this.persistUsers(); cb && cb(); }); }
   persistUsers() { const u = this.state.users; if (u && u !== this._savedUsers) { this._savedUsers = u; try { localStorage.setItem(UKEY, JSON.stringify(u)); } catch (e) {} } }
   // One pop-up for both: Add user starts empty, Edit user starts from the chosen row.
-  openAdd() { this.setState({ adding: true, editId: null, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, nDept: 'IT Department', nRole: 'Participant', nStatus: 'Active', tried: false, nErr: '', created: null }); }
-  openEdit(u) { this.setState({ adding: true, editId: u.id, nName: u.name, nEmail: u.email, nUser: u.username || '', userTouched: true, emailTouched: true, nDept: u.dept, nRole: u.role, nStatus: u.status, tried: false, nErr: '', created: null }); }
+  openAdd() { this.setState({ adding: true, editId: null, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, nDept: 'IT Department', nRole: 'Participant', nAccess: defaultAccess('Participant'), nScope: defaultScope('Participant'), nStatus: 'Active', tried: false, nErr: '', created: null }); }
+  openEdit(u) { this.setState({ adding: true, editId: u.id, nName: u.name, nEmail: u.email, nUser: u.username || '', userTouched: true, emailTouched: true, nDept: u.dept, nRole: u.role, nAccess: accessOf(u), nScope: scopeOf(u), nStatus: u.status, tried: false, nErr: '', created: null }); }
   closeModal() { this.setState({ adding: false, editId: null, tried: false, nErr: '' }); }
   flash(t) { this.setState({ toast: t }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
   // ===== SETTINGS · View values (renderVals) =====
@@ -135,7 +136,13 @@ class SMSystem extends React.Component {
       nameHint: s.tried && !nameOk ? (s.nName.trim() ? 'Enter both the first and last name, e.g. Isaac Addy' : 'Enter the full name') : 'First and last name, as held by HR', nameHintColor: s.tried && !nameOk ? '#b91c1c' : '#6b7280',
       emailBorder: (rawEmail && (!emailOk || emailTaken)) || (s.tried && !emailOk) ? '#fca5a5' : 'rgba(15,35,65,.14)',
       emailHint: !rawEmail ? (s.tried ? 'Enter a work email' : 'Filled in from the name. You can type just the part before the @.') : !emailOk ? 'Use a work email like isaac.addy@dvla.gov.gh' : emailTaken ? 'A user with this email already exists' : !rawEmail.includes('@') ? 'Will be saved as ' + email : 'Looks good',
-      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => this.setState({ nRole: e.target.value }),
+      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => { const r = e.target.value; this.setState({ nRole: r, nAccess: defaultAccess(r), nScope: defaultScope(r) }); },
+      // ===== USERS · Access checkboxes (what the user can open) & department scope =====
+      // Picking a role ticks its usual boxes; the admin can then tick or untick any of them (a user can mix roles, e.g. admin + take assessments).
+      accessGroups: ACCESS_AREAS.map(g => ({ group: g.group, items: g.items.map(it => { const on = s.nAccess.includes(it.key); return { ...it, on,
+        toggle: () => this.setState({ nAccess: on ? this.state.nAccess.filter(k => k !== it.key) : [...this.state.nAccess, it.key] }) }; }) })),
+      accessCount: s.nAccess.length, nScope: s.nScope, scopeOpts: SCOPES.map(([v, label]) => ({ v, label, on: s.nScope === v, pick: () => this.setState({ nScope: v }) })),
+      resetAccess: () => this.setState({ nAccess: defaultAccess(s.nRole), nScope: defaultScope(s.nRole) }),
       nSaveBg: 'linear-gradient(180deg,#2fb36b,#15904c)',
       nUser: s.nUser, onNUser: e => this.setState({ nUser: e.target.value.replace(/\s/g, '').toLowerCase(), userTouched: true, nErr: '' }),
       userBorder: (uname && (!userOk || userTaken)) || (s.tried && !userOk) ? '#fca5a5' : 'rgba(15,35,65,.14)',
@@ -155,7 +162,9 @@ class SMSystem extends React.Component {
           // Last-admin guard: the only Administrator cannot be given another role or be suspended.
           if (isAdmin(editUser) && adminCount === 1 && s.nRole !== 'Administrator') { this.setState({ nErr: editUser.name + ' is the only Administrator. Make someone else an Administrator first.' }); return; }
           if (isAdmin(editUser) && adminCount === 1 && s.nStatus === 'Suspended') { this.setState({ nErr: 'The only Administrator cannot be suspended.' }); return; }
-          const next = { ...editUser, name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, status: s.nStatus, mustChange: s.nStatus === 'Must change password' };
+          // Lock-out guard: the only Administrator must keep Settings & User Management, or nobody could manage users.
+          if (isAdmin(editUser) && adminCount === 1 && !s.nAccess.includes('settings')) { this.setState({ nErr: editUser.name + ' is the only Administrator, so they must keep Settings & User Management.' }); return; }
+          const next = { ...editUser, name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, access: s.nAccess, scope: s.nScope, status: s.nStatus, mustChange: s.nStatus === 'Must change password' };
           // Keep the signed-in person signed in if they renamed their own username.
           if ((editUser.username || '') === me && uname !== me) { try { localStorage.setItem('skm-me', uname); } catch (e) {} }
           this.setState({ users: s.users.map(x => x.id === editUser.id ? next : x), adding: false, editId: null, tried: false, nErr: '' });
@@ -163,7 +172,7 @@ class SMSystem extends React.Component {
           return;
         }
         // New user: added to the top of the list; the "User created" card then shows the sign-in details once.
-        const u = { id: Date.now(), name: nameParts.join(' '), email, username: uname, password: s.nPass, mustChange: s.mustChange, dept: s.nDept, role: s.nRole, status: s.mustChange ? 'Must change password' : 'Active', last: 'Never signed in' };
+        const u = { id: Date.now(), name: nameParts.join(' '), email, username: uname, password: s.nPass, mustChange: s.mustChange, dept: s.nDept, role: s.nRole, access: s.nAccess, scope: s.nScope, status: s.mustChange ? 'Must change password' : 'Active', last: 'Never signed in' };
         const note = (s.sendEmail ? 'Sign-in details have been emailed to ' + u.email + '. ' : 'Share these details with them securely. ') + (s.mustChange ? 'They will be asked to set their own password the first time they sign in.' : 'They can sign in with this password straight away.');
         this.setState({ users: [u, ...s.users], adding: false, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, nErr: '', created: { ...u, title: u.name + ' has been added', note } });
         this.flash('User created' + (s.sendEmail ? ', details emailed' : '')); },
@@ -174,8 +183,8 @@ class SMSystem extends React.Component {
       users: users.map(u => ({ ...u, initials: u.name.split(' ').map(x => x[0]).slice(0, 2).join(''), sBg: u.status === 'Active' ? '#dcfce7' : u.status === 'Suspended' ? '#fee2e2' : '#fef3c7', sFg: u.status === 'Active' ? '#15803d' : u.status === 'Suspended' ? '#b91c1c' : '#92400e', username: u.username || '—',
         reset: () => { const p = genPass(); this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, password: p, mustChange: true, status: x.status === 'Suspended' ? 'Suspended' : 'Must change password' } : x), created: { ...u, password: p, title: 'Password reset for ' + u.name, note: 'Give ' + u.name.split(' ')[0] + ' this temporary password. They will set a new one the next time they sign in.' } }); this.flash('Temporary password generated'); },
         // Last-admin guard (table role dropdown): changing the only Administrator's role is refused.
-        onRole: e => { const r = e.target.value; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; } this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, role: r } : x) }); this.flash(u.name + ' is now ' + r); },
-        edit: () => this.openEdit(u),
+        onRole: e => { const r = e.target.value; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; } this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, role: r, access: defaultAccess(r), scope: defaultScope(r) } : x) }); this.flash(u.name + ' is now ' + r); },
+        edit: () => this.openEdit(u), custom: isCustom(u),
         // Delete is blocked for your own account (self-delete) and for the last Administrator; the reason shows as the button tooltip.
         delBlock: (u.username || '') === me ? 'You cannot delete your own account while signed in' : isAdmin(u) && adminCount === 1 ? 'The only Administrator cannot be deleted' : '',
         del: () => { if ((u.username || '') === me || (isAdmin(u) && adminCount === 1)) return; this.setState({ confirmDel: u }); },
@@ -279,6 +288,39 @@ class SMSystem extends React.Component {
                     </div><span style={{ font: "400 11.5px Inter,sans-serif", letterSpacing: "0", color: __v.passHintColor }}>{__v.passHint}</span></label>
                   </>)}
                 </div>
+                {/* ===== USERS · Access checkboxes & department scope ===== */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", borderTop: "1px solid rgba(15,35,65,.07)", paddingTop: "14px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "8px" }}>
+                    <div>
+                      <div style={{ font: "600 13.5px Inter,sans-serif", color: "#111827" }}>What this user can open</div>
+                      <div style={{ font: "400 12px Inter,sans-serif", color: "#6b7280", marginTop: "2px" }}>The role ticks its usual boxes. Tick or untick to change. Home, My Profile and Help & Guides are always open.</div>
+                    </div>
+                    <button onClick={__v.resetAccess} type={"button"} style={{ background: "none", border: "0", padding: "0", cursor: "pointer", font: "600 12px Inter,sans-serif", color: "#127a42" }}>Reset to role defaults</button>
+                  </div>
+                  {(__v.accessGroups || []).map((g) => (<div key={g.group} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", textTransform: "uppercase" }}>{g.group}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "8px" }}>
+                      {g.items.map((it) => (
+                        <button key={it.key} type={"button"} role={"checkbox"} aria-checked={it.on} onClick={it.toggle} style={{ display: "flex", alignItems: "flex-start", gap: "10px", textAlign: "left", padding: "10px 12px", borderRadius: "12px", cursor: "pointer", background: it.on ? "#e6f2ea" : "#fff", border: it.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
+                          <span style={{ flex: "none", width: "18px", height: "18px", marginTop: "1px", borderRadius: "5px", display: "flex", alignItems: "center", justifyContent: "center", background: it.on ? "#15904c" : "#fff", border: it.on ? "1px solid #15904c" : "1px solid rgba(15,35,65,.3)", color: "#fff" }}>{it.on ? <i className={"icon-check"} style={{ fontSize: "12px" }}></i> : null}</span>
+                          <span style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: "0" }}>
+                            <span style={{ font: "600 13px Inter,sans-serif", color: "#111827" }}>{it.label}</span>
+                            <span style={{ font: "400 11.5px Inter,sans-serif", color: "#6b7280" }}>{it.desc}</span>
+                          </span>
+                        </button>))}
+                    </div>
+                  </div>))}
+                  {/* Department scope: which departments' staff and results they can see. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".4px", color: "#6b7280", textTransform: "uppercase" }}>Departments they can see</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {(__v.scopeOpts || []).map((o) => (
+                        <button key={o.v} type={"button"} role={"radio"} aria-checked={o.on} onClick={o.pick} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "999px", cursor: "pointer", font: "500 13px Inter,sans-serif", color: "#111827", background: o.on ? "#e6f2ea" : "#fff", border: o.on ? "1px solid rgba(21,144,76,.45)" : "1px solid rgba(15,35,65,.12)" }}>
+                          <span style={{ width: "14px", height: "14px", borderRadius: "50%", border: o.on ? "4px solid #15904c" : "1px solid rgba(15,35,65,.3)", background: "#fff", boxSizing: "border-box" }}></span>{o.label}
+                        </button>))}
+                    </div>
+                  </div>
+                </div>
                 {/* ===== USERS · New-user options (toggles) ===== */}
                 {(!__v.editing) ? (<div style={{ display: "flex", flexWrap: "wrap", gap: "10px 26px" }}>
                   {(__v.newToggles || []).map((tg, $index) => (<React.Fragment key={$index}>
@@ -362,11 +404,15 @@ class SMSystem extends React.Component {
                     </div>
                     <span style={{ font: "500 12.5px 'JetBrains Mono',monospace", color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u?.username}</span>
                     <span style={{ fontSize: "13px", color: "#374151" }}>{u?.dept}</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px", minWidth: "0" }}>
                     <Select value={u?.role} onChange={u?.onRole} style={{ height: "32px", border: "1px solid rgba(15,35,65,.14)", borderRadius: "10px", padding: "0 6px", font: "400 12.5px Inter,sans-serif", background: "#fff" }}>
                       {(__v.roleNames || []).map((r, $index) => (<React.Fragment key={$index}>
                         <option value={r}>{r}</option>
                       </React.Fragment>))}
                     </Select>
+                    {/* "Custom access" = this user's ticked boxes differ from their role's defaults (Edit to see them). */}
+                    {(u?.custom) ? <button onClick={u?.edit} type={"button"} style={{ alignSelf: "flex-start", background: "none", border: "0", padding: "0", cursor: "pointer", font: "500 11px Inter,sans-serif", color: "#127a42" }}>Custom access</button> : null}
+                    </div>
                     <button onClick={u?.toggle} style={{ justifySelf: "start", font: "600 11px Inter,sans-serif", borderRadius: "999px", padding: "4px 10px", border: "0", cursor: "pointer", background: u?.sBg, color: u?.sFg }}>{u?.status}</button>
                     <span style={{ fontSize: "12.5px", color: "#6b7280" }}>{u?.last}</span>
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
