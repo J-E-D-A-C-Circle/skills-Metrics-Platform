@@ -60,7 +60,7 @@ class SMSignIn extends React.Component {
       cpBorder: s.cp && !match ? '#fca5a5' : 'rgba(15,35,65,.14)',
       rules: rules.map(([label, ok]) => ({ label, icon: ok ? 'icon-circle-check' : 'icon-circle', color: ok ? '#15803d' : '#6b7280' })),
       strengthPct: (okCount / rules.length * 100) + '%', strengthColor: okCount <= 2 ? '#dc2626' : okCount <= 4 ? '#f2a516' : '#16a34a',
-      saveBg: allOk && match ? '#15904c' : '#a3acb9', saveCursor: allOk && match ? 'pointer' : 'not-allowed',
+      saveBg: allOk && match ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', saveCursor: allOk && match ? 'pointer' : 'not-allowed',
       // Save new password: clears mustChange, writes skm-users, then signs the person in.
       savePw: () => { if (!allOk) return this.setState({ err: 'Your new password needs to meet every rule.' }); if (!match) return this.setState({ err: "The passwords don't match." });
         const nu = { ...u, password: np, mustChange: false, status: 'Active' };

@@ -73,7 +73,7 @@ class TeamLegacy extends React.Component {
       modalOpen: !!m, closeModal: () => this.setState({ modal: null }), stop: e => e.stopPropagation(),
       modalTitle: m ? (m.kind === 'eval' ? 'Evaluate ' + m.name : 'Feedback for ' + m.name) : '', modalSub: m ? m.role + (m.kind === 'eval' ? ' · ' + d.cycle.name : ' · 360° feedback') : '',
       rateRows, ratedText: rated + ' of ' + total + ' rated', comment: s.comment, onComment: e => this.setState({ comment: e.target.value }),
-      submitBg: ready ? '#15904c' : '#a3acb9', submitCursor: ready ? 'pointer' : 'not-allowed',
+      submitBg: ready ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', submitCursor: ready ? 'pointer' : 'not-allowed',
       submitModal: () => { if (!ready) return;
         if (m.kind === 'eval') this.setState({ evals: { ...s.evals, [m.id]: 'Evaluated' }, modal: null }); else this.setState({ done360: { ...s.done360, [m.id]: true }, modal: null });
         this.flash(m.kind === 'eval' ? 'Evaluation submitted for ' + m.name : 'Feedback submitted'); },

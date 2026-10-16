@@ -101,7 +101,7 @@ class SMAssessmentSession extends React.Component {
         { icon: 'icon-shuffle', text: 'Every candidate gets the questions in a different order. Copy, paste and right-click are turned off.' },
         { icon: 'icon-cloud-check', text: 'Your answers save as you go, and still save if your connection drops for a moment.' }],
       agreed: s.agreed, toggleAgree: () => this.setState({ agreed: !s.agreed }),
-      startBg: s.agreed ? '#15904c' : '#a3acb9', startCursor: s.agreed ? 'pointer' : 'not-allowed',
+      startBg: s.agreed ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', startCursor: s.agreed ? 'pointer' : 'not-allowed',
       // Start: needs the agreement box ticked; shuffles the question order, saves a new attempt, starts the timer and asks for fullscreen.
       start: () => { if (!s.agreed) return;
         const order = all.map(q => q.id).sort(() => Math.random() - 0.5);

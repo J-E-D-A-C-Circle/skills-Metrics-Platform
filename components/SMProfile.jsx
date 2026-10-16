@@ -205,7 +205,7 @@ class SMProfile extends React.Component {
       history,
       adding: s.adding, toggleAdd: () => this.setState({ adding: !s.adding }), newAction: s.newAction, newComp, newDue: s.newDue, gapComps,
       onNewAction: e => this.setState({ newAction: e.target.value }), onNewComp: e => this.setState({ newComp: e.target.value }), onNewDue: e => this.setState({ newDue: e.target.value }),
-      saveBg: canSave ? '#15904c' : '#a3acb9',
+      saveBg: canSave ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9',
       // Add plan action: due month becomes "Mon YYYY"; new actions start at 0% and wait for manager approval.
       saveAction: () => { if (!canSave) return; const due = s.newDue ? new Date(s.newDue + '-01').toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'TBC';
         this.setState({ plan: [...s.plan, { id: Date.now(), action: s.newAction.trim(), comp: +newComp, due, pct: 0, ok: false }], adding: false, newAction: '', newDue: '' }); this.flash('Sent to Joseph Ahor Abandoh-Sam for approval'); },

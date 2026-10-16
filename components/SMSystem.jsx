@@ -166,7 +166,7 @@ class SMSystem extends React.Component {
     // ===== SETTINGS · Values handed to the screen =====
     return {
       headerActions: view === 'users' ? (!may('settings.add-user') ? null : <button onClick={() => this.openAdd()} style={{ display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}><i className={"icon-user-plus"} style={{ fontSize: "14px" }}></i>Add user</button>)
-        : view === 'settings' ? <button onClick={() => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); }} style={{ height: "36px", padding: "0 18px", border: "0", borderRadius: "999px", background: s.sDirty ? '#15904c' : '#a3acb9', color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>{s.sDirty ? 'Save settings' : 'All changes saved'}</button> : null,
+        : view === 'settings' ? <button onClick={() => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); }} style={{ height: "36px", padding: "0 18px", border: "0", borderRadius: "999px", background: s.sDirty ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', color: "#fff", font: "600 13px Inter,sans-serif", cursor: "pointer" }}>{s.sDirty ? 'Save settings' : 'All changes saved'}</button> : null,
       title: { users: 'User Management', audit: 'Audit Logs', settings: 'System Settings', help: 'Help & Guides', ratings: 'Help & Guides' }[view],
       subtitle: { users: 'Manage who can sign in and what each role can do, across every department', audit: 'A tamper-evident record of sign-ins, assessments, integrity events and changes', settings: 'Platform-wide defaults for assessments, security and data', help: 'Answers about the timed assessment, scoring and your results', ratings: 'The proficiency, importance, gap and scoring scales used across the platform' }[view],
       isUsers: view === 'users', isAudit: view === 'audit', isSettings: view === 'settings', isHelp: view === 'help', isRatings: view === 'ratings',
@@ -279,7 +279,7 @@ class SMSystem extends React.Component {
       st: s.st, on: Object.fromEntries(['duration', 'start', 'end', 'tabLimit', 'retention'].map(k => [k, e => setSt(k, ['duration', 'tabLimit'].includes(k) ? +e.target.value : e.target.value)])),
       switches: [['mfa', 'Require multi-factor sign-in', 'For administrators and managers'], ['offline', 'Allow offline assessments', 'Answers cached on the device and synced automatically'], ['encrypt', 'Encrypt offline data', 'AES-256 on the device'], ['notify', 'Email staff before assessment day', 'Reminders 3 days and 1 day before'], ...(ft.feedback360 ? [['anon', 'Keep 360° feedback anonymous', 'Only HR can see who gave feedback']] : [])]
         .map(([k, label, desc]) => ({ label, desc, justify: s.st[k] ? 'flex-end' : 'flex-start', bg: s.st[k] ? '#0d3b2a' : '#d1d5db', toggle: () => setSt(k, !s.st[k]) })),
-      sSaveBg: s.sDirty ? '#15904c' : '#a3acb9', sSaveText: s.sDirty ? 'Save settings' : 'All changes saved',
+      sSaveBg: s.sDirty ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', sSaveText: s.sDirty ? 'Save settings' : 'All changes saved',
       saveSettings: () => { if (!s.sDirty) return; this.setState({ sDirty: false }); this.flash('Settings saved'); },
       // ===== HELP · Quick links, FAQ & support ticket =====
       // Quick links: non-admins get My assessments; everyone gets Rating scales (opens the Rating Scales tab on this page).
@@ -287,7 +287,7 @@ class SMSystem extends React.Component {
       links: [role !== 'admin' ? { icon: 'icon-clipboard-list', title: 'My assessments', sub: 'Open today · ' + d.cycle.window, go: () => go('assessments') } : null, { icon: 'icon-sliders-horizontal', title: 'Rating scales explained', sub: 'Proficiency, importance and gap', go: () => go('help', 'ratings') }].filter(Boolean),
       hq: s.hq, onHq: e => this.setState({ hq: e.target.value }), noFaq: faqs.length === 0,
       faqs: faqs.map(({ f, i }) => ({ q: f[0], a: f[1], open: !!s.open[i], chev: s.open[i] ? 'icon-chevron-up' : 'icon-chevron-down', toggle: () => this.setState({ open: { ...this.state.open, [i]: !this.state.open[i] } }) })),
-      tSubject: s.tSubject, tMsg: s.tMsg, onTSubject: e => this.setState({ tSubject: e.target.value }), onTMsg: e => this.setState({ tMsg: e.target.value }), tBg: canSend ? '#15904c' : '#a3acb9',
+      tSubject: s.tSubject, tMsg: s.tMsg, onTSubject: e => this.setState({ tSubject: e.target.value }), onTMsg: e => this.setState({ tMsg: e.target.value }), tBg: canSend ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9',
       sendTicket: () => { if (!canSend) { this.flash('Add a subject and a message'); return; } this.setState({ tSubject: '', tMsg: '' }); this.flash('Ticket sent. We usually reply within one working day.'); },
       toast: s.toast,
     };
