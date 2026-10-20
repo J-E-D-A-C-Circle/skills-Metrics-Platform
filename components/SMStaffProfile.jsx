@@ -81,7 +81,7 @@ export function AssessmentHistory({ p, own }) {
         {isOpen ? <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {!a.released && a.completed ? <div style={{ fontSize: '13px', color: '#92400e', background: '#fef3c7', borderRadius: '10px', padding: '8px 12px' }}><i className="icon-clock" style={{ marginRight: '6px' }}></i>Results for this assessment have not been released yet.</div> : null}
           {a.results.length ? <div><div style={{ font: '600 12px Inter,sans-serif', color: '#374151', marginBottom: '6px' }}>Final results ({a.completed} completed attempt{a.completed === 1 ? '' : 's'} averaged)</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>{a.results.map(r => <Badge key={r.competency.id} bg={GAP_COLOURS[r.gapStatus][0]} fg={GAP_COLOURS[r.gapStatus][1]} title={r.competencyLabel + ' · ' + r.gapLabel}>{r.competency.short || r.competency.name}: {r.display} · {r.gapLabel}</Badge>)}</div></div> : null}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>{a.results.map(r => <Badge key={r.competency.id} bg={GAP_COLOURS[r.gapStatus][1]} fg={GAP_COLOURS[r.gapStatus][2]} title={r.competencyLabel + ' · ' + r.gapLabel}>{r.competency.short || r.competency.name}: {r.display} · {r.gapLabel}</Badge>)}</div></div> : null}
           {attempts.length ? <DataTable minWidth={720} rowKey={h => h.id} rows={attempts} columns={[
             { key: 'n', label: 'Attempt', render: h => <b>#{h.attemptNo}</b> },
             { key: 'v', label: 'Version', render: h => h.versionNo ? 'v' + h.versionNo : '—' },

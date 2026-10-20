@@ -154,12 +154,12 @@ export function ScopeBadge({ override }) {
 export function CompetencyBadge({ status, pending }) {
   if (!status) return <Badge bg="#f3f4f6" fg="#6b7280">{pending ? 'Pending' : 'Not assessed'}</Badge>;
   const c = COMPETENCY_COLOURS[status];
-  return <Badge bg={c[0]} fg={c[1]}><i className={status === 'PROFICIENT' ? 'icon-award' : status === 'COMPETENT' ? 'icon-check' : 'icon-triangle-alert'} style={{ fontSize: '11px' }}></i>{COMPETENCY_LABEL[status]}</Badge>;
+  return <Badge bg={c[1]} fg={c[2]}><i className={status === 'PROFICIENT' ? 'icon-award' : status === 'COMPETENT' ? 'icon-check' : 'icon-triangle-alert'} style={{ fontSize: '11px' }}></i>{COMPETENCY_LABEL[status]}</Badge>;
 }
 export function GapStatusBadge({ gap, pending }) {
   if (!gap) return <Badge bg="#f3f4f6" fg="#6b7280">{pending ? 'Pending' : 'Not assessed'}</Badge>;
   const c = GAP_COLOURS[gap];
-  return <Badge bg={c[0]} fg={c[1]}><i className={gap === 'NONE' ? 'icon-circle-check' : gap === 'MODERATE' ? 'icon-circle-alert' : 'icon-octagon-alert'} style={{ fontSize: '11px' }}></i>{GAP_LABEL[gap]}</Badge>;
+  return <Badge bg={c[1]} fg={c[2]}><i className={gap === 'NONE' ? 'icon-circle-check' : gap === 'MODERATE' ? 'icon-circle-alert' : 'icon-octagon-alert'} style={{ fontSize: '11px' }}></i>{GAP_LABEL[gap]}</Badge>;
 }
 // Final average to 2 decimals (the unrounded value is what the server classifies).
 export const Avg = ({ value }) => <span style={{ font: "600 13px 'JetBrains Mono',monospace" }}>{value == null ? '—' : formatAverage(Number(value))}</span>;

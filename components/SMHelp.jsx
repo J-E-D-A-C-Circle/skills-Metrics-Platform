@@ -4,14 +4,16 @@
 // Screen / URL: /help (Help & Guides) and /help?tab=ratings (Rating Scales); open to every signed-in person
 // Used by: components/SkillMatrixApp.jsx (help page)   Depends on: smUI, smApi (GET /api/lookups), lib/scoring.js
 // Sections (search for these markers): HELP · Questions & answers, HELP · Screen, HELP · Quick links, HELP · Answers,
-//   HELP · Rating Scales
+//   HELP · Rating Scales, HELP · Rating Scales · Row helper, HELP · Rating Scales · Competency score,
+//   HELP · Rating Scales · Skill Importance Levels, HELP · Rating Scales · Gaps Description, HELP · Rating Scales · Final result,
+//   HELP · Rating Scales · Attempts
 // Every rule described here is the one the server applies (lib/scoring.js and the active scoring version), so the
 // thresholds shown always match the results people see.
 // =============================================================================
 import React, { useMemo, useState } from 'react';
-import { Page, PageHeader, Card, Search, EmptyState, Badge } from './smUI';
+import { Page, PageHeader, Card, Search, EmptyState } from './smUI';
 import { useLoad } from './smApi';
-import { SCORE_LABELS, DEFAULT_CONFIG, COMPETENCY_LABEL, GAP_LABEL, COMPETENCY_COLOURS, GAP_COLOURS } from '../lib/scoring';
+import { SCORE_LABELS, SCORE_COLOURS, IMPORTANCE, DEFAULT_CONFIG, COMPETENCY_LABEL, GAP_LABEL, COMPETENCY_COLOURS, GAP_COLOURS } from '../lib/scoring';
 
 const n2 = v => Number(v).toFixed(2);
 const below = v => n2(Math.round(v * 100 - 1) / 100); // 4.00 -> "3.99"
@@ -75,34 +77,49 @@ function Guides({ c, me, go }) {
 }
 
 // ===== HELP · Rating Scales =====
-// The 0-5 score labels, the Competent / Proficient thresholds and the gap bands, from the active scoring version.
+// The 0-5 score labels, the Competent / Proficient thresholds, the gap bands and the importance levels, from the
+// active scoring version. Laid out like the original DVLA scale cards: coloured block on the left, meaning on the right.
 function Ratings({ c, version }) {
-  const row = (key, left, label, colours, desc) => (
-    <div key={key} style={{ display: 'flex', gap: '14px', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid rgba(15,35,65,.07)', flexWrap: 'wrap' }}>
-      <span style={{ flex: 'none', width: '110px', font: "600 14px 'JetBrains Mono',monospace", color: '#111827' }}>{left}</span>
-      <span style={{ flex: 'none', minWidth: '130px' }}>{colours ? <Badge bg={colours[0]} fg={colours[1]}>{label}</Badge> : <b style={{ fontSize: '13px' }}>{label}</b>}</span>
-      <span style={{ flex: '1 1 220px', fontSize: '13px', lineHeight: '1.5', color: '#374151' }}>{desc}</span>
+  // ===== HELP · Rating Scales · Row helper =====
+  // One row: a 150px block (number or range in bold, label underneath) and the description. Used by every card.
+  const block = (key, num, label, bg, fg, desc) => (
+    <div key={key} style={{ display: 'flex', gap: '14px', alignItems: 'stretch', borderBottom: '1px solid rgba(15,35,65,.07)' }}>
+      <div style={{ flex: 'none', width: '150px', padding: '12px 14px', background: bg, color: fg, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <span style={{ font: '700 16px Inter,sans-serif' }}>{num}</span><span style={{ font: '600 12px Inter,sans-serif' }}>{label}</span>
+      </div>
+      <div style={{ flex: '1', minWidth: 0, padding: '12px 16px 12px 0', fontSize: '13px', lineHeight: '1.5', color: '#374151', display: 'flex', alignItems: 'center' }}>{desc}</div>
     </div>);
+  const solid = (key, num, label, col, desc) => block(key, num, label, col[1], col[2], desc);
+  const tint = (key, num, label, col, desc) => block(key, num, label, col[0], col[1], desc);
+  const card = { flush: true, style: { overflow: 'hidden' } };
   return (
     <>
       <PageHeader title="Help & Guides" description={'The scales used for every result' + (version ? ' (scoring version ' + version + ')' : '')} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,440px),1fr))', gap: '20px', alignItems: 'start' }}>
-        <Card title="Competency score (0 to 5)" sub="5 × the share of a competency's questions answered correctly; a score of 3.5 reads as Moderate" flush>
-          {SCORE_LABELS.map(s => row(s.score, String(s.score), s.label, null, s.meaning))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,420px),1fr))', gap: '20px', alignItems: 'start' }}>
+        {/* ===== HELP · Rating Scales · Competency score ===== */}
+        <Card title="Competency score (0 to 5)" sub="5 × the share of a competency's questions answered correctly; a score of 3.5 reads as Moderate" {...card}>
+          {SCORE_LABELS.map(s => solid('s' + s.score, String(s.score), s.label, SCORE_COLOURS[s.score], s.meaning))}
         </Card>
-        <Card title="Final result" sub="The average of every completed attempt, compared unrounded and shown to 2 decimals" flush>
-          {row('nc', '0.00 – ' + below(c.competentFrom), COMPETENCY_LABEL.NOT_COMPETENT, COMPETENCY_COLOURS.NOT_COMPETENT, 'Below the working competency threshold.')}
-          {row('c', n2(c.competentFrom) + (c.proficientFrom > c.competentFrom ? ' – ' + below(c.proficientFrom) : ''), COMPETENCY_LABEL.COMPETENT, COMPETENCY_COLOURS.COMPETENT, 'Meets the working competency threshold.')}
-          {row('p', n2(c.proficientFrom) + (c.proficientFrom < c.requiredLevel ? ' +' : ''), COMPETENCY_LABEL.PROFICIENT, COMPETENCY_COLOURS.PROFICIENT, 'Has reached the full required proficiency level.')}
+        {/* ===== HELP · Rating Scales · Skill Importance Levels ===== */}
+        <Card title="Skill Importance Levels" sub="How critical a competency is to the role (set on each competency in the Competency Framework)" {...card}>
+          {IMPORTANCE.slice(1).map(p => block('imp' + p.n, String(p.n), p.label, p.bg, p.fg, p.desc))}
         </Card>
-        <Card title="Gap status" sub={'Gap = required level (' + n2(c.requiredLevel) + ') minus the final average'} flush>
-          {row('cg', '0.00 – ' + below(c.moderateGapFrom), GAP_LABEL.CRITICAL, GAP_COLOURS.CRITICAL, 'A priority for development.')}
-          {row('mg', n2(c.moderateGapFrom) + ' – ' + below(c.noGapFrom), GAP_LABEL.MODERATE, GAP_COLOURS.MODERATE, 'Some development still needed, even when Competent.')}
-          {row('ng', n2(c.noGapFrom) + (c.noGapFrom < c.requiredLevel ? ' +' : ''), GAP_LABEL.NONE, GAP_COLOURS.NONE, 'The required level is reached.')}
+        {/* ===== HELP · Rating Scales · Gaps Description ===== */}
+        <Card title="Gaps Description" sub={'Gap = required level (' + n2(c.requiredLevel) + ') minus the final average'} {...card}>
+          {solid('ng', n2(c.noGapFrom) + (c.noGapFrom < c.requiredLevel ? ' +' : ''), GAP_LABEL.NONE, GAP_COLOURS.NONE, "The employee's current skill level fully meets the required skill level. There is no discrepancy between the required and current skills.")}
+          {solid('mg', n2(c.moderateGapFrom) + ' – ' + below(c.noGapFrom), GAP_LABEL.MODERATE, GAP_COLOURS.MODERATE, "The employee's current skill level is close to, but not yet at, the required skill level. Some improvement and refinement is needed, even when Competent.")}
+          {solid('cg', '0.00 – ' + below(c.moderateGapFrom), GAP_LABEL.CRITICAL, GAP_COLOURS.CRITICAL, "The employee's current skill level is far below the required skill level. Immediate and intensive training, along with ongoing support and development, are necessary to address the gap.")}
         </Card>
-        <Card title="Attempts" flush>
-          {row('a1', String(c.defaultMaxAttempts), 'Attempts allowed', null, 'The usual limit; an assessment or assignment can set its own. Every attempt started counts.')}
-          {row('a2', 'Average', 'Final result', null, 'All completed attempts count equally. Unfinished, abandoned or expired attempts are never counted, and a competency not assessed is shown as "Not assessed", never 0.')}
+        {/* ===== HELP · Rating Scales · Final result ===== */}
+        <Card title="Final result" sub="The average of every completed attempt, compared unrounded and shown to 2 decimals" {...card}>
+          {tint('nc', '0.00 – ' + below(c.competentFrom), COMPETENCY_LABEL.NOT_COMPETENT, COMPETENCY_COLOURS.NOT_COMPETENT, 'Below the working competency threshold.')}
+          {tint('c', n2(c.competentFrom) + (c.proficientFrom > c.competentFrom ? ' – ' + below(c.proficientFrom) : ''), COMPETENCY_LABEL.COMPETENT, COMPETENCY_COLOURS.COMPETENT, 'Meets the working competency threshold.')}
+          {tint('p', n2(c.proficientFrom) + (c.proficientFrom < c.requiredLevel ? ' +' : ''), COMPETENCY_LABEL.PROFICIENT, COMPETENCY_COLOURS.PROFICIENT, 'Has reached the full required proficiency level.')}
+        </Card>
+        {/* ===== HELP · Rating Scales · Attempts ===== */}
+        <Card title="Attempts" {...card}>
+          {block('a1', String(c.defaultMaxAttempts), 'Attempts allowed', '#f3f4f6', '#111827', 'The usual limit; an assessment or assignment can set its own. Every attempt started counts.')}
+          {block('a2', 'Average', 'Final result', '#f3f4f6', '#111827', 'All completed attempts count equally. Unfinished, abandoned or expired attempts are never counted, and a competency not assessed is shown as "Not assessed", never 0.')}
         </Card>
       </div>
     </>

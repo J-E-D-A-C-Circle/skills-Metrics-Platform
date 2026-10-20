@@ -28,7 +28,7 @@ export const pct = x => (x == null ? '—' : Math.round(x * 100) + '%');
 // Critical / Moderate / No Gap counts as small labelled chips (zero counts are faded).
 export function GapCounts({ c, compact }) {
   return <span style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>{[['CRITICAL', c.critical], ['MODERATE', c.moderate], ['NONE', c.none]].map(([k, n]) =>
-    <Badge key={k} bg={n ? GAP_COLOURS[k][0] : '#f9fafb'} fg={n ? GAP_COLOURS[k][1] : '#9ca3af'} title={GAP_LABEL[k]}>{n} {compact ? GAP_LABEL[k].split(' ')[0] : GAP_LABEL[k]}</Badge>)}</span>;
+    <Badge key={k} bg={n ? GAP_COLOURS[k][1] : '#f9fafb'} fg={n ? GAP_COLOURS[k][2] : '#9ca3af'} title={GAP_LABEL[k]}>{n} {compact ? GAP_LABEL[k].split(' ')[0] : GAP_LABEL[k]}</Badge>)}</span>;
 }
 // Opens Team Results with filters already chosen (used by dashboard drill-downs).
 export function goTeam(go, filters) { try { sessionStorage.setItem('skm-team-filter', JSON.stringify(filters || {})); } catch (e) {} go('staff-evals'); }
@@ -169,7 +169,7 @@ function Matrix({ rows, comps, nameCell, loading }) {
           <td style={{ ...TD, position: 'sticky', left: 0, background: 'rgba(255,255,255,.96)', zIndex: 1 }}>{nameCell(r)}<div style={{ fontSize: '11px', color: '#6b7280' }}>{r.department || '—'}</div></td>
           {comps.map(c => { const x = r.results[c.id]; const col = x ? GAP_COLOURS[x.gapStatus] : null;
             return <td key={c.id} title={x ? c.name + ': ' + formatAverage(x.average) + ' · ' + GAP_LABEL[x.gapStatus] + ' · ' + x.attemptsIncluded + ' attempt(s)' : c.name + ': Not assessed'} style={{ ...TD, textAlign: 'center', padding: '6px' }}>
-              {x ? <div style={{ background: col[0], color: col[1], borderRadius: '8px', padding: '4px 2px' }}><div style={{ font: "700 12.5px 'JetBrains Mono',monospace" }}>{formatAverage(x.average)}</div><div style={{ fontSize: '10px', fontWeight: 600 }}>{GAP_LABEL[x.gapStatus].replace(' Gap', '')}</div></div>
+              {x ? <div style={{ background: col[1], color: col[2], borderRadius: '8px', padding: '4px 2px' }}><div style={{ font: "700 12.5px 'JetBrains Mono',monospace" }}>{formatAverage(x.average)}</div><div style={{ fontSize: '10px', fontWeight: 600 }}>{GAP_LABEL[x.gapStatus].replace(' Gap', '')}</div></div>
                 : <span style={{ color: '#9ca3af', fontSize: '11px' }}>—</span>}</td>; })}
         </tr>)}</tbody>
       </table>

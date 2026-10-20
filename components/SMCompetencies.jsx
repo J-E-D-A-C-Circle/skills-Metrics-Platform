@@ -4,7 +4,7 @@
 // Screen / URL: /framework
 // Who sees it: users with "View framework" (framework.view, e.g. Administrators and Assessment Creators); adding and
 //   editing competencies and categories needs "Edit competencies" (framework.competencies). The server checks both.
-// Used by: components/SkillMatrixApp.jsx (PAGE ROUTER, pFramework)   Depends on: ./smUI, ./smApi, /api/competencies/**
+// Used by: components/SkillMatrixApp.jsx (PAGE ROUTER, pFramework)   Depends on: ./smUI, ./smApi, lib/scoring.js (IMPORTANCE, scoreColours), /api/competencies/**
 // Sections (search for these markers): FRAMEWORK · Constants, FRAMEWORK · Page, FRAMEWORK · Category groups,
 //   FRAMEWORK · Competency row, FRAMEWORK · Competency drawer, FRAMEWORK · Competency form, FRAMEWORK · Category dialog
 // Deactivating a competency or category only stops it being used for new content; saved results never change.
@@ -12,18 +12,19 @@
 import React, { useMemo, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, Drawer, INPUT, LABEL } from './smUI';
 import { api, qs, useLoad, fmtDate } from './smApi';
+import { IMPORTANCE, scoreColours } from '../lib/scoring';
 
 // ===== FRAMEWORK · Constants =====
-// Importance 1-5 (the DVLA assessment tools' scale), shown with a text label as well as a colour.
-const IMP = [null,
-  { label: 'Not Important', bg: '#1c8fd1', fg: '#fff' }, { label: 'Of Minor Importance', bg: '#2f9e44', fg: '#fff' }, { label: 'Moderately Important', bg: '#f2c200', fg: '#3b2f00' },
-  { label: 'Very Important', bg: '#f08c00', fg: '#fff' }, { label: 'Critically Important', bg: '#e03131', fg: '#fff' }];
+// Importance 1-5 (the DVLA assessment tools' scale, from lib/scoring.js), shown with a text label as well as a colour.
+const IMP = IMPORTANCE;
 const MONO = { font: "600 12px 'JetBrains Mono',monospace", color: '#6b7280' };
 const SUB = { fontSize: '11.5px', color: '#6b7280', marginTop: '3px', lineHeight: 1.45 };
 const ERR = { fontSize: '12.5px', color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '8px 10px' };
 const NOTE = { fontSize: '12.5px', color: '#374151', background: '#f0f7f2', border: '1px solid #cfe6d7', borderRadius: '10px', padding: '8px 10px', lineHeight: 1.5 };
 const GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '12px' };
 const ImpBadge = ({ n }) => IMP[n] ? <Badge bg={IMP[n].bg} fg={IMP[n].fg} style={{ borderRadius: '6px' }}>Importance {n} · {IMP[n].label}</Badge> : null;
+// Required level as a small chip in the 0-5 score colour for that level (the number carries the meaning).
+const LevelChip = ({ n, suffix }) => { const c = scoreColours(n); return <Badge bg={c[1]} fg={c[2]} style={{ borderRadius: '6px', fontFamily: "'JetBrains Mono',monospace" }}>{n.toFixed(2)}{suffix || ''}</Badge>; };
 const Off = () => <Badge bg="#f3f4f6" fg="#4b5563"><i className="icon-circle-pause" style={{ fontSize: '11px' }}></i>Inactive</Badge>;
 const catName = c => (c ? c.name + ' · ' + c.group : '—');
 const FieldErr = ({ e }) => (e ? <span style={{ font: '400 11.5px Inter,sans-serif', letterSpacing: 0, color: '#b91c1c' }}>{[].concat(e)[0]}</span> : null);
@@ -95,7 +96,7 @@ function CompRow({ c, dept, onOpen }) {
       </span>
       <Badge bg={c.departmentId ? '#eef2ff' : '#e6f2ea'} fg={c.departmentId ? '#3730a3' : '#0d3b2a'}>{c.departmentId ? dept || 'Department' : 'All departments'}</Badge>
       <ImpBadge n={c.importance} />
-      <span style={{ fontSize: '12px', color: '#374151', width: '96px' }}>Required <b style={{ fontFamily: "'JetBrains Mono',monospace" }}>{c.requiredLevel.toFixed(2)}</b></span>
+      <span style={{ fontSize: '12px', color: '#374151', width: '118px', display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>Required <LevelChip n={c.requiredLevel} /></span>
       <span style={{ fontSize: '11.5px', color: '#9ca3af', width: '96px' }}>{c.questions} questions</span>
       {!c.active ? <Off /> : null}
       <i className="icon-chevron-right" style={{ fontSize: '14px', color: '#9ca3af' }}></i>
@@ -130,7 +131,7 @@ function CompDrawer({ open, setOpen, data, mayEdit, toast, onChanged }) {
           {err ? <div style={ERR}>{err}</div> : null}
           {!c.active ? <div style={NOTE}>This competency is inactive: it is not offered for new questions. Results already saved for it are kept unchanged.</div> : null}
           <div style={GRID}>
-            {[['Short name', c.short], ['Department', dept], ['Importance', <ImpBadge n={c.importance} />], ['Required level', <b style={{ fontFamily: "'JetBrains Mono',monospace" }}>{c.requiredLevel.toFixed(2)} of 5</b>],
+            {[['Short name', c.short], ['Department', dept], ['Importance', <ImpBadge n={c.importance} />], ['Required level', <LevelChip n={c.requiredLevel} suffix=" of 5" />],
               ['Questions mapped', c.questions], ['Results recorded', c.finalResults ? c.finalResults + ' staff results' : 'None yet'], ['Last changed', fmtDate(c.updatedAt)]].map(([k, v]) =>
               <div key={k}><div style={LABEL}>{k.toUpperCase()}</div><div style={{ fontSize: '13.5px', marginTop: '4px' }}>{v}</div></div>)}
           </div>

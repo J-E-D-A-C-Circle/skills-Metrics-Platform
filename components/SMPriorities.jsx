@@ -70,7 +70,7 @@ function CompetencyCard({ c, S }) {
   const [open, setOpen] = useState(c.rank <= 3);
   const perms = S.me?.perms || [], canOpen = perms.includes('staff-evals.report');
   return (
-    <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '26px', height: '26px', borderRadius: '50%', background: c.critical ? GAP_COLOURS.CRITICAL[0] : GAP_COLOURS.MODERATE[0], color: c.critical ? GAP_COLOURS.CRITICAL[1] : GAP_COLOURS.MODERATE[1], display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: '700 12px Inter,sans-serif', flex: 'none' }}>{c.rank}</span>{c.name}</span>}
+    <Card title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '26px', height: '26px', borderRadius: '50%', background: c.critical ? GAP_COLOURS.CRITICAL[1] : GAP_COLOURS.MODERATE[1], color: c.critical ? GAP_COLOURS.CRITICAL[2] : GAP_COLOURS.MODERATE[2], display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: '700 12px Inter,sans-serif', flex: 'none' }}>{c.rank}</span>{c.name}</span>}
       sub={[c.category, c.group].filter(Boolean).join(' · ') + ' · ' + c.assessed + ' people assessed · group average ' + c.display}
       actions={<><GapStatusBadge gap={c.gapStatus} /><Btn small kind="ghost" icon={open ? 'icon-chevron-up' : 'icon-chevron-down'} onClick={() => setOpen(!open)}>{open ? 'Hide people' : c.needDevelopment + ' people'}</Btn></>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
