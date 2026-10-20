@@ -17,11 +17,20 @@ The competency framework, question banks and scales come from the DVLA documents
 
 ## Run it
 
-You need Node 20+ and PostgreSQL 16 (Docker is the easiest way to get PostgreSQL).
+### Option A: Run Entire Stack via Docker (App + PostgreSQL)
+
+```bash
+cp .env.example .env          # set SEED_ADMIN_PASSWORD and any custom settings
+docker compose up -d --build  # builds and starts both PostgreSQL and Next.js
+docker compose exec app npm run db:seed # seed initial administrator and frameworks
+```
+Open [http://localhost:3000](http://localhost:3000).
+
+### Option B: Local Node.js Development (Docker for PostgreSQL only)
 
 ```bash
 cp .env.example .env          # then set DATABASE_URL, a temporary SEED_ADMIN_PASSWORD and JOBS_SECRET
-docker compose up -d          # starts PostgreSQL (skip if you already run PostgreSQL)
+docker compose up -d db       # starts only PostgreSQL
 npm install                   # also generates the database client
 npm run db:migrate            # creates the tables
 npm run db:seed               # departments, competencies, the 8 question banks, notification templates, the first administrator
@@ -29,9 +38,19 @@ npm run dev                   # open http://localhost:3000
 npm test                      # unit tests (scoring, permissions, every module's rules)
 ```
 
-Sign in as **denzilasiam.adjei** with the temporary `SEED_ADMIN_PASSWORD`; you'll be asked to set your own password.
+Sign in as **admin** with password `Password123!`.
 
-**Test data (never on live data):** set `SEED_DEMO=true` and `SEED_DEMO_PASSWORD` in `.env` and run `npm run db:seed` again. It adds the accounts below (all with `SEED_DEMO_PASSWORD`), 40 more staff, publishes the two Assistant Officer banks, assigns them to every department and loads repeatable sample attempts and results (`prisma/seed-demo-results.mjs`). Staff IDs start with `DEMO-`.
+### Demo Accounts for Testing & Presentation (Password: `Password123!`)
+
+| Username | Role | Department | Designation / Purpose |
+|---|---|---|---|
+| `admin` | Administrator | IT Department | Full system admin & configuration |
+| `creator.hr` | Assessment Creator | Human Resources | Designs and drafts assessment tools |
+| `manager.rbdi` | Manager / Supervisor | RBDI | Views team skill matrices & gap analysis |
+| `staff.rbdi` | Participant (Staff) | RBDI | Takes RBDI Assistant Officer assessments |
+| `staff.hr` | Participant (Staff) | Human Resources | Takes HR Officer assessments |
+| `resolver.it` | Ticket Resolver | IT Department | Resolves technical support requests |
+| `manager.ca` | Manager / Supervisor | Corporate Affairs | Corporate Affairs team oversight |
 
 | Username | Role | Department |
 |---|---|---|

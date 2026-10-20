@@ -1,18 +1,57 @@
 # =============================================================================
-# docker-compose.yml · Local PostgreSQL for development (docker compose up -d)
-# The password here must match DATABASE_URL in .env. Data is kept in the "skm-db" volume.
+# docker-compose.yml · Local Full Stack (PostgreSQL 16 + Next.js App)
+# Usage:
+#   docker compose up -d          # Start both database and app
+#   docker compose up -d db       # Start only the database (for local npm run dev)
+#   docker compose exec app npm run db:seed # Seed initial administrative & framework data
 # =============================================================================
 services:
   db:
     image: postgres:16
+    container_name: skm-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: skm
-      POSTGRES_PASSWORD: change-me
-      POSTGRES_DB: skill_matrix
+      POSTGRES_USER: ${POSTGRES_USER:-skm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-skill_matrix}
     ports:
       - "5432:5432"
     volumes:
       - skm-db:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-skm} -d ${POSTGRES_DB:-skill_matrix}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skm-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-skm}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-skill_matrix}?schema=public
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@dvla.gov.gh}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-System Administrator}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Password123!}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-60}
+      JOBS_SECRET: ${JOBS_SECRET:-}
+      STORAGE_DIR: /app/storage
+    volumes:
+      - app-storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   skm-db:
+  app-storage:

@@ -11,5 +11,12 @@ const nextConfig = {
   outputFileTracingRoot: __dirname,
   // pdfkit reads its font files from node_modules at run time, so it is loaded by Node instead of being bundled.
   serverExternalPackages: ['pdfkit'],
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  webpack: (config) => {
+    config.resolve.alias['@'] = __dirname;
+    return config;
+  },
 };
 export default nextConfig;

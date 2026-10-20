@@ -44,7 +44,7 @@ export function PageTabs() {
 // ===== UI KIT · Avatar key =====
 // localStorage key for the signed-in person's profile photo. The seeded administrator keeps the original key.
 export function avatarKey() {
-  try { const me = localStorage.getItem('skm-me'); return me && me !== 'denzilasiam.adjei' ? 'skm-user-avatar:' + me : 'skm-user-avatar'; } catch (e) { return 'skm-user-avatar'; }
+  try { const me = localStorage.getItem('skm-me'); return me && me !== 'admin' ? 'skm-user-avatar:' + me : 'skm-user-avatar'; } catch (e) { return 'skm-user-avatar'; }
 }
 
 // ===== UI KIT · Page header =====

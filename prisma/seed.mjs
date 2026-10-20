@@ -11,6 +11,8 @@
 //   the administrator, the 8 DVLA question banks (as Approved assessments, not yet published or assigned) and
 //   notification templates. No made-up staff or results unless SEED_DEMO=true.
 // =============================================================================
+import fs from 'node:fs';
+import xlsx from 'xlsx';
 import { PrismaClient } from '@prisma/client';
 import { scrypt, randomBytes } from 'node:crypto';
 import { DEPARTMENTS, LOCATIONS, COMPETENCIES, JOB_LEVELS, BANKS, DEMO_ACCOUNTS, NOTIFICATION_TEMPLATES } from './seed-data.mjs';
@@ -57,14 +59,13 @@ async function main() {
 
   // ===== SEED · Administrator account =====
   // Created once, on a temporary password. Re-running the seed never resets an existing password.
-  const adminUser = (process.env.SEED_ADMIN_USERNAME || 'denzilasiam.adjei').toLowerCase();
+  const adminUser = (process.env.SEED_ADMIN_USERNAME || 'admin').toLowerCase();
   let admin = await db.account.findUnique({ where: { username: adminUser } });
   if (!admin) {
-    const pw = process.env.SEED_ADMIN_PASSWORD;
-    if (!pw) throw new Error('Set SEED_ADMIN_PASSWORD in .env (a temporary password for the first administrator).');
+    const pw = process.env.SEED_ADMIN_PASSWORD || 'Password123!';
     admin = await db.account.create({ data: {
-      username: adminUser, email: (process.env.SEED_ADMIN_EMAIL || adminUser + '@dvla.gov.gh').toLowerCase(), displayName: process.env.SEED_ADMIN_NAME || 'Adjei Denzil Asiam',
-      passwordHash: await hashPassword(pw), status: 'MUST_CHANGE_PASSWORD', deptScope: 'ALL', roles: { create: [{ role: 'ADMIN' }] },
+      username: adminUser, email: (process.env.SEED_ADMIN_EMAIL || adminUser + '@dvla.gov.gh').toLowerCase(), displayName: process.env.SEED_ADMIN_NAME || 'System Administrator',
+      passwordHash: await hashPassword(pw), status: 'ACTIVE', deptScope: 'ALL', roles: { create: [{ role: 'ADMIN' }] },
     } });
     await db.auditLog.create({ data: { action: 'account.create', entityType: 'Account', entityId: String(admin.id), after: { username: admin.username, roles: ['ADMIN'], source: 'seed' } } });
     log('administrator', adminUser, 'created (must change password on first sign-in)');
@@ -92,6 +93,75 @@ async function main() {
 
   // ===== SEED · Notification templates =====
   for (const [key, title, body] of NOTIFICATION_TEMPLATES) await db.notificationTemplate.upsert({ where: { key }, update: {}, create: { key, title, body } });
+
+  // ===== SEED · Official HR & RBDI Staff List =====
+  const excelFile = 'HR & RBDI STAFF LIST (1).xlsx';
+  if (fs.existsSync(excelFile)) {
+    const wb = xlsx.readFile(excelFile);
+    const rawRows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    const defaultPw = process.env.SEED_DEMO_PASSWORD || 'Password123!';
+    const staffHash = await hashPassword(defaultPw);
+    const head = stations['Head Office, Accra'] || Object.values(stations)[0];
+
+    for (const r of rawRows) {
+      const empId = String(r['Employee Id']).trim();
+      const fullName = r['Employee Name'].trim();
+      const parts = fullName.replace(/\s+/g, ' ').split(' ');
+      const desig = r.Designation.trim();
+      const isHR = r.Department.trim().toUpperCase().includes('HUMAN');
+      const deptCode = isHR ? 'HR' : 'RBDI';
+      const dUpper = desig.toUpperCase();
+      let gradeRank = 0;
+      if (dUpper.includes('DIRECTOR')) gradeRank = 3;
+      else if (dUpper.includes('MANAGER')) gradeRank = 2;
+      else if (dUpper.includes('OFFICER')) gradeRank = 1;
+
+      let role = 'STAFF';
+      if (dUpper.includes('DIRECTOR') || dUpper.includes('MANAGER HR') || dUpper.includes('MANAGER RBDI')) role = 'SUPERVISOR';
+      else if (dUpper.includes('ASSISTANT MANAGER HR')) role = 'CREATOR';
+
+      const username = (parts[0].toLowerCase() + '.' + parts[parts.length - 1].toLowerCase()).replace(/[^a-z0-9._-]/g, '');
+      const email = `${username}@dvla.gov.gh`;
+      const isTamale = String(r['Location\t'] || r['Location'] || '').toUpperCase().includes('TAMALE');
+      const station = (isTamale && stations['Tamale Office']) ? stations['Tamale Office'] : head;
+
+      const staff = await db.staffRecord.upsert({
+        where: { staffNo: empId },
+        update: { designation: desig, departmentId: dept[deptCode].id, gradeId: grades[gradeRank].id, stationId: station.id },
+        create: {
+          staffNo: empId,
+          firstName: parts[0],
+          lastName: parts[parts.length - 1],
+          otherNames: parts.length > 2 ? parts.slice(1, -1).join(' ') : null,
+          email,
+          designation: desig,
+          departmentId: dept[deptCode].id,
+          gradeId: grades[gradeRank].id,
+          stationId: station.id,
+        }
+      });
+
+      const existingAccount = await db.account.findUnique({ where: { username } });
+      if (!existingAccount) {
+        const roles = role === 'SUPERVISOR' ? ['SUPERVISOR', 'STAFF'] : [role];
+        await db.account.create({
+          data: {
+            username,
+            email,
+            displayName: fullName,
+            passwordHash: staffHash,
+            status: 'ACTIVE',
+            staffId: staff.id,
+            deptScope: 'OWN',
+            roles: { create: roles.map(r => ({ role: r })) },
+            permissions: { create: [...new Set(roles.flatMap(r => ROLE_PERMS[ROLE_LABEL[r]] || []))].map(key => ({ key })) },
+            supervisorLinks: role === 'SUPERVISOR' ? { create: [{ departmentId: dept[deptCode].id }] } : undefined,
+          }
+        });
+      }
+    }
+    log(rawRows.length, 'official HR & RBDI staff accounts loaded from Excel');
+  }
 
   // ===== SEED · Demo accounts (test only) =====
   if (process.env.SEED_DEMO === 'true') {

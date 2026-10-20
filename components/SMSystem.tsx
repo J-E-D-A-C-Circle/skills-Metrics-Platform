@@ -68,7 +68,7 @@ async function api(method, path, body) {
 const STATUSES = ['Active', 'Must change password', 'Suspended'];
 const isAdmin = u => u.role === 'Administrator';
 // Username of whoever is signed in (the seeded administrator when nobody has signed in yet).
-function meName() { try { return localStorage.getItem('skm-me') || 'denzilasiam.adjei'; } catch (e) { return 'denzilasiam.adjei'; } }
+function meName() { try { return localStorage.getItem('skm-me') || 'admin'; } catch (e) { return 'admin'; } }
 // ===== AUDIT LOG · Saved entries (permission and account changes) =====
 // Entries older versions saved in localStorage "skm-audit" (shown above the sample entries in the Audit Log tab).
 // User Management changes are now recorded on the server (AuditLog table); the Audit Log tab moves there in phase 8.

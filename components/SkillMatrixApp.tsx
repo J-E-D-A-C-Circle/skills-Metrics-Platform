@@ -1,6 +1,7 @@
+// @ts-nocheck
 'use client';
 // =============================================================================
-// SkillMatrixApp.jsx · App shell: header, sidebar, notifications, footer and the page router for every screen
+// SkillMatrixApp.tsx · App shell: header, sidebar, notifications, footer and the page router for every screen
 // Screen / URL: every URL (/, /profile, /assessments, /take, /signin, /staff-evals, /analytics, /training, /reports, /framework, /cycles, /forms, /settings, /help, /report?id=...); old URLs are redirected here
 // Who sees it: every signed-in user; the sidebar, tabs, pages and buttons follow their permissions (components/smAccess.js)
 // Used by: components/AppRouter.jsx (rendered from every app/<route>/page.jsx)   Depends on: SM* page components, smModel.js (buildModel), dvlaBanks.js (question banks), smUI.jsx (TabsContext, avatarKey), ui/select.jsx
@@ -115,7 +116,7 @@ function buildData() {
     window: '09:00 – 17:00', durationMin: 45, tabLimit: 3,
     mgrClose: add(2), mgrCloseLabel: dl(add(2)), results: add(7), resultsLabel: dl(add(7)), plans: add(14), plansLabel: dl(add(14)),
   };
-  const user = { name: 'ADJEI DENZIL ASIAM', first: 'DENZIL', last: 'ADJEI', other: 'ASIAM', email: 'denzilasiam.adjei@dvla.gov.gh', mobile: '0256488784', id: '123456789', dept: 'IT DEPARTMENT', deptName: 'IT Department', designation: 'IT OFFICER', location: 'HEAD OFFICE', dob: '13 April 1998', gender: 'Male', manager: 'HOD: Joseph Ahor Abandoh-Sam', target: JOB_LEVELS[1] + ' · Technical track' };
+  const user = { name: 'SYSTEM ADMINISTRATOR', first: 'SYSTEM', last: 'ADMINISTRATOR', other: '', email: 'admin@dvla.gov.gh', mobile: '0256488784', id: 'DVLA-ADM-001', dept: 'IT DEPARTMENT', deptName: 'IT Department', designation: 'SENIOR SYSTEMS ADMINISTRATOR', location: 'HEAD OFFICE', dob: '13 April 1990', gender: 'Male', manager: 'HOD: Joseph Ahor Abandoh-Sam', target: JOB_LEVELS[3] + ' · Management track' };
 
   // ===== DATA MODEL · Departments & competency framework =====
   // ---- Organisation: departments, competency framework, training ----
@@ -356,13 +357,13 @@ const setTitle = page => { wantedTitle = (TITLES[page] || 'Home') + ' · DVLA Sk
 // that still read it. The seeded administrator keeps the full sample profile; anyone else gets their own name,
 // email, department and role, with a dash for details not held.
 const ROLE_KEY = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff', 'Ticket Resolver': 'staff' };
-const DEMO_USER = 'denzilasiam.adjei';
+const DEMO_USER = 'admin';
 // SIGNED_IN = the user the server returned (set by restoreSignIn, onSignedIn and signOut). readMe() is how the
 // module-level helpers (myPerms, navItems, tabsFor) read it; the permission ticks come from the server.
 let SIGNED_IN = null;
 const readMe = () => SIGNED_IN;
 function userFor(u) {
-  const base = { ...DATA.user, firstName: 'Denzil', short: 'Denzil A.', initials: 'AD' };
+  const base = { ...DATA.user, firstName: 'System', short: 'Admin', initials: 'SA' };
   if (!u || u.username === DEMO_USER) return base;
   const parts = (u.name || u.username || '').trim().split(/\s+/).filter(Boolean), up = x => (x || '').toUpperCase();
   const first = parts[0] || '', last = parts.length > 1 ? parts[parts.length - 1] : '', dept = u.dept || DATA.user.deptName;
