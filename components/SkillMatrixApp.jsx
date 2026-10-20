@@ -9,28 +9,34 @@
 import React from 'react';
 import __css from './SkillMatrixApp.module.css';
 import SMSignIn from './SMSignIn';
-import SMAssessmentSession from './SMAssessmentSession';
-import SMHome from './SMHome';
 import SMProfile from './SMProfile';
-import SMAssessments from './SMAssessments';
-import SMTeam from './SMTeam';
-import SMAnalytics from './SMAnalytics';
-import SMTraining from './SMTraining';
-import SMFramework from './SMFramework';
-import SMCycles from './SMCycles';
-import SMFormBuilder from './SMFormBuilder';
 import SMSystem from './SMSystem';
-import SMStaffReport from './SMStaffReport';
+// Server-backed screens (data from app/api/**). Each file owns one area; see the README "Server, database and tests" table.
+import SMDashboard from './SMDashboard';
+import SMMyAssessments from './SMMyAssessments';
+import SMTake from './SMTake';
+import SMTeamResults from './SMTeamResults';
+import SMOrgDashboard from './SMOrgDashboard';
+import SMPriorities from './SMPriorities';
+import SMStaffProfile from './SMStaffProfile';
+import SMReports from './SMReports';
+import SMCompetencies from './SMCompetencies';
+import SMOrganisation from './SMOrganisation';
+import SMContent from './SMContent';
+import SMAssignments from './SMAssignments';
+import SMSettings from './SMSettings';
+import SMTickets from './SMTickets';
+import SMHelp from './SMHelp';
 import { buildModel, ALL } from './smModel';
 import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from './dvlaBanks';
 import { Select } from './ui/select';
-import { TabsContext, avatarKey } from './smUI';
+import { TabsContext, avatarKey, Toast } from './smUI';
 import { permsOf, pageKeys, defaultPerms, visibleDepts } from './smAccess';
 
 // ===== APP SHELL · Feature flags =====
 // Feature flags. A feature that is off is removed from the sidebar, routes, Profile tabs,
 // Home cards, notifications and links. Its code stays in place so it can be switched back on.
-const FEATURES = { auditLogs: false, developmentPlan: false, feedback360: false, evidence: false, planApprovals: false };
+const FEATURES = { auditLogs: true, developmentPlan: false, feedback360: false, evidence: false, planApprovals: false };
 // Plan Approvals depends on the Development Plan, so it is only on when both are on.
 const FT = { ...FEATURES, planApprovals: FEATURES.planApprovals && FEATURES.developmentPlan };
 
@@ -256,19 +262,22 @@ const DATA = buildData();
 const NAV = [
   { label: 'Overview', items: [{ label: 'Home', icon: 'icon-house', key: 'home' }] },
   { label: 'Assessments', items: [
-    { label: 'Assessment Cycles', icon: 'icon-calendar-cog', key: 'cycles', roles: ['admin'] },
-    { label: 'Forms', icon: 'icon-file-pen-line', key: 'forms', roles: ['admin', 'creator'] },
-    { label: 'Staff Evaluations', icon: 'icon-users', key: 'staff-evals', roles: ['admin', 'manager'] },
+    { label: 'Assessment Content', icon: 'icon-file-pen-line', key: 'forms', roles: ['admin', 'creator'] },
+    { label: 'Assignments', icon: 'icon-calendar-cog', key: 'cycles', roles: ['admin'] },
+    { label: 'Team Results', icon: 'icon-users', key: 'staff-evals', roles: ['admin', 'manager'] },
     { label: 'My Assessments', icon: 'icon-clipboard-list', key: 'assessments', roles: ['manager', 'creator', 'staff'] }] },
   { label: 'Analytics', items: [
-    { label: 'Analytics', icon: 'icon-chart-column', key: 'analytics', roles: ['admin', 'manager'] },
-    { label: 'Training Needs', icon: 'icon-graduation-cap', key: 'training', roles: ['admin', 'manager'] },
+    { label: 'Dashboards', icon: 'icon-chart-column', key: 'analytics', roles: ['admin', 'manager'] },
+    { label: 'Development Priorities', icon: 'icon-graduation-cap', key: 'training', roles: ['admin', 'manager'] },
     { label: 'Reports', icon: 'icon-file-spreadsheet', key: 'reports', roles: ['admin'] }] },
   { label: 'Administration', items: [
-    { label: 'Skill Framework', icon: 'icon-network', key: 'framework', roles: ['admin', 'creator'] }] },
+    { label: 'Organisation', icon: 'icon-building-2', key: 'organisation', roles: ['admin'] },
+    { label: 'Competency Framework', icon: 'icon-network', key: 'framework', roles: ['admin', 'creator'] }] },
 ];
 // Pages opened from the sidebar footer instead of the menu (Settings holds User Management).
 const FOOTER_PAGES = [{ label: 'Settings', icon: 'icon-settings', key: 'settings', roles: ['admin'] }];
+// Support Tickets is open to everyone (their own tickets); it sits beside Help in the sidebar footer.
+const SUPPORT_PAGE = { label: 'Support Tickets', icon: 'icon-life-buoy', key: 'tickets' };
 const PAGES = [...NAV.flatMap(g => g.items), ...FOOTER_PAGES];
 // ===== ROUTER · Tabbed pages (TABS) =====
 // Pages whose sub-pages are tabs. `view` is what the host component renders; a tab can have its own
@@ -277,13 +286,13 @@ const PAGES = [...NAV.flatMap(g => g.items), ...FOOTER_PAGES];
 const TABS = {
   analytics: [{ key: 'overview', label: 'Overview', icon: 'icon-chart-column', view: 'dashboard', perm: 'analytics.view' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'departments', perm: 'analytics.departments' }, { key: 'heatmap', label: 'Heatmap', icon: 'icon-grid-3x3', view: 'heatmap', perm: 'analytics.heatmap' }],
   training: [{ key: 'all', label: 'All Needs', icon: 'icon-graduation-cap', view: 'training', perm: 'training.view' }, { key: 'top-needs', label: 'Top Training Needs', icon: 'icon-trending-up', view: 'topneeds', perm: 'training.top' }],
-  reports: [{ key: 'builder', label: 'Report Builder', icon: 'icon-file-spreadsheet', view: 'reports', perm: 'reports.view' }, { key: 'scheduled', label: 'Scheduled', icon: 'icon-calendar-clock', view: 'schedules', perm: 'reports.schedule' }],
-  framework: [{ key: 'competencies', label: 'Competencies', icon: 'icon-network', view: 'library' }, { key: 'targets', label: 'Target Profiles', icon: 'icon-crosshair', view: 'targets' }],
+  organisation: [{ key: 'staff', label: 'Staff Records', icon: 'icon-id-card', view: 'org-staff' }, { key: 'departments', label: 'Departments', icon: 'icon-building-2', view: 'org-departments' },
+    { key: 'grades', label: 'Grades', icon: 'icon-layers', view: 'org-grades' }, { key: 'stations', label: 'Stations & Locations', icon: 'icon-map-pin', view: 'org-stations' },
+    { key: 'supervisors', label: 'Supervisors', icon: 'icon-user-round-check', view: 'org-supervisors' }],
   // Help & Guides: guides/FAQ plus the Rating Scales reference (moved here from the Skill Framework). Open to every role.
   help: [{ key: 'guides', label: 'Help & Guides', icon: 'icon-life-buoy', view: 'help' }, { key: 'ratings', label: 'Rating Scales', icon: 'icon-sliders-horizontal', view: 'ratings' }],
-  settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings', perm: 'settings.general' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users', perm: 'settings.users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs', perm: 'settings.audit' }],
-  'staff-evals': [{ key: 'reviews', label: 'Reviews', icon: 'icon-users', view: 'staff-evals' }, { key: 'feedback', label: '360° Feedback', icon: 'icon-refresh-cw', view: 'feedback', feature: 'feedback360' },
-    { key: 'approvals', label: 'Plan Approvals', icon: 'icon-badge-check', view: 'approvals', feature: 'planApprovals' }],
+  settings: [{ key: 'general', label: 'General', icon: 'icon-settings', view: 'settings', perm: 'settings.general' }, { key: 'scoring', label: 'Scoring & Attempts', icon: 'icon-sliders-horizontal', view: 'scoring', perm: 'settings.scoring' },
+    { key: 'notifications', label: 'Notifications', icon: 'icon-bell', view: 'notif-templates', perm: 'settings.notifications' }, { key: 'users', label: 'User Management', icon: 'icon-user-cog', view: 'users', perm: 'settings.users' }, { key: 'audit', label: 'Audit Log', icon: 'icon-scroll-text', view: 'audit', feature: 'auditLogs', perm: 'settings.audit' }],
 };
 const tabsFor = (page, role) => { const perms = myPerms(role); return (TABS[page] || []).filter(t => (!t.feature || FT[t.feature]) && (!t.roles || t.roles.includes(role)) && (!t.perm || perms.includes(t.perm))); };
 // Profile tabs; Development Plan and Evidence only while their features are on. Administrators have no
@@ -291,17 +300,19 @@ const tabsFor = (page, role) => { const perms = myPerms(role); return (TABS[page
 const profileTabs = role => ['account', ...(role === 'admin' ? [] : ['skills', 'history']), ...(FT.developmentPlan ? ['plan'] : []), ...(FT.evidence ? ['evidence'] : [])];
 // ===== ROUTER · View groups (GROUP) =====
 // Maps each view to the page component that draws it (pAssess, pTeam, pAnalytics ... in PAGE ROUTER below).
-const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', departments: 'analytics', topneeds: 'training', heatmap: 'analytics', reports: 'analytics', schedules: 'analytics',
-  training: 'training', library: 'framework', targets: 'framework', ratings: 'system', cycles: 'cycles', users: 'system', audit: 'system', settings: 'system', help: 'system', report: 'report' };
+const GROUP = { assessments: 'assess', evidence: 'assess', 'staff-evals': 'team', feedback: 'team', approvals: 'team', dashboard: 'analytics', departments: 'analytics', topneeds: 'training', heatmap: 'analytics', reports: 'reports', schedules: 'reports',
+  training: 'training', framework: 'framework', library: 'framework', targets: 'framework', ratings: 'system', cycles: 'cycles', users: 'system', help: 'system', report: 'report',
+  settings: 'settings', scoring: 'settings', 'notif-templates': 'settings', audit: 'settings', tickets: 'tickets',
+  'org-staff': 'org', 'org-departments': 'org', 'org-grades': 'org', 'org-stations': 'org', 'org-supervisors': 'org' };
 // ===== ROUTER · Old URL redirects (REDIRECT) =====
 // Old URLs (and the umbrella routes in app/) -> [page, tab]. A missing tab keeps whatever ?tab= the URL had.
-const REDIRECT = { heatmap: ['analytics', 'heatmap'], dashboard: ['analytics'], schedules: ['reports', 'scheduled'], users: ['settings', 'users'],
-  library: ['framework', 'competencies'], targets: ['framework', 'targets'], scales: ['help', 'ratings'],
+const REDIRECT = { heatmap: ['analytics', 'heatmap'], dashboard: ['analytics'], schedules: ['reports'], users: ['settings', 'users'],
+  library: ['framework'], targets: ['framework'], scales: ['help', 'ratings'],
   audit: ['settings', 'audit'], system: ['settings'], feedback: ['staff-evals', 'feedback'], approvals: ['staff-evals', 'approvals'], team: ['staff-evals'], 'team-evals': ['staff-evals'],
   evidence: ['profile', 'evidence'], plan: ['profile', 'plan'], builder: ['cycles'], assess: ['assessments'] };
 // ===== ROUTER · Access guard (normalize) =====
 // ALWAYS: pages any role may open; everything else must be in that role's sidebar (navItems).
-const ALWAYS = ['home', 'profile', 'take', 'signin', 'help'];
+const ALWAYS = ['home', 'profile', 'take', 'signin', 'help', 'tickets'];
 // ===== ROUTER · Permissions & allowed pages (myPerms, navItems) =====
 // myPerms: the signed-in user's permission keys (Settings > User Management); nobody signed in: the role's defaults.
 // navItems: a page shows in the sidebar (and can be opened) when the user holds at least one permission for it.
@@ -333,30 +344,28 @@ function normalize(page, tab, role) {
 const load = (k, f) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? f : v; } catch (e) { return f; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 // Browser tab title for the page on screen (the route file's metadata only covers the first load).
-const TITLES = { ...Object.fromEntries(PAGES.map(i => [i.key, i.label])), home: 'Home', profile: 'My Profile', take: 'Take Assessment', signin: 'Sign in', help: 'Help & Guides', report: 'Individual Report' };
+const TITLES = { ...Object.fromEntries(PAGES.map(i => [i.key, i.label])), home: 'Home', profile: 'My Profile', take: 'Take Assessment', signin: 'Sign in', help: 'Help & Guides', report: 'Competency Profile', tickets: 'Support Tickets' };
 let wantedTitle = '';
 const setTitle = page => { wantedTitle = (TITLES[page] || 'Home') + ' · DVLA Skill Matrix & Assessment Platform'; try { if (document.title !== wantedTitle) document.title = wantedTitle; } catch (e) {} };
 
 // ===== SIGNED-IN USER · readMe / userFor =====
 // skm-users is the user list managed in Settings > Users; ROLE_KEY turns its role label into admin/creator/manager/staff.
-// The person signed in is saved as their username in skm-me. The seeded administrator keeps the full sample
-// profile; anyone else gets their own name, email, department and role, with a dash for details not held.
-const ROLE_KEY = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff' };
+// The person signed in comes from the server (GET /api/auth/me); their username is also kept in skm-me for screens
+// that still read it. The seeded administrator keeps the full sample profile; anyone else gets their own name,
+// email, department and role, with a dash for details not held.
+const ROLE_KEY = { Administrator: 'admin', 'Assessment Creator': 'creator', 'Manager / Supervisor': 'manager', Participant: 'staff', 'Ticket Resolver': 'staff' };
 const DEMO_USER = 'denzilasiam.adjei';
-function readMe() {
-  try {
-    const id = localStorage.getItem('skm-me'); if (!id) return null;
-    const all = JSON.parse(localStorage.getItem('skm-users') || 'null');
-    return (Array.isArray(all) && all.find(u => u.username === id)) || (id === DEMO_USER ? { username: DEMO_USER, role: 'Administrator' } : null);
-  } catch (e) { return null; }
-}
+// SIGNED_IN = the user the server returned (set by restoreSignIn, onSignedIn and signOut). readMe() is how the
+// module-level helpers (myPerms, navItems, tabsFor) read it; the permission ticks come from the server.
+let SIGNED_IN = null;
+const readMe = () => SIGNED_IN;
 function userFor(u) {
   const base = { ...DATA.user, firstName: 'Denzil', short: 'Denzil A.', initials: 'AD' };
   if (!u || u.username === DEMO_USER) return base;
   const parts = (u.name || u.username || '').trim().split(/\s+/).filter(Boolean), up = x => (x || '').toUpperCase();
   const first = parts[0] || '', last = parts.length > 1 ? parts[parts.length - 1] : '', dept = u.dept || DATA.user.deptName;
   return { ...base, name: up(parts.join(' ')), first: up(first), last: up(last) || '—', other: up(parts.slice(1, -1).join(' ')) || '—', email: u.email || '—',
-    mobile: '—', id: '—', dob: '—', gender: '—', dept: up(dept), deptName: dept, designation: up(u.role) || '—', location: 'HEAD OFFICE', manager: '—',
+    mobile: '—', id: u.staffNo || '—', dob: '—', gender: '—', dept: up(dept), deptName: dept, designation: up(u.designation || u.role) || '—', location: up(u.location) || 'HEAD OFFICE', manager: '—',
     firstName: first, short: first + (last ? ' ' + last[0] + '.' : ''), initials: up((first[0] || '') + (last[0] || '')) || '?' };
 }
 
@@ -381,12 +390,9 @@ class SkillMatrixApp extends React.Component {
     window.addEventListener('resize', this.onResize);
     try { const n = JSON.parse(localStorage.getItem('skm-notes') || '[]'); if (Array.isArray(n)) this.setState({ notes: n }); } catch (e) {}
     try { const s = JSON.parse(localStorage.getItem('skm-session') || 'null'); if (s) this.setState({ status: s.submittedAt ? 'submitted' : 'in_progress' }); } catch (e) {}
-    // Restore whoever signed in, then re-check the page from the URL against their role.
-    const me = readMe();
-    if (me) {
-      const role = ROLE_KEY[me.role] || 'staff', [p, t] = normalize(this.props.routePage ?? this.props.startPage ?? 'home', this.props.routeTab, role);
-      this.setState({ me, roleOverride: role, page: p, active: p, tab: t || 'account' }, () => { setTitle(p); this.syncUrl(); });
-    }
+    // Restore whoever signed in (asks the server, GET /api/auth/me), then re-check the page from the URL against
+    // their role. Nobody signed in, or still on a temporary password: go to Sign in.
+    this.restoreSignIn();
     const pr = load('skm-target-profiles', null), ev = load('skm-evals', {});
     this.setState({ profiles: Array.isArray(pr) && pr.length ? pr : DATA.profiles, evals: ev && typeof ev === 'object' ? ev : {} });
     // Profile photo chosen on the Profile page (shown in the sidebar and header).
@@ -399,9 +405,27 @@ class SkillMatrixApp extends React.Component {
     setTitle(this.state.page);
     this.syncUrl();
   }
+  // ===== APP SHELL · Restore sign-in from the server =====
+  // authChecked stays false until the server answers, so no page shows before we know who is signed in.
+  restoreSignIn = async () => {
+    let me = null;
+    try { const r = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) me = (await r.json()).user; } catch (e) {}
+    if (me && !me.mustChange) {
+      SIGNED_IN = me;
+      try { localStorage.setItem('skm-me', me.username); } catch (e) {}
+      const role = ROLE_KEY[me.role] || 'staff', [p, t] = normalize(this.props.routePage ?? this.props.startPage ?? 'home', this.props.routeTab, role);
+      this.setState({ me, roleOverride: role, authChecked: true, page: p, active: p, tab: t || 'account' }, () => { setTitle(p); this.syncUrl(); this.onAvatarStorage && this.onAvatarStorage(); this.startNotifs(); });
+    } else {
+      SIGNED_IN = null;
+      try { localStorage.removeItem('skm-me'); } catch (e) {}
+      this.setState({ me: null, roleOverride: null, authChecked: true }, () => { if (this.state.page !== 'signin') this.go('signin'); });
+    }
+  };
   // Replace the URL when it pointed at an alias, a hidden feature or a page the role cannot see.
+  // Waits until the server has said who is signed in; before that the role is unknown and allowed pages would be
+  // mistaken for forbidden ones (e.g. a refresh on /assessments would jump to Home).
   syncUrl() {
-    const rp = this.props.routePage; if (!rp) return;
+    const rp = this.props.routePage; if (!rp || !this.state.authChecked) return;
     const [p, t] = normalize(rp, this.props.routeTab, this.role());
     if (p !== rp || (t || undefined) !== (this.props.routeTab || undefined)) this.props.onNavigate && this.props.onNavigate(p, t, { replace: true });
   }
@@ -419,6 +443,7 @@ class SkillMatrixApp extends React.Component {
     window.removeEventListener('skm-avatar-changed', this.onAvatarStorage);
     window.removeEventListener('storage', this.onAvatarStorage);
     if (this.titleWatch) this.titleWatch.disconnect();
+    clearInterval(this._notifT);
   }
   // ===== APP SHELL · Navigation actions (go, tabs, sign out) =====
   // history keeps the last 20 pages for the Back button; signOut clears skm-me and goes to /signin.
@@ -429,12 +454,31 @@ class SkillMatrixApp extends React.Component {
     this.props.onNavigate && this.props.onNavigate(page, t, { id });
     try { window.scrollTo(0, 0); } catch (e) {}
   };
+  startNotifs = () => { this.loadNotifs(); clearInterval(this._notifT); this._notifT = setInterval(this.loadNotifs, 60000); };
+  // ===== NOTIFICATIONS · Load from the server =====
+  // Bell list and unread count (GET /api/notifications), loaded after sign-in and every 60 seconds.
+  loadNotifs = async () => {
+    if (!SIGNED_IN) return;
+    try { const r = await fetch('/api/notifications', { credentials: 'same-origin', cache: 'no-store' }); if (r.ok) { const d = await r.json(); this.setState({ notifs: d.items || [], notifUnread: d.unread || 0 }); } } catch (e) {}
+  };
+  // Opening a notification marks it read and follows its link (e.g. "/assessments" or "/tickets?id=12").
+  openNotif = n => {
+    try { fetch('/api/notifications', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: [n.id] }) }).then(this.loadNotifs); } catch (e) {}
+    this.setState({ bellOpen: false });
+    if (n.link) { try { const u = new URL(n.link, window.location.origin), sp = u.searchParams; this.go(u.pathname.replace(/^\/+|\/+$/g, '') || 'home', sp.get('tab') || undefined, sp.get('id') || undefined); } catch (e) {} }
+  };
+  // ===== APP SHELL · Toast =====
+  // toast('Saved') shows a short message at the bottom of the screen (passed to every server-backed screen).
+  flashToast = text => { this.setState({ toastText: text }); clearTimeout(this._toastT); this._toastT = setTimeout(() => this.setState({ toastText: '' }), 2600); };
   selectTab = t => {
     const [page, t0] = normalize(this.state.page, t, this.role());
     this.setState(s => ({ tab: t0 || 'account', history: [...s.history, { page: s.page, tab: s.tab, id: s.id }].slice(-20) }));
     this.props.onNavigate && this.props.onNavigate(page, t0);
   };
   signOut = () => {
+    // Ends the session on the server (POST /api/auth/logout) as well as in this browser.
+    try { fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) {}
+    SIGNED_IN = null;
     try { localStorage.removeItem('skm-me'); } catch (e) {}
     this.setState({ me: null, roleOverride: null }, () => { this.onAvatarStorage && this.onAvatarStorage(); this.go('signin'); });
   };
@@ -458,7 +502,7 @@ class SkillMatrixApp extends React.Component {
     // No department selector in the header. "Departments they can see" (Settings > User Management) decides:
     // vis = the department names this user may see (null = all). Results pages get rdata / rmodel, which only hold
     // those departments and their staff. One department locks the page filters to it.
-    const meNow = s.me ? readMe() || s.me : null;
+    const meNow = s.me || null;
     const perms = myPerms(role), can = k => perms.includes(k);
     const vis = meNow ? visibleDepts(meNow, myDept) : role === 'manager' ? [myDept] : null;
     const rdata = vis ? { ...data, depts: data.depts.filter(d => vis.includes(d.name)), staff: data.staff.filter(x => vis.includes(x.dept)) } : data;
@@ -469,8 +513,7 @@ class SkillMatrixApp extends React.Component {
     const scopeStaff = rStaff.filter(x => scope === ALL || x.dept === scope);
     // ===== SIDEBAR · Menu items & badges =====
     // Staff Evaluations badge = results waiting for review (Submitted or Auto-scored) in the visible scope.
-    const awaiting = scopeStaff.filter(x => x.status === 'Submitted' || x.status === 'Auto-scored').length;
-    const badges = { 'staff-evals': awaiting ? String(awaiting) : '' };
+    const badges = {};
     const allowed = navItems(role), canSettings = allowed.some(i => i.key === 'settings');
     const groups = NAV.map(g => {
       const items = g.items.filter(i => allowed.includes(i) && (!q || i.label.toLowerCase().includes(q))).map(({ label, icon, key }) => {
@@ -498,14 +541,8 @@ class SkillMatrixApp extends React.Component {
       bg: n.id === s.selId ? '#262838' : 'transparent', accent: n.id === s.selId ? '#f5a623' : 'transparent', select: () => this.select(n.id) }));
     // ===== NOTIFICATIONS · Bell list =====
     // Each entry depends on role (and feature flags); empty entries are filtered out.
-    const nextCycle = DATA.cycles.find(c => c.status === 'Scheduled');
-    const notifs = [
-      allowed.some(i => i.key === 'assessments') ? { icon: 'icon-timer', title: s.status === 'submitted' ? 'Assessment submitted' : 'Your assessment is open today', sub: DATA.cycle.dayLabel + ' · ' + DATA.cycle.window + ' · ' + DATA.cycle.durationMin + ' min', onClick: () => this.go(s.status === 'submitted' ? 'assessments' : 'take') } : null,
-      allowed.some(i => i.key === 'staff-evals') && awaiting ? { icon: 'icon-user-round-check', title: awaiting + ' result' + (awaiting > 1 ? 's' : '') + ' waiting for review', sub: (scope === ALL ? 'All departments' : scope) + ' · ' + DATA.cycle.short, onClick: () => this.go('staff-evals') } : null,
-      allowed.some(i => i.key === 'cycles') && nextCycle ? { icon: 'icon-calendar-cog', title: nextCycle.name + ' is scheduled', sub: 'Opens ' + new Date(nextCycle.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), onClick: () => this.go('cycles') } : null,
-      allowed.some(i => i.key === 'assessments') ? { icon: 'icon-user-round-check', title: 'Manager evaluation received', sub: 'Q3 2026 · Joseph Ahor Abandoh-Sam', onClick: () => this.go('profile', 'history') } : null,
-      FT.developmentPlan ? { icon: 'icon-badge-check', title: 'Development action approved', sub: 'CompTIA CySA+ certification course', onClick: () => this.go('profile', 'plan') } : null,
-    ].filter(Boolean);
+    // Comes from the server (GET /api/notifications, loaded by loadNotifs); opening one marks it read and follows its link.
+    const notifs = (s.notifs || []).map(n => ({ icon: n.readAt ? 'icon-bell' : 'icon-bell-dot', title: n.title, sub: n.body, onClick: () => this.openNotif(n) }));
     // ===== APP SHELL · Values passed to render =====
     const common = { data, role, vw, go: this.go, features: FT, model, scope, myDept, deptLocked, can, rdata, rmodel };
     return {
@@ -514,9 +551,10 @@ class SkillMatrixApp extends React.Component {
       onStatus: st => set({ status: st }), profiles: s.profiles, setProfiles: this.setProfiles, evals: s.evals, setEval: this.setEval, resetEvals: this.resetEvals,
       // Sign-in and Take Assessment are full-screen (no header or sidebar); every other page is inside the shell.
       pTake: s.page === 'take', pSignin: s.page === 'signin', shell: s.page !== 'take' && s.page !== 'signin', pForms: s.page === 'forms',
-      onSignedIn: u => { try { localStorage.setItem('skm-me', u.username); } catch (e) {} this.setState({ me: u, roleOverride: ROLE_KEY[u.role] || 'staff' }, () => { this.onAvatarStorage && this.onAvatarStorage(); this.go('home'); }); },
+      onSignedIn: u => { SIGNED_IN = u; try { localStorage.setItem('skm-me', u.username); } catch (e) {} this.setState({ me: u, authChecked: true, roleOverride: ROLE_KEY[u.role] || 'staff' }, () => { this.onAvatarStorage && this.onAvatarStorage(); this.startNotifs(); this.go('home'); }); },
       // Which page component shows, chosen by the view group (see PAGE ROUTER in render).
       pHome: s.page === 'home', pProfile: s.page === 'profile', pAssess: grp === 'assess', pTeam: grp === 'team', pAnalytics: grp === 'analytics', pTraining: grp === 'training', pFramework: grp === 'framework', pCycles: grp === 'cycles', pSystem: grp === 'system', pReport: grp === 'report',
+      pReports: grp === 'reports', pOrg: grp === 'org', pSettings: grp === 'settings', pTickets: grp === 'tickets', me: s.me, toast: this.flashToast, toastText: s.toastText,
       // ===== HEADER · Title & role label =====
       compact, notCompact: !compact, wideHeader: vw >= 760,
       titleText: vw < 520 ? 'Skill Matrix' : 'Skill Matrix & Assessment Platform',
@@ -537,12 +575,13 @@ class SkillMatrixApp extends React.Component {
       // ===== SIDEBAR · Greeting & footer quick actions =====
       greeting: (() => { const h = new Date().getHours(); return h < 12 ? 'Good morning,' : h < 17 ? 'Good afternoon,' : 'Good evening,'; })(),
       // Sidebar footer: Settings (users with the Settings & User Management box), Help and Sign out. Notifications stay on the header bell.
-      quick: (exp ? [['Help & Guides', 'icon-life-buoy', () => this.go('help')], canSettings ? ['Settings', 'icon-settings', () => this.go('settings')] : ['My Profile', 'icon-user', () => this.go('profile')], ['Sign out', 'icon-log-out', this.signOut]]
-        : [['Help & Guides', 'icon-life-buoy', () => this.go('help')], canSettings ? ['Settings', 'icon-settings', () => this.go('settings')] : null, ['Sign out', 'icon-log-out', this.signOut]]).filter(Boolean).map(([label, icon, onClick, badge]) => ({ label, icon, onClick, badge: badge || '', color: icon === 'icon-log-out' ? '#e5484d' : '#475569' })),
+      // Sidebar footer: Help & Guides, Support Tickets (everyone), then Settings or My Profile, and Sign out.
+      quick: (exp ? [['Help & Guides', 'icon-circle-help', () => this.go('help')], ['Support Tickets', 'icon-life-buoy', () => this.go('tickets')], canSettings ? ['Settings', 'icon-settings', () => this.go('settings')] : ['My Profile', 'icon-user', () => this.go('profile')], ['Sign out', 'icon-log-out', this.signOut]]
+        : [['Help & Guides', 'icon-circle-help', () => this.go('help')], ['Support Tickets', 'icon-life-buoy', () => this.go('tickets')], canSettings ? ['Settings', 'icon-settings', () => this.go('settings')] : null, ['Sign out', 'icon-log-out', this.signOut]]).filter(Boolean).map(([label, icon, onClick, badge]) => ({ label, icon, onClick, badge: badge || '', color: icon === 'icon-log-out' ? '#e5484d' : '#475569' })),
       // ===== HEADER · Back, profile & bell =====
       goBack: () => { const h = [...s.history]; const prev = h.pop() || { page: 'home' }; this.go(prev.page, prev.tab, prev.id); this.setState({ history: h }); },
       goProfile: () => this.go('profile'),
-      bellOpen: s.bellOpen, toggleBell: () => set({ bellOpen: !s.bellOpen }), notifs, notifCount: notifs.length,
+      bellOpen: s.bellOpen, toggleBell: () => set({ bellOpen: !s.bellOpen }), notifs, notifCount: s.notifUnread || 0,
       groups, query: s.query, onQuery: e => set({ query: e.target.value }),
       // ===== NOTES · Notes panel handlers (skm-notes) =====
       notesOpen: s.notesOpen, openNotes: () => set({ notesOpen: true }), closeNotes: () => set({ notesOpen: false }), stop: e => e.stopPropagation(),
@@ -565,9 +604,15 @@ class SkillMatrixApp extends React.Component {
   // R = P for results pages (Home, Staff Evaluations, Analytics, Training, Individual report): data and model only
   // hold the departments the user may see.
   render() {
+    // ===== APP SHELL · Waiting for the sign-in check =====
+    // Plain page while GET /api/auth/me answers (Sign in itself shows straight away).
+    if (!this.state.authChecked && this.state.page !== 'signin') return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 14px Inter,sans-serif', color: '#6b7280' }}>Loading…</div>;
     const __v = this.renderVals() || {};
     const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept, deptLocked: __v.deptLocked, can: __v.can };
     const R = { ...P, data: __v.rdata, model: __v.rmodel };
+    // S = props for the server-backed screens: who is signed in (me, from /api/auth/me), role key, navigation,
+    // permission check, screen width, current tab / id, and toast().
+    const S = { me: __v.me, role: __v.role, go: __v.go, can: __v.can, vw: __v.vw, tab: __v.tab, id: __v.id, onTab: __v.onTab, toast: __v.toast };
     return (
       <>
       {/* ===== PAGE ROUTER · Full-screen pages (sign in, take assessment) ===== */}
@@ -575,7 +620,7 @@ class SkillMatrixApp extends React.Component {
         <SMSignIn data={__v.data} vw={__v.vw} onSignedIn={__v.onSignedIn} features={__v.features} />
       </>) : null}
       {(__v.pTake) ? (<>
-        <SMAssessmentSession data={__v.data} go={__v.go} onStatus={__v.onStatus} vw={__v.vw} />
+        <SMTake {...S} />
       </>) : null}
       {/* ===== APP SHELL · Layout (header + sidebar + main) ===== */}
       {(__v.shell) ? (<>
@@ -719,18 +764,23 @@ class SkillMatrixApp extends React.Component {
               <div style={{ flex: "1" }}>
                 <TabsContext.Provider value={__v.tabsCtx}>
                 {/* ===== PAGE ROUTER · Page component per route ===== */}
-                {/* home: SMHome · profile: SMProfile · assessments: SMAssessments · staff-evals: SMTeam · analytics, reports: SMAnalytics · training: SMTraining (Top Needs tab: SMAnalytics) · framework: SMFramework · cycles: SMCycles · forms: SMFormBuilder · settings, help: SMSystem · report?id=: SMStaffReport */}
-                {(__v.pHome) ? (<SMHome {...R} status={__v.status} />) : null}
-                {(__v.pProfile) ? (<SMProfile {...P} tab={__v.tab} onTab={__v.onTab} />) : null}
-                {(__v.pAssess) ? (<SMAssessments {...P} view={__v.view} status={__v.status} />) : null}
-                {(__v.pTeam) ? (<SMTeam {...R} view={__v.view} evals={__v.evals} setEval={__v.setEval} resetEvals={__v.resetEvals} />) : null}
-                {(__v.pAnalytics) ? (<SMAnalytics key={__v.view} {...R} view={__v.view} />) : null}
-                {(__v.pTraining) ? (__v.view === 'topneeds' ? <SMAnalytics key={__v.view} {...R} view={__v.view} /> : <SMTraining {...R} />) : null}
-                {(__v.pFramework) ? (<SMFramework {...P} view={__v.view} profiles={__v.profiles} setProfiles={__v.setProfiles} />) : null}
-                {(__v.pCycles) ? (<SMCycles {...P} />) : null}
-                {(__v.pForms) ? (<SMFormBuilder data={__v.data} vw={__v.vw} go={__v.go} can={__v.can} />) : null}
-                {(__v.pSystem) ? (<SMSystem {...P} view={__v.view} />) : null}
-                {(__v.pReport) ? (<SMStaffReport key={__v.id} {...R} id={__v.id} />) : null}
+                {/* home: SMDashboard · profile: SMProfile · assessments: SMMyAssessments · take: SMTake · staff-evals: SMTeamResults · analytics: SMOrgDashboard · training: SMPriorities · reports: SMReports · framework: SMCompetencies · organisation: SMOrganisation · cycles: SMAssignments · forms: SMContent · settings: SMSettings (users tab: SMSystem) · tickets: SMTickets · help: SMHelp · report?id=: SMStaffProfile */}
+                {(__v.pHome) ? (<SMDashboard {...S} />) : null}
+                {(__v.pProfile) ? (<SMProfile {...S} />) : null}
+                {(__v.pAssess) ? (<SMMyAssessments {...S} />) : null}
+                {(__v.pTeam) ? (<SMTeamResults {...S} />) : null}
+                {(__v.pAnalytics) ? (<SMOrgDashboard key={__v.view} {...S} view={__v.view} />) : null}
+                {(__v.pTraining) ? (<SMPriorities key={__v.view} {...S} view={__v.view} />) : null}
+                {(__v.pReports) ? (<SMReports {...S} />) : null}
+                {(__v.pFramework) ? (<SMCompetencies {...S} />) : null}
+                {(__v.pOrg) ? (<SMOrganisation key={__v.view} {...S} view={__v.view} />) : null}
+                {(__v.pCycles) ? (<SMAssignments {...S} />) : null}
+                {(__v.pForms) ? (<SMContent {...S} />) : null}
+                {(__v.pSettings) ? (<SMSettings key={__v.view} {...S} view={__v.view} />) : null}
+                {(__v.pTickets) ? (<SMTickets {...S} />) : null}
+                {(__v.pSystem && __v.view === 'users') ? (<SMSystem {...P} view={__v.view} />) : null}
+                {(__v.pSystem && __v.view !== 'users') ? (<SMHelp key={__v.view} {...S} view={__v.view} />) : null}
+                {(__v.pReport) ? (<SMStaffProfile key={__v.id} {...S} />) : null}
                 </TabsContext.Provider>
               </div>
               {/* ===== FOOTER · Page footer ===== */}
@@ -739,6 +789,8 @@ class SkillMatrixApp extends React.Component {
           </div>
         </div>
       </>) : null}
+      {/* ===== APP SHELL · Toast (completed operations on server-backed screens) ===== */}
+      {__v.toastText ? <Toast text={__v.toastText} /> : null}
     </>
     );
   }

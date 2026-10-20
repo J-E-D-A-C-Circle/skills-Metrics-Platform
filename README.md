@@ -1,8 +1,8 @@
 # DVLA · Skill Matrix & Assessment Platform (Next.js)
 
-A Next.js 15 (App Router) front-end prototype of the Skill Matrix platform. This build is the **Administrator / super-user console**: every screen is designed for someone who oversees all departments. It keeps the liquid-glass UI, the hover/pin sidebar and the timed one-day assessment. It adds a department scope, automatic scoring with manager review, click-through analytics, training needs, cycle management with spreadsheet upload, and target profiles with department overrides.
+A Next.js 15 (App Router) application for DVLA staff competency assessments, built to the "Skills Metrics prompt" specification: a PostgreSQL database, secure sign-in, permissions checked on the server, assessment content with review and publishing, assignments and deadlines, assessments without a countdown timer, one scoring engine for every screen and export, dashboards, reports (Excel, PDF, CSV), support tickets, notifications and an append-only audit log. It keeps the DVLA green liquid-glass look.
 
-Front end only: there is no backend, database, API route or real authentication. Sample data lives in `buildData()` and `components/dvlaBanks.js`, and browser state lives in localStorage.
+**Build status (20 Oct 2026):** all nine phases of the build plan are in place and tested (unit tests, an end-to-end workflow check and every page opened for each role). Nothing here has been pushed to GitHub yet.
 
 ## Source content
 
@@ -17,203 +17,146 @@ The competency framework, question banks and scales come from the DVLA documents
 
 ## Run it
 
+You need Node 20+ and PostgreSQL 16 (Docker is the easiest way to get PostgreSQL).
+
 ```bash
-npm install
-npm run dev
-# open http://localhost:3000
+cp .env.example .env          # then set DATABASE_URL, a temporary SEED_ADMIN_PASSWORD and JOBS_SECRET
+docker compose up -d          # starts PostgreSQL (skip if you already run PostgreSQL)
+npm install                   # also generates the database client
+npm run db:migrate            # creates the tables
+npm run db:seed               # departments, competencies, the 8 question banks, notification templates, the first administrator
+npm run dev                   # open http://localhost:3000
+npm test                      # unit tests (scoring, permissions, every module's rules)
 ```
 
-Demo sign-in: **denzilasiam.adjei** / **Password@1** (go to `/signin`). Every seeded user has the password `Password@1`. To try other roles, sign in as `joseph.abandoh-sam` (manager), `esi.mensah` (assessment creator) or `ama.owusu` (participant).
-Set `NEXT_PUBLIC_DEMO_ROLE` to `staff`, `manager`, `creator` or `admin` to change the default role before sign-in.
+Sign in as **denzilasiam.adjei** with the temporary `SEED_ADMIN_PASSWORD`; you'll be asked to set your own password.
 
-## Feature flags
+**Test data (never on live data):** set `SEED_DEMO=true` and `SEED_DEMO_PASSWORD` in `.env` and run `npm run db:seed` again. It adds the accounts below (all with `SEED_DEMO_PASSWORD`), 40 more staff, publishes the two Assistant Officer banks, assigns them to every department and loads repeatable sample attempts and results (`prisma/seed-demo-results.mjs`). Staff IDs start with `DEMO-`.
 
-`FEATURES` at the top of `components/SkillMatrixApp.jsx`:
+| Username | Role | Department |
+|---|---|---|
+| `esi.mensah` | Assessment Creator | Human Resources |
+| `joseph.abandoh-sam` | Manager / Supervisor (+ takes assessments) | IT Department |
+| `nana.appiah`, `kojo.quaye` | Manager / Supervisor | RBDI, Corporate Affairs |
+| `ama.owusu`, `kofi.boateng`, `efua.asante` | Participant (Ama and Efua start with no attempts) | IT Department |
+| `abena.sarpong` | Ticket Resolver (+ takes assessments) | IT Department |
 
-```js
-const FEATURES = { auditLogs: false, developmentPlan: false, feedback360: false, evidence: false, planApprovals: false };
-```
+**Deadline reminders:** `POST /api/jobs/reminders` with header `x-jobs-secret: $JOBS_SECRET` sends "closes soon" and "has closed" notifications (never twice). Run it on a schedule, for example hourly with cron:
+`0 * * * * curl -fsS -X POST -H "x-jobs-secret: $JOBS_SECRET" http://localhost:3000/api/jobs/reminders`
 
-A feature that is `false` loses its tab (Settings, Staff Evaluations or Profile), Home cards, notifications, filters and in-page links. Its code is still in place. Plan Approvals only turns on when **both** `planApprovals` and `developmentPlan` are `true`. A URL to a hidden feature opens the first tab of its page instead.
+**Ticket attachments** are saved under `STORAGE_DIR` (default `storage/` in the project, ignored by git). Back it up with the database.
 
-**Currently hidden:** Audit Logs (`/audit`), Development Plan (`/plan` and `/profile?tab=plan`), 360° Feedback (`/feedback`, plus 360° rows, filters, timeline steps and the anonymity setting), Evidence & Certifications (`/evidence`, the Upload Evidence buttons and evidence notes) and Plan Approvals (`/approvals`).
+## What each role gets
 
-## Sidebar by role
+What a person sees comes from their permission ticks (Settings > User Management), not from the role name; the role only picks the starting ticks. The server checks every permission again on every request.
 
-Pages that are really parts of another page are tabs on that page, not sidebar items.
-
-| Group | Admin | Manager | Creator | Staff |
-|---|---|---|---|---|
-| Overview | Home | Home | Home | Home |
-| Assessments | Assessment Cycles · Forms · Staff Evaluations | Staff Evaluations (own department) · My Assessments | Forms · My Assessments | My Assessments |
-| Analytics | Analytics · Training Needs · Reports | Analytics · Training Needs (own department) | | |
-| Administration | Skill Framework | | Skill Framework | |
-
-Administrators don't take assessments: they have no My Assessments, no assessment card on Home, no assessment notifications, no Skill Profile or Assessment History tab, and `/take` sends them Home.
-
-Tabs (the same tab bar as Profile; a tab whose feature is off is removed, and a page with one tab left shows no tab bar):
-
-| Page | Tabs |
+| Role | Main pages |
 |---|---|
-| Analytics | Overview (executive dashboard) · Departments · Heatmap |
-| Training Needs | All Needs · Top Training Needs |
-| Reports | Report Builder · Scheduled |
-| Skill Framework | Competencies · Target Profiles |
-| Settings | General · User Management · Audit Log (`auditLogs`) |
-| Help & Guides | Help & Guides · Rating Scales (open to every role) |
-| Staff Evaluations | Reviews · 360° Feedback (`feedback360`) · Plan Approvals (`planApprovals` + `developmentPlan`) |
-| Profile | Account · Skill Profile · History · Development Plan (`developmentPlan`) · Evidence (`evidence`) |
+| Administrator | Home (organisation overview), Assessment Content (review, approve, publish), Assignments, Team Results, Dashboards, Development Priorities, Reports, Organisation, Competency Framework, Support Tickets (all), Settings |
+| Assessment Creator | Home, Assessment Content (own drafts; submit for review), Competency Framework, My Assessments only if the account also has the Staff role |
+| Manager / Supervisor | Home (own results and team summary), My Assessments, Team Results, Assignments (progress), Dashboards, Development Priorities, Reports, all limited to the departments assigned to them and their direct reports |
+| Participant | Home, My Assessments, My Profile, Support Tickets (own) |
+| Ticket Resolver | Participant pages plus the tickets assigned to them |
 
-- **User permissions:** when creating or editing a user (Settings > User Management), each area (Assessment Cycles, Forms, Staff Evaluations, Analytics, Training Needs, Reports, Skill Framework, Settings) has a card with a tick for every action: for example View results, Score & adjust, Confirm & reopen results, Export results. Picking a role ticks its usual set; any single tick can then be changed. "Departments they can see" is All departments, Own department only, or Selected departments (pick them). Security rules: you can only give permissions you hold yourself (Take assessments excepted), you cannot change your own permissions, at least one active user must keep "Change roles & permissions", and every role, permission and department change is written to the audit log (`skm-audit`). The list of permissions is in `components/smAccess.js`; users saved before this change keep every action on the pages they had.
-- Tabs are defined in `TABS` in `components/SkillMatrixApp.jsx`. A tab can also have its own `roles`; a role that cannot see a tab does not get it.
-- Take Assessment is not a sidebar item. Start an assessment from the Home card, from My Assessments, or from the notification.
-- Profile opens from the avatar/name in the header.
-- The sidebar footer has Help & Guides, Settings (admins only; other roles get My Profile) and Sign out. Settings is not in the sidebar menu. Notifications are only on the header bell.
-- There is no department selector in the header. Admins start on "All departments" and pick a department with the filter on each page (Analytics, Training Needs, Reports, Staff Evaluations, Target Profiles). Managers are always locked to their own department.
+Rules no tick can override: an Administrator never takes assessments; only an Administrator can approve or publish content, and nobody can approve their own work; a supervisor never sees departments they were not given; supervisor and staff grades never grant admin rights.
 
 ## Routes
 
-`/` home · `/profile` (`?tab=skills|history|plan|evidence`) · `/take` · `/assessments` · `/analytics` (`?tab=departments|heatmap`) · `/training` (`?tab=top-needs`) · `/reports` (`?tab=scheduled`) · `/cycles` · `/forms` · `/staff-evals` (`?tab=feedback|approvals`) · `/framework` (`?tab=targets`) · `/settings` (`?tab=users|audit`) · `/help` (`?tab=ratings`) · `/report?id=<staffId>` (individual report) · `/signin`
+`/` Home · `/assessments` My Assessments · `/take?id=<assessment>` take an assessment (full screen, no timer) · `/forms` Assessment Content · `/cycles` Assignments · `/staff-evals` Team Results · `/analytics` (`?tab=departments|heatmap`) Dashboards · `/training` (`?tab=top-needs`) Development Priorities · `/reports` · `/organisation` (`?tab=departments|grades|stations|supervisors`) · `/framework` Competency Framework · `/tickets` (`?id=`) · `/settings` (`?tab=scoring|notifications|users|audit`) · `/profile` (`?tab=skills|history`) · `/report?id=<staff record>` individual competency profile · `/help` (`?tab=ratings`) · `/signin`
 
-The first tab of a page has no `?tab=`. Switching tabs updates `?tab=` and adds a history entry, so back/forward move between tabs.
+The first tab of a page has no `?tab=`. A tab or page a person may not open sends them to the first allowed tab or to Home. Old URLs from the prototype redirect (see `REDIRECT` in `components/SkillMatrixApp.jsx`).
 
-Every route has its own folder under `app/`. Old URLs redirect, replacing the history entry:
+## Server API
 
-| Old URL | Goes to |
+Every route checks the session and the permission named in its header comment, filters staff and results through `lib/server/scope.js`, validates input with zod, and writes important changes to the audit log. Changes sent from another website are refused (`lib/server/http.js`).
+
+| Path | What |
 |---|---|
-| `/heatmap` · `/dashboard` | `/analytics?tab=heatmap` · `/analytics` |
-| `/users` | `/settings?tab=users` |
-| `/schedules` | `/reports?tab=scheduled` |
-| `/library` · `/targets` · `/scales` | `/framework` · `/framework?tab=targets` · `/help?tab=ratings` |
-| `/audit` · `/system` | `/settings?tab=audit` · `/settings` |
-| `/feedback` · `/approvals` · `/team` · `/team-evals` | `/staff-evals?tab=feedback` · `/staff-evals?tab=approvals` · `/staff-evals` |
-| `/plan` · `/evidence` | `/profile?tab=plan` · `/profile?tab=evidence` |
-| `/builder` | `/cycles` |
-
-A URL to a tab that is switched off or not allowed opens the page's first tab; a page the role cannot see opens Home.
+| `app/api/auth/*` | sign in, sign out, who am I, change password |
+| `app/api/accounts/*` | User Management (list, add, edit, delete, reset password) |
+| `app/api/lookups` | names for drop-down lists and the scoring thresholds in use |
+| `app/api/org/*` | staff records (with placement history and Excel/CSV import), departments, grades, stations, locations, supervisors |
+| `app/api/competencies/*` | competency framework and categories |
+| `app/api/content/*` | assessment content: drafts, questions, bulk upload, submit / approve / return / reject / publish / archive, new versions |
+| `app/api/assignments/*` | assignments, progress, extensions, result release |
+| `app/api/my/*`, `app/api/attempts/*` | My Assessments, starting / resuming, autosave, active page time, submit (scores written in `lib/server/results.js`) |
+| `app/api/dashboard/*`, `app/api/team/*`, `app/api/staff/*`, `app/api/me` | dashboards, team results, development priorities, individual profiles, My Profile |
+| `app/api/reports/*` | the 15 reports and their Excel / PDF / CSV exports |
+| `app/api/tickets/*` | support tickets, replies, internal notes, attachments |
+| `app/api/notifications` | the header bell |
+| `app/api/settings/*`, `app/api/audit/*` | general settings, scoring versions, notification templates, audit log and its export |
+| `app/api/jobs/reminders` | deadline reminders (secret header or an admin session) |
+| `app/api/health` | database check |
 
 ## Structure
 
 ```
-app/
-  layout.jsx            fonts, icon font, global CSS
-  globals.css           body reset, link colours, Select animation
-  page.jsx              Home route (/)
-  not-found.jsx         fallback route (renders Home)
-  <route>/page.jsx      one folder per URL; each renders <AppRouter initialPage="<route>" />
-    home · profile · assessments · take · signin · help · report (individual report, ?id=)
-    analytics · training · reports · cycles · forms · staff-evals · framework · settings
-    old URLs, now redirects to a page tab: heatmap · schedules · library · targets · scales · audit · feedback ·
-    approvals · plan · evidence · analytics · team · team-evals · system · builder (see Routes)
+app/<route>/page.jsx    one folder per URL; each renders <AppRouter initialPage="<route>" />
+app/api/**              server routes (above)
 components/
-  AppRouter.jsx         URL → app (page, ?tab, ?id); pushState/replaceState; back/forward
-  SkillMatrixApp.jsx    FEATURES, buildData() (all sample data), NAV, routing/guards, signed-in user, shell
-  dvlaBanks.js          job levels, RBDI and HR frameworks and the eight question banks (generated from the PDFs)
-  smModel.js            derived model: automatic scoring, interpretation bands, target-profile resolution, gaps, training, report data
-  smUI.jsx              shared UI: PageHeader (with the page tab bar), Card, DataTable, badges, EmptyState, Drawer, StaffDrawer, ScopeSelect
-  ui/select.jsx         shadcn-style Select used for every dropdown (no native <select> anywhere)
-  SMHome.jsx            personal Home (staff/manager/creator); SMAdminHome.jsx is the admin overview
-  SMProfile.jsx         Profile (Account with profile photo, Skill Profile, History)
-  SMAnalytics.jsx       Executive Dashboard, Departments, Top Training Needs (shown under Training Needs), Skill Heatmap, Report Builder, Scheduled Reports
-  SMTraining.jsx        Training Needs (by competency / by staff)
-  SMStaffReport.jsx     individual report page + exports (also used by the Report Builder)
-  SMStaffEvals.jsx      Staff Evaluations (review, confirm, adjust)
-  SMTeam.jsx            routes Staff Evaluations; keeps the hidden 360° Feedback and Plan Approvals code
-  SMCycles.jsx          Assessment Cycles: table, editor, SheetJS upload with validated preview
-  SMFramework.jsx       Competency Library, Target Profiles; exports the Rating Scales cards used on Help & Guides
-  SMFormBuilder.jsx     Form Builder (WYSIWYG canvas, configurable Likert); exports form storage helpers
-  SMAssessments.jsx · SMAssessmentSession.jsx · SMSystem.jsx · SMSignIn.jsx
-  *.module.css          hover/focus states
-public/assets/dvla-logo.png
+  AppRouter.jsx         URL -> app (page, ?tab, ?id); back/forward
+  SkillMatrixApp.jsx    shell: header, bell, sidebar, tabs, page guard, which screen draws which page
+  smUI.jsx · smApi.js · smAccess.js   UI kit · browser API helpers · permission list and role defaults
+  SMDashboard.jsx       Home for every role          SMMyAssessments.jsx · SMTake.jsx   My Assessments · taking one
+  SMContent.jsx         Assessment Content           SMAssignments.jsx   Assignments & deadlines
+  SMTeamResults.jsx     Team Results                 SMStaffProfile.jsx  individual competency profile (/report)
+  SMOrgDashboard.jsx    Dashboards                   SMPriorities.jsx    Development Priorities
+  SMReports.jsx         Reports & exports            SMOrganisation.jsx  Organisation CMS
+  SMCompetencies.jsx    Competency Framework         SMTickets.jsx       Support Tickets
+  SMSettings.jsx        Settings (general, scoring, templates, audit)   SMSystem.jsx  User Management
+  SMProfile.jsx         My Profile                   SMHelp.jsx          Help & Guides, Rating Scales
+  SMSignIn.jsx          sign in and first password   dvlaBanks.js        the DVLA question banks (seed source)
+lib/
+  scoring.js            THE scoring engine (0-5, final average of completed attempts, Competent / Proficient, gaps)
+  permissions.js        effective permissions, hard rules, department scope
+  server/               db, sessions, passwords, audit, scope, notify, assigned (who is assigned / deadlines /
+                        progress), results, analytics, reports, exporters, org, content, tickets, settings, reminders
+prisma/                 schema.prisma · migrations/ · seed.mjs · seed-data.mjs · seed-demo-results.mjs
+tests/                  vitest: scoring, permissions, results, attempts, content, assignments, org, analytics,
+                        reports, tickets, settings
 ```
 
 ## Where to find things in the code
 
-Every file starts with a header saying what it draws, its web address, who sees it and its section list.
-Inside, sections are marked `// ===== AREA · Part =====` (or `{/* ===== AREA · Part ===== */}` in JSX).
-Search the project for the marker text (e.g. `HOME · Welcome banner`) to jump straight to it.
+Every file starts with a header saying what it is, its web address, who uses it and its section list. Inside, sections are marked `// ===== AREA · Part =====` (or `{/* ===== AREA · Part ===== */}` in JSX). Search the project for the marker text to jump straight to it.
 
-| On screen | File (components/) | Search for |
+| On screen | File | Search for |
 |---|---|---|
-| Top green header: logo, title, bell, profile chip | SkillMatrixApp.jsx | `HEADER · Logo & title`, `HEADER · Bell & profile button` |
-| Notifications dropdown | SkillMatrixApp.jsx | `NOTIFICATIONS · Dropdown panel` |
-| Sidebar menu, its groups and order | SkillMatrixApp.jsx | `SIDEBAR · Menu groups (NAV)`, `SIDEBAR · Menu groups` |
-| Sidebar footer: Help, Settings, Sign out | SkillMatrixApp.jsx | `SIDEBAR · Footer quick actions` |
-| Page tabs (Analytics, Training, Settings ...) | SkillMatrixApp.jsx | `ROUTER · Tabbed pages (TABS)` |
-| Old URL redirects | SkillMatrixApp.jsx | `ROUTER · Old URL redirects (REDIRECT)` |
-| Who can open which page | SkillMatrixApp.jsx | `ROUTER · Access guard (normalize)` |
-| Which component draws which page | SkillMatrixApp.jsx | `PAGE ROUTER · Page component per route` |
-| Who is signed in (name, initials, details) | SkillMatrixApp.jsx | `SIGNED-IN USER · readMe / userFor` |
-| Sample data (departments, staff, cycles, current user) | SkillMatrixApp.jsx | `DATA MODEL · ...` |
-| Scoring, gaps, target levels, training suggestion | smModel.js | `DATA MODEL · Scoring`, `DATA MODEL · Training suggestion` |
-| Shared buttons, cards, tables, drawers, department filter | smUI.jsx | `UI KIT · ...` |
-| Dropdown (select) control | ui/select.jsx | `UI KIT · Select component` |
-| Sign-in and first-time password change | SMSignIn.jsx | `SIGN IN · Sign-in form`, `SIGN IN · Set your password` |
-| Sign-in page photo slideshow (3 DVLA photos in public/assets/dvla-login-1..3.jpg) | SMSignIn.jsx | `SIGN IN · DVLA photo slideshow`, `SIGN IN · Brand panel animations` |
-| Home welcome banner (photo, name, DVLA building) | SMHome.jsx | `HOME · Welcome banner` |
-| Home info row (Staff ID, department, designation) | SMHome.jsx | `HOME · Info row` |
-| Home assessment banner (Start / Resume) | SMHome.jsx | `HOME · Assessment banner` |
-| Home KPI cards, priority gaps, quick actions | SMHome.jsx | `HOME · KPI cards`, `HOME · Priority skill gaps table`, `HOME · Quick actions` |
-| Home calendar and cycle timeline | SMHome.jsx | `HOME · Calendar`, `HOME · Cycle timeline` |
-| Admin Home: shortcut cards, KPI tiles, attention, cycles | SMAdminHome.jsx | `ADMIN HOME · Shortcut cards`, `ADMIN HOME · KPI tiles`, `ADMIN HOME · Needs your attention card` |
-| My Profile: header, photo, tabs | SMProfile.jsx | `PROFILE · Profile header card`, `PROFILE · Tabs bar` |
-| Profile tabs: account, skills radar, history, plan | SMProfile.jsx | `PROFILE · Account tab`, `PROFILE · Skills tab`, `PROFILE · History tab`, `PROFILE · Development plan tab` |
-| My Assessments list and evidence uploads | SMAssessments.jsx | `ASSESSMENTS · Current cycle card`, `ASSESSMENTS · Evidence` |
-| Taking the assessment: rules screen | SMAssessmentSession.jsx | `ASSESSMENT · Brief screen` |
-| Taking the assessment: questions, timer, integrity | SMAssessmentSession.jsx | `ASSESSMENT · Live question screen`, `ASSESSMENT · Autosave, timer & integrity checks` |
-| Assessment receipt after submitting | SMAssessmentSession.jsx | `ASSESSMENT · Submitted screen` |
-| Assessment Cycles list, editor, uploads | SMCycles.jsx | `CYCLES · Cycles table`, `CYCLES · Cycle editor`, `CYCLES · Upload drawer` |
-| Forms library and builder | SMFormBuilder.jsx | `FORMS · Build tab`, `FORMS · Rubric & Scoring tab`, `FORMS · Preview tab` |
-| Staff Evaluations: reviews and review drawer | SMStaffEvals.jsx | `STAFF EVALS · Staff table`, `STAFF EVALS · Review drawer` |
-| Staff Evaluations: staff details popup (click a name) | SMStaffEvals.jsx, SMStaffReport.jsx | `STAFF EVALS · Staff details popup`, `REPORT · Staff details popup` |
-| Staff details popup: floating staff list on the left (switch person) | SMStaffReport.jsx | `REPORT · Popup staff list (floating panel, left)` |
-| 360 feedback and plan approvals | SMTeam.jsx | `STAFF EVALS · 360 Feedback tab`, `STAFF EVALS · Plan Approvals tab` |
-| Analytics Overview (KPIs, charts) | SMAnalytics.jsx | `ANALYTICS · Overview dashboard`, `ANALYTICS · KPI tiles` |
-| Analytics Departments tab | SMAnalytics.jsx | `ANALYTICS · Departments table` |
-| Analytics Heatmap tab | SMAnalytics.jsx | `ANALYTICS · Heatmap tab` |
-| Training Needs · All Needs | SMTraining.jsx | `TRAINING · All Needs page` |
-| Training Needs · Top Training Needs | SMAnalytics.jsx | `TRAINING · Top Training Needs` |
-| Report Builder and Scheduled reports | SMAnalytics.jsx | `REPORTS · Report builder`, `REPORTS · Scheduled reports` |
-| Individual staff report (/report?id=) | SMStaffReport.jsx | `REPORT · Page` |
-| Skill Framework: competencies, target profiles | SMFramework.jsx | `FRAMEWORK · Competencies tab`, `FRAMEWORK · Target Profiles tab` |
-| Settings General tab | SMSystem.jsx | `SETTINGS · General tab` |
-| User Management: table, add/edit dialog, delete | SMSystem.jsx | `USERS · Users table`, `USERS · Add / edit user dialog`, `USERS · Delete confirmation dialog` |
-| User permission ticks (what each user can open and do) & departments they can see | SMSystem.jsx, smAccess.js | `USERS · Permissions (what the user can open and do) & department scope`, `USERS · Permission rules (who may grant what)`, `ACCESS · Permission list (areas & actions)`, `ACCESS · Role defaults` |
-| Permission changes in the audit log | SMSystem.jsx | `AUDIT LOG · Saved entries (permission and account changes)` |
-| Buttons hidden without permission | SMCycles.jsx, SMFormBuilder.jsx, SMStaffEvals.jsx, SMStaffReport.jsx, SMAnalytics.jsx, SMTraining.jsx, SMFramework.jsx | `CYCLES · Permissions`, `FORMS · Permissions`, the `may` / `can(...)` checks in each file |
-| Sidebar, tabs & page guard follow each user's permissions | SkillMatrixApp.jsx | `ROUTER · Permissions & allowed pages (myPerms, navItems)`, `ROUTER · Tabbed pages (TABS)`, `ROUTER · Access guard (normalize)` |
-| Audit Log | SMSystem.jsx | `AUDIT LOG · Audit Log tab` |
-| Help & Guides | SMSystem.jsx | `HELP · Help & Guides tab`, `HELP · Quick links, FAQ & support ticket` |
-| Help & Guides: Rating Scales tab | SMSystem.jsx, SMFramework.jsx | `HELP · Rating Scales tab`, `HELP · Rating Scales cards` |
-| Question banks (RBDI, HR) | dvlaBanks.js | `QUESTION BANKS` |
-| Route files (one per URL) | app/<route>/page.jsx | first line says what the URL opens |
+| Header, bell, sidebar, tabs, page guard | components/SkillMatrixApp.jsx | `HEADER ·`, `NOTIFICATIONS ·`, `SIDEBAR ·`, `ROUTER ·`, `PAGE ROUTER ·` |
+| Home | SMDashboard.jsx | `HOME · My assessments`, `HOME · Team`, `HOME · Organisation`, `HOME · Content` |
+| My Assessments / taking one | SMMyAssessments.jsx, SMTake.jsx | `MY ASSESSMENTS · Assessment card`, `TAKE · Question`, `TAKE · Review`, `TAKE · Active page time` |
+| Assessment Content | SMContent.jsx | `CONTENT · Workflow actions`, `CONTENT · Question editor`, `CONTENT · Bulk upload` |
+| Assignments | SMAssignments.jsx | `ASSIGNMENTS · New assignment drawer`, `ASSIGNMENTS · Dialogs (edit, extend, cancel)` |
+| Team Results / profile | SMTeamResults.jsx, SMStaffProfile.jsx | `TEAM · Summary table`, `TEAM · Matrix`, `PROFILE · Screen` |
+| Dashboards / priorities | SMOrgDashboard.jsx, SMPriorities.jsx | `DASHBOARDS · Overview`, `DASHBOARDS · Heatmap`, `PRIORITIES · Top needs` |
+| Reports | SMReports.jsx, lib/server/reports.js, lib/server/exporters.js | `REPORTS · Export`, the report list at the top of reports.js |
+| Organisation | SMOrganisation.jsx | `ORG · Staff Records`, `ORG · Bulk import`, `ORG · Supervisors` |
+| Competency Framework | SMCompetencies.jsx | `FRAMEWORK · Competency form` |
+| Tickets | SMTickets.jsx | `TICKETS · Ticket drawer`, `TICKETS · Conversation` |
+| Settings | SMSettings.jsx (users: SMSystem.jsx) | `GENERAL · Form`, `SCORING · Form`, `TEMPLATES · Editor`, `AUDIT · Table`, `USERS · Add / edit user dialog` |
+| Permission list and role defaults | smAccess.js | `ACCESS · Permission list (areas & actions)`, `ACCESS · Role defaults` |
+| Help & Rating Scales | SMHelp.jsx | `HELP · Answers`, `HELP · Rating Scales` |
 
 ## How the numbers are made
 
-Everything on screen is derived from `buildData()` plus browser state. No totals are hard-coded.
+- **One engine:** `lib/scoring.js`. A competency score in one attempt is 5 × correct ÷ asked (0 to 5). The final result is the average of all COMPLETED attempts; unfinished, abandoned and expired attempts never count, and a competency that was not assessed is "Not assessed", never 0. Final results are cached in `FinalCompetencyResult`, rebuilt in the same transaction that completes an attempt.
+- **Classification** (default thresholds, changeable as a new scoring version in Settings > Scoring): Competent from 4.00, Proficient at 5.00; Critical Gap below 2.50, Moderate Gap 2.50 to 4.99, No Gap at 5.00. Thresholds use the unrounded average; screens show 2 decimals.
+- **Groups:** a person's result for a competency across several assessments is the average of every completed attempt that assessed it. A department's (or grade's, station's) average is the mean of its people's results. Dashboards, Team Results and Reports use the same rules, so their numbers match.
+- **Progress:** `lib/server/assigned.js` decides who an assessment covers, each person's deadline (with extensions), attempt limit and status (Upcoming, Not started, In progress, Completed, Overdue). Completion rate = people with a completed attempt ÷ people assigned whose assessment has opened.
 
-- **Organisation:** 4 departments (IT, Human Resources, Research, Business Development & Innovation, Corporate Affairs) and 43 staff across the four job levels. Every person is assessed on the 5 general skills plus their department's technical competencies. Training is a structured programme for gaps of 3 or more and coached practice for smaller gaps; HR (L&D) assigns the actual programme.
-- **Results:** each submitted staff member has item-level answers. HR and RBDI staff answer the real question bank for their job level (a correct answer scores 1). The other competencies are rated on the proficiency scale (a rating of v scores v × 20%). The overall score uses the tools' interpretation: 80–100% High Competency, 60–79% Moderate, 40–59% Basic, below 40% Training Required. Each competency's percentage maps to a level with the same cut-offs (Expert ≥90, Proficient ≥80, Competent ≥60, Basic ≥40, otherwise Novice), and the pass mark is 60%. Staff Evaluations shows each answer next to the answer key. Open-text answers count once a reviewer scores them. **Gap = max(0, Target − Actual)**, shown with the 0–5 bands in `DATA.GAP`. Staff who have not submitted show their Q3 result. Because levels run from 1 to 5, the largest possible gap is 4, so the Critical (5) band is never reached with the current scale.
-- **Statuses:** Not started → In progress → Submitted (open text waiting) → Auto-scored (ready to confirm) → Confirmed. Reviewers score the open text, then confirm or adjust a competency with a mandatory reason. System and final scores are shown side by side.
-- **Targets:** profiles are mapped by job level and career track, with Technical and General category targets. Corporate Affairs has department overrides that reproduce the sample's required levels. An org-wide profile applies everywhere; a department override replaces it in that department. Category targets can be fine-tuned per competency.
+## Uploads
+
+Spreadsheets (assessment questions in Assessment Content, staff records in Organisation) are read in the browser with SheetJS; only the cell text goes to the server, which checks every row and shows row-by-row errors before anything is saved. Each screen has a Download template button. Ticket attachments (pdf, png, jpg, docx, xlsx, txt, up to 5 MB) are checked by type and content on the server.
 
 ## Browser storage
 
-`skm-me` (username of whoever is signed in; their name, initials and department show in the header, sidebar, Home and Profile) · `skm-target-profiles` · `skm-evals` (reviews, adjustments, confirmations) · `skm-cycles` · `skm-forms` · `skm-qbank` (uploaded question bank) · `skm-users` · `skm-notes` · `skm-session` · `skm-nav-pin` · `skm-user-avatar` (profile photo). To reset the demo, clear site data. When the sample data changes shape, bump `DATA_VERSION` in `SkillMatrixApp.jsx`; browsers then clear the old saved state once. Staff Evaluations also has a "Reset demo reviews" button.
-
-## Uploads (Assessment Cycles)
-
-Uploads are parsed in the browser with SheetJS (`xlsx`, the only added dependency).
-- **Upload assessment** (.xlsx/.csv/.json) creates a draft cycle and a matching draft form in the Form Builder. In .xlsx, the `Assessment` sheet holds name, departments, dates, window, duration and attempts, and the `Questions` sheet holds the questions. A .csv is treated as questions only, and the name comes from the file name. JSON uses `{ assessment: {...}, questions: [...] }`.
-- **Upload questions** adds questions to an existing form (a published form gets a new draft version) or to the question bank.
-- Question columns: `competency, question, type (likert/single/multiple/numeric/text), options (pipe-separated), correct answer, weight, required`.
-- Use **Download template** for either upload. The preview flags unknown competencies, missing question text, bad types, missing or invalid options and answers, and bad weights. You can fix cells or skip rows before importing.
+The session is the `skm_session` cookie (scripts can't read it). The browser keeps only conveniences: `skm-me` (username, for the shell), `skm-nav-pin`, `skm-user-avatar` (profile photo) and remembered filters. No results or records are kept in the browser.
 
 ## Before production
 
-- **Data:** replace `buildData()` and localStorage with API routes or a database (e.g. Route Handlers + Prisma/Postgres). Scoring in `smModel.js` must run on the server so results can't be altered in the browser.
-- **Auth:** passwords are stored in plain text in the browser for the demo. Use real authentication (NextAuth/Auth.js or your SSO), hash passwords on the server, and enforce roles and department scope server-side. The role checks in the client only hide UI.
-- **Assessment integrity:** the timer, attempt limit and window-leave count must also be enforced on the server.
-- **Email:** invitations, reminders and scheduled reports only show confirmations. Wire them to your mail service.
-- **Exports:** CSV, JSON, XML and Excel download in the browser. PDF only shows a confirmation and needs a server-side generator.
-- **Dependency:** the npm-registry release of `xlsx` (0.18.5) has known advisories (`npm audit`). For production, install SheetJS from its official CDN tarball (`https://cdn.sheetjs.com/`) or parse uploads on the server.
+- **Passwords and secrets:** set strong values in `.env` (database password, `JOBS_SECRET`), serve over HTTPS (the session cookie is marked Secure in production) and turn `SEED_DEMO` off.
+- **Email / SMS:** notifications are in-app. Templates already have email/SMS channels that switch on when a mail or SMS service is configured (`NOTIFY_EMAIL` / `NOTIFY_SMS`); the sending itself still needs wiring to DVLA's service.
+- **Reminders:** schedule `/api/jobs/reminders` (see Run it).
+- **Backups:** the PostgreSQL database and the `storage/` folder.
+- **Dependency:** `xlsx` 0.18.5 from npm has known advisories for crafted files. Uploaded spreadsheets are therefore only read in the uploader's own browser, never on the server; the server only writes spreadsheets. Moving to SheetJS 0.20.x from `https://cdn.sheetjs.com/` is still recommended.
+- **Single sign-on:** sign-in is local accounts; SSO can be added later.

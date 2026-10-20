@@ -2,7 +2,7 @@
 // smModel.js · Data model: cycles, statuses, score bands, scoring and per-staff results
 // Screen / URL: no screen of its own; feeds Home, Analytics, Training Needs, Staff Evaluations, Skill Framework, Cycles and the staff report (/report?id=)
 // Who sees it: admin / manager (results); used for every role
-// Used by: SkillMatrixApp.jsx, SMAdminHome, SMAnalytics, SMCycles, SMFramework, SMStaffEvals, SMStaffReport, SMTraining, smUI.jsx   Depends on: nothing (pure functions over buildData() + skm-target-profiles + skm-evals)
+// Used by: SkillMatrixApp.jsx, SMFramework, smUI.jsx (Help & Guides rating scales and the remaining sample-data views)   Depends on: nothing (pure functions over buildData() + skm-target-profiles + skm-evals)
 // Sections (search for these markers): DATA MODEL
 // =============================================================================
 // Derived data for the admin console. Everything here is computed from buildData()

@@ -1,4 +1,4 @@
-// Route /reports · Reports (Report Builder / Scheduled tabs) · drawn by components/SMAnalytics.jsx
+// Route /reports · Reports and exports · drawn by components/SMReports.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

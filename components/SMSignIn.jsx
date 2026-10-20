@@ -3,40 +3,43 @@
 // SMSignIn · Sign-in screen plus forced "Set your password" step for accounts on a temporary password
 // Screen / URL: "/signin" (shown whenever nobody is signed in)
 // Who sees it: everyone before signing in
-// Used by: components/SkillMatrixApp.jsx   Depends on: React only (reads/writes localStorage skm-users)
+// Used by: components/SkillMatrixApp.jsx   Depends on: React, lib/passwordRules.js, POST /api/auth/login, /api/auth/password, /api/auth/logout
 // Sections (search for these markers): SIGN IN · Constants, Component, Sign-in check, Finish sign-in, State & helpers, Render,
-//   Page layout, Brand panel, Brand panel animations, DVLA photo slideshow (full background), Form panel, Sign-in form, Username & password fields, Demo accounts, Set your password,
+//   Page layout, Brand panel, Brand panel animations, DVLA photo slideshow (full background), Form panel, Sign-in form, Username & password fields, Set your password,
 //   Password rules checklist, Save & Cancel buttons
 // =============================================================================
 import React from 'react';
+import { PASSWORD_RULES } from '../lib/passwordRules';
 
 
 // ===== SIGN IN · Constants =====
-// 'skm-users' = every user account (managed on Settings > Users). FALLBACK = seeded administrator,
-// used when no accounts are stored yet.
-const UKEY = 'skm-users';
-const FALLBACK = [{ id: 0, name: 'Adjei Denzil Asiam', email: 'denzilasiam.adjei@dvla.gov.gh', username: 'denzilasiam.adjei', password: 'Password@1', mustChange: false, role: 'Administrator', status: 'Active' }];
+// Accounts live on the server (PostgreSQL). Passwords are checked by POST /api/auth/login and never stored in the browser.
+// The rules for a new password come from lib/passwordRules.js, which the server also enforces.
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) })
+  .then(async r => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+  .catch(() => ({ ok: false, status: 0, data: { error: "Can't reach the server. Check your connection and try again." } }));
 // ===== SIGN IN · Component =====
 class SMSignIn extends React.Component {
   // step: 'login' (sign-in form) or 'change' (forced password change). ident = username or email typed.
-  state = { step: 'login', ident: '', pw: '', show: false, err: '', forgot: false, user: null, np: '', cp: '' };
-  users() { try { const u = JSON.parse(localStorage.getItem(UKEY) || 'null'); if (Array.isArray(u) && u.length) return u; } catch (e) {} return FALLBACK; }
+  // busy = waiting for the server (stops double clicks sending two requests).
+  state = { step: 'login', ident: '', pw: '', show: false, err: '', forgot: false, user: null, np: '', cp: '', busy: false };
   // ===== SIGN IN · Sign-in check =====
-  // Matches username or email (not case-sensitive) and password; suspended accounts are refused;
-  // accounts with mustChange go to the 'Set your password' step instead of signing in.
-  signIn() {
-    const s = this.state, id = s.ident.trim().toLowerCase();
+  // The server matches username or email and password, refuses suspended accounts and locks out repeated failures.
+  // Accounts on a temporary password go to the 'Set your password' step instead of signing in.
+  async signIn() {
+    const s = this.state, id = s.ident.trim();
+    if (s.busy) return;
     if (!id || !s.pw) return this.setState({ err: 'Enter your username or email and your password.' });
-    const u = this.users().find(x => (x.username || '').toLowerCase() === id || (x.email || '').toLowerCase() === id);
-    if (!u || u.password !== s.pw) return this.setState({ err: 'The username/email or password is incorrect.' });
-    if (u.status === 'Suspended') return this.setState({ err: 'This account is suspended. Contact your administrator.' });
-    if (u.mustChange) return this.setState({ step: 'change', user: u, err: '', np: '', cp: '' });
-    this.done(u);
+    this.setState({ busy: true, err: '' });
+    const r = await post('/api/auth/login', { identifier: id, password: s.pw });
+    if (!r.ok) return this.setState({ busy: false, err: r.data.error || 'Sign-in failed. Please try again.' });
+    if (r.data.user.mustChange) return this.setState({ busy: false, step: 'change', user: r.data.user, err: '', np: '', cp: '' });
+    this.setState({ busy: false });
+    this.done(r.data.user);
   }
   // ===== SIGN IN · Finish sign-in =====
-  // Stamps last sign-in as 'Now' in skm-users, then the parent (SkillMatrixApp) saves skm-me and goes Home.
+  // Hands the signed-in user (from the server) to the parent (SkillMatrixApp), which goes Home.
   done(u) {
-    try { const all = this.users().map(x => x.id === u.id ? { ...x, last: 'Now' } : x); localStorage.setItem(UKEY, JSON.stringify(all)); } catch (e) {}
     this.props.onSignedIn && this.props.onSignedIn(u);
   }
   // ===== SIGN IN · State & helpers (renderVals) =====
@@ -44,29 +47,28 @@ class SMSignIn extends React.Component {
     const s = this.state, vw = this.props.vw || 1440;
     const np = s.np, u = s.user;
     // New-password rules shown as a checklist; every rule must pass and both boxes must match before saving.
-    const rules = [['At least 8 characters', np.length >= 8], ['An uppercase letter', /[A-Z]/.test(np)], ['A lowercase letter', /[a-z]/.test(np)], ['A number', /\d/.test(np)], ['A symbol (e.g. ! @ # $)', /[^A-Za-z0-9]/.test(np)], ['Different from your temporary password', !!np && u && np !== u.password]];
+    const rules = PASSWORD_RULES.map(([label, test]) => [label, test(np, s.pw)]);
     const okCount = rules.filter(r => r[1]).length, allOk = okCount === rules.length, match = np && np === s.cp;
-    const users = this.users();
-    // Demo accounts: seeded admin plus the 2 newest accounts still on a temporary password (click to fill the form).
-    const demos = [FALLBACK[0], ...users.filter(x => x.mustChange).slice(-2)].filter((x, i, a) => a.findIndex(y => y.username === x.username) === i)
-      .map(x => ({ user: x.username, note: x.mustChange ? 'temp: ' + x.password : x.password, fill: () => this.setState({ ident: x.username, pw: x.password, err: '' }) }));
     return {
       showBrand: vw >= 900, isLogin: s.step === 'login', isChange: s.step === 'change',
       ident: s.ident, pw: s.pw, onIdent: e => this.setState({ ident: e.target.value, err: '' }), onPw: e => this.setState({ pw: e.target.value, err: '' }),
       onKey: e => { if (e.key === 'Enter') this.signIn(); },
       pwType: s.show ? 'text' : 'password', pwIcon: s.show ? 'icon-eye-off' : 'icon-eye', pwToggleText: s.show ? 'Hide passwords' : 'Show passwords', togglePw: () => this.setState({ show: !s.show }),
-      err: s.err, signIn: () => this.signIn(), forgot: s.forgot, toggleForgot: () => this.setState({ forgot: !s.forgot }), demos,
+      err: s.err, signIn: () => this.signIn(), forgot: s.forgot, toggleForgot: () => this.setState({ forgot: !s.forgot }), busy: s.busy, signInText: s.busy ? 'Signing in…' : 'Sign in',
       firstName: u ? u.name.split(' ')[0] : '', np, cp: s.cp, onNp: e => this.setState({ np: e.target.value, err: '' }), onCp: e => this.setState({ cp: e.target.value, err: '' }),
       cpBorder: s.cp && !match ? '#fca5a5' : 'rgba(15,35,65,.14)',
       rules: rules.map(([label, ok]) => ({ label, icon: ok ? 'icon-circle-check' : 'icon-circle', color: ok ? '#15803d' : '#6b7280' })),
       strengthPct: (okCount / rules.length * 100) + '%', strengthColor: okCount <= 2 ? '#dc2626' : okCount <= 4 ? '#f2a516' : '#16a34a',
       saveBg: allOk && match ? 'linear-gradient(180deg,#2fb36b,#15904c)' : '#a3acb9', saveCursor: allOk && match ? 'pointer' : 'not-allowed',
-      // Save new password: clears mustChange, writes skm-users, then signs the person in.
-      savePw: () => { if (!allOk) return this.setState({ err: 'Your new password needs to meet every rule.' }); if (!match) return this.setState({ err: "The passwords don't match." });
-        const nu = { ...u, password: np, mustChange: false, status: 'Active' };
-        try { localStorage.setItem(UKEY, JSON.stringify(users.map(x => x.id === u.id ? nu : x))); } catch (e) {}
-        this.done(nu); },
-      backToLogin: () => this.setState({ step: 'login', pw: '', user: null }),
+      // Save new password: the server checks the rules again, clears "must change password", then the person is signed in.
+      savePw: async () => { if (!allOk) return this.setState({ err: 'Your new password needs to meet every rule.' }); if (!match) return this.setState({ err: "The passwords don't match." });
+        if (s.busy) return;
+        this.setState({ busy: true, err: '' });
+        const r = await post('/api/auth/password', { currentPassword: s.pw, newPassword: np });
+        if (!r.ok) return this.setState({ busy: false, err: r.data.error || 'Could not save your password. Please try again.' });
+        this.setState({ busy: false, pw: '', np: '', cp: '' });
+        this.done(r.data.user); },
+      backToLogin: () => { post('/api/auth/logout', {}); this.setState({ step: 'login', pw: '', user: null }); },
     };
   }
   // ===== SIGN IN · Render =====
@@ -141,21 +143,11 @@ class SMSignIn extends React.Component {
                 {(__v.err) ? (<>
                   <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "10px 12px", borderRadius: "9px", background: "#fef2f2", color: "#991b1b", fontSize: "13px" }}><i className={"icon-circle-alert"} style={{ fontSize: "15px", marginTop: "1px" }}></i>{__v.err}</div>
                 </>) : null}
-                <button onClick={__v.signIn} style={{ height: "46px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 15px Inter,sans-serif", cursor: "pointer" }}>Sign in</button>
+                <button onClick={__v.signIn} disabled={__v.busy} style={{ height: "46px", border: "0", borderRadius: "999px", background: "linear-gradient(180deg,#2fb36b,#15904c)", boxShadow: "0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)", color: "#fff", font: "600 15px Inter,sans-serif", cursor: "pointer" }}>{__v.signInText}</button>
                 <button onClick={__v.toggleForgot} style={{ alignSelf: "center", background: "none", border: "0", cursor: "pointer", color: "#127a42", font: "500 13px Inter,sans-serif" }}>Forgot password?</button>
                 {(__v.forgot) ? (<>
                   <div style={{ padding: "12px", borderRadius: "9px", background: "#e6f4ec", color: "#1e3a8a", fontSize: "13px", lineHeight: "1.5" }}>Ask your system administrator to reset your password. They'll give you a new temporary password, and you'll set your own the next time you sign in.</div>
                 </>) : null}
-              </div>
-              {/* ===== SIGN IN · Demo accounts ===== */}
-              <div style={{ border: "1px dashed rgba(15,35,65,.14)", borderRadius: "12px", padding: "12px 14px", fontSize: "12.5px", color: "#4b5563", display: "flex", flexDirection: "column", gap: "6px" }}>
-                <span style={{ font: "600 10.5px Inter,sans-serif", letterSpacing: ".5px", color: "#9ca3af" }}>DEMO ACCOUNTS</span>
-                {(__v.demos || []).map((d, $index) => (<React.Fragment key={$index}>
-                  <button onClick={d?.fill} style={{ display: "flex", justifyContent: "space-between", gap: "10px", background: "none", border: "0", padding: "2px 0", cursor: "pointer", textAlign: "left", font: "400 12.5px Inter,sans-serif", color: "#374151" }}>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>{d?.user}</span>
-                    <span style={{ color: "#6b7280" }}>{d?.note}</span>
-                  </button>
-                </React.Fragment>))}
               </div>
             </>) : null}
             {/* ===== SIGN IN · Set your password (forced change on first sign-in) ===== */}

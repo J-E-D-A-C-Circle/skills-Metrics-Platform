@@ -1,0 +1,807 @@
+// =============================================================================
+// schema.prisma · Database tables for the Skill Matrix & Assessment Platform (PostgreSQL)
+// Screen / URL: no screen of its own; every server route reads and writes these tables
+// Who sees it: developers only (the app reaches it through lib/server/*)
+// Used by: lib/server/db.js (Prisma client), prisma/seed.mjs, every app/api/** route
+// Sections (search for these markers): DB · Organisation, DB · Staff records, DB · Accounts & sign-in,
+//   DB · Roles & permissions, DB · Competency framework, DB · Assessments & versions, DB · Questions,
+//   DB · Assignments & deadlines, DB · Attempts & responses, DB · Results, DB · Scoring configuration,
+//   DB · Notifications, DB · Support tickets, DB · Audit log, DB · System settings
+// Rules carried by the tables (Skills Metrics prompt, 19 Oct 2026):
+//   - A staff record (the person) is separate from a login account; several accounts may point at one staff record.
+//   - Attempts belong to the STAFF RECORD, so a second linked account cannot add extra attempts.
+//   - Every attempt is stored on its own, with a score per competency; the final result is the average of
+//     all COMPLETED attempts (lib/scoring.js) and the cached copy can always be rebuilt from the attempts.
+//   - Published assessment content is versioned; attempts point at the exact version they used.
+//   - Scoring thresholds are versioned too, so old reports can be reproduced.
+//   - The audit log is append-only (a database trigger blocks UPDATE and DELETE, see the first migration).
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== DB · Organisation =====
+// Departments, grades (job levels), locations and stations. Codes/names are unique so imports can't duplicate them.
+
+model Department {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String   @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  staff            StaffRecord[]
+  competencies     Competency[]
+  scopeAccounts    AccountScopeDepartment[]
+  supervisorLinks  SupervisorAssignment[]
+  assignments      AssessmentAssignment[]
+  locationHistory  StaffPlacementHistory[]
+}
+
+// A grade is a job level (e.g. "Officer & Senior Officer"). `rank` orders them, 0 = most junior.
+// A grade never grants system permissions on its own (see Account roles).
+model Grade {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  rank      Int      @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff              StaffRecord[]
+  supervisoryMapping GradeSupervisoryMapping[]
+  assignments        AssessmentAssignment[]
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  region    String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stations    Station[]
+  assignments AssessmentAssignment[]
+}
+
+model Station {
+  id         Int      @id @default(autoincrement())
+  name       String
+  locationId Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  location           Location                  @relation(fields: [locationId], references: [id])
+  staff              StaffRecord[]
+  supervisoryMapping GradeSupervisoryMapping[]
+  assignments        AssessmentAssignment[]
+  placementHistory   StaffPlacementHistory[]
+
+  @@unique([locationId, name])
+}
+
+// Which grade acts as station manager / supervisor at a station (e.g. "Assistant Manager & Manager" at Kumasi).
+model GradeSupervisoryMapping {
+  id        Int      @id @default(autoincrement())
+  gradeId   Int
+  stationId Int?
+  roleLabel String // e.g. "Station Manager"
+  createdAt DateTime @default(now())
+
+  grade   Grade    @relation(fields: [gradeId], references: [id])
+  station Station? @relation(fields: [stationId], references: [id])
+
+  @@unique([gradeId, stationId, roleLabel])
+}
+
+// ===== DB · Staff records =====
+// The person. Staff ID (staffNo) is unique. Names alone never merge records.
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+  LEFT
+}
+
+model StaffRecord {
+  id           Int         @id @default(autoincrement())
+  staffNo      String      @unique
+  firstName    String
+  lastName     String
+  otherNames   String?
+  email        String?     @unique
+  designation  String?
+  departmentId Int?
+  gradeId      Int?
+  stationId    Int?
+  supervisorId Int? // the staff record of their supervisor / HoD
+  status       StaffStatus @default(ACTIVE)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  grade        Grade?        @relation(fields: [gradeId], references: [id])
+  station      Station?      @relation(fields: [stationId], references: [id])
+  supervisor   StaffRecord?  @relation("Supervises", fields: [supervisorId], references: [id])
+  reports      StaffRecord[] @relation("Supervises")
+  accounts     Account[]
+  placements   StaffPlacementHistory[]
+  attempts     Attempt[]
+  finalResults FinalCompetencyResult[]
+  assignments  AssessmentAssignment[]
+  extensions   DeadlineExtension[]
+
+  @@index([departmentId])
+  @@index([gradeId])
+  @@index([stationId])
+}
+
+// Where a person sat over time, so moving someone today doesn't rewrite where earlier results came from.
+model StaffPlacementHistory {
+  id           Int       @id @default(autoincrement())
+  staffId      Int
+  departmentId Int?
+  stationId    Int?
+  fromDate     DateTime  @default(now())
+  toDate       DateTime?
+  reason       String?
+  changedById  Int?
+
+  staff      StaffRecord @relation(fields: [staffId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
+  station    Station?    @relation(fields: [stationId], references: [id])
+  changedBy  Account?    @relation(fields: [changedById], references: [id])
+
+  @@index([staffId, fromDate])
+}
+
+// ===== DB · Accounts & sign-in =====
+// A login. Passwords are stored only as scrypt hashes (lib/server/password.js).
+
+enum AccountStatus {
+  ACTIVE
+  MUST_CHANGE_PASSWORD
+  SUSPENDED
+  DISABLED
+}
+
+model Account {
+  id             Int           @id @default(autoincrement())
+  username       String        @unique
+  email          String        @unique
+  displayName    String
+  passwordHash   String
+  status         AccountStatus @default(MUST_CHANGE_PASSWORD)
+  staffId        Int?
+  deptScope      DeptScope     @default(OWN)
+  lastLoginAt    DateTime?
+  passwordSetAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  staff            StaffRecord?             @relation(fields: [staffId], references: [id])
+  roles            AccountRole[]
+  permissions      AccountPermission[]
+  scopeDepartments AccountScopeDepartment[]
+  sessions         Session[]
+  supervisorLinks  SupervisorAssignment[]
+
+  createdAssessments  Assessment[]           @relation("AssessmentCreator")
+  reviewEvents        AssessmentReviewEvent[]
+  assignmentsMade     AssessmentAssignment[]  @relation("AssignedBy")
+  extensionsApproved  DeadlineExtension[]
+  attempts            Attempt[]
+  scoringConfigs      ScoringConfig[]
+  notifications       Notification[]
+  ticketsRaised       Ticket[]                @relation("TicketRequester")
+  ticketsAssigned     Ticket[]                @relation("TicketAssignee")
+  ticketMessages      TicketMessage[]
+  ticketEvents        TicketEvent[]
+  auditEntries        AuditLog[]
+  placementChanges    StaffPlacementHistory[]
+  settingsChanged     SystemSetting[]
+
+  @@index([staffId])
+}
+
+// One row per signed-in browser. Only the SHA-256 of the cookie token is stored.
+model Session {
+  id          String    @id @default(cuid())
+  tokenHash   String    @unique
+  accountId   Int
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  lastSeenAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  ip          String?
+  userAgent   String?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+// Every sign-in try, used for lock-out after repeated failures (lib/server/rateLimit.js) and the audit trail.
+model LoginAttempt {
+  id         Int      @id @default(autoincrement())
+  identifier String // lower-cased username or email typed
+  ip         String?
+  success    Boolean
+  reason     String?
+  at         DateTime @default(now())
+
+  @@index([identifier, at])
+  @@index([ip, at])
+}
+
+// ===== DB · Roles & permissions =====
+// Roles set the default ticks; AccountPermission holds the ticks actually saved (keys from components/smAccess.js).
+
+enum Role {
+  STAFF
+  SUPERVISOR
+  CREATOR
+  ADMIN
+  TICKET_RESOLVER
+}
+
+enum DeptScope {
+  ALL
+  OWN
+  SELECTED
+}
+
+model AccountRole {
+  accountId Int
+  role      Role
+  grantedAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, role])
+}
+
+model AccountPermission {
+  accountId Int
+  key       String // e.g. "staff-evals.confirm"
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, key])
+}
+
+// The departments chosen when deptScope = SELECTED.
+model AccountScopeDepartment {
+  accountId    Int
+  departmentId Int
+
+  account    Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+
+  @@id([accountId, departmentId])
+}
+
+// Which teams a supervisor / HoD may see: a whole department, or named staff.
+model SupervisorAssignment {
+  id           Int      @id @default(autoincrement())
+  accountId    Int
+  departmentId Int?
+  createdAt    DateTime @default(now())
+
+  account    Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id])
+
+  @@unique([accountId, departmentId])
+}
+
+// ===== DB · Competency framework =====
+
+model CompetencyCategory {
+  id     Int    @id @default(autoincrement())
+  name   String // "Technical" | "General"
+  group  String // e.g. "Talent Acquisition & Selection"
+
+  competencies Competency[]
+
+  @@unique([name, group])
+}
+
+model Competency {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique // stable key from the source documents, e.g. "rb1", "hr1_2", "lead"
+  name          String
+  short         String
+  categoryId    Int
+  departmentId  Int? // null = applies to every department
+  importance    Int      @default(4)
+  requiredLevel Decimal  @default(5) @db.Decimal(4, 2)
+  skillAreas    Json? // list of skill-area names
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category       CompetencyCategory      @relation(fields: [categoryId], references: [id])
+  department     Department?             @relation(fields: [departmentId], references: [id])
+  questions      QuestionCompetency[]
+  attemptResults CompetencyAttemptResult[]
+  finalResults   FinalCompetencyResult[]
+}
+
+// ===== DB · Assessments & versions =====
+// Draft -> Submitted for review -> (Returned | Rejected | Approved) -> Published -> Archived.
+
+enum AssessmentStatus {
+  DRAFT
+  SUBMITTED
+  RETURNED
+  REJECTED
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ResultRelease {
+  IMMEDIATE
+  AFTER_DEADLINE
+  MANUAL
+}
+
+model Assessment {
+  id               Int              @id @default(autoincrement())
+  title            String
+  description      String?
+  instructions     String?
+  createdById      Int
+  status           AssessmentStatus @default(DRAFT)
+  maxAttempts      Int              @default(3)
+  resultRelease    ResultRelease    @default(IMMEDIATE)
+  resultsReleasedAt DateTime?
+  sourceRef        String?          @unique // e.g. "bank:rbdi-1" for content loaded from the DVLA banks
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  createdBy    Account                 @relation("AssessmentCreator", fields: [createdById], references: [id])
+  versions     AssessmentVersion[]
+  assignments  AssessmentAssignment[]
+  attempts     Attempt[]
+  finalResults FinalCompetencyResult[]
+  tickets      Ticket[]
+}
+
+model AssessmentVersion {
+  id              Int              @id @default(autoincrement())
+  assessmentId    Int
+  versionNo       Int
+  status          AssessmentStatus @default(DRAFT)
+  scoringConfigId Int?
+  submittedAt     DateTime?
+  approvedById    Int?
+  approvedAt      DateTime?
+  publishedById   Int?
+  publishedAt     DateTime?
+  createdAt       DateTime         @default(now())
+
+  assessment    Assessment              @relation(fields: [assessmentId], references: [id])
+  scoringConfig ScoringConfig?          @relation(fields: [scoringConfigId], references: [id])
+  questions     Question[]
+  reviewEvents  AssessmentReviewEvent[]
+  attempts      Attempt[]
+
+  @@unique([assessmentId, versionNo])
+}
+
+// Submit / approve / reject / return / publish actions with the reviewer's feedback.
+model AssessmentReviewEvent {
+  id        Int      @id @default(autoincrement())
+  versionId Int
+  actorId   Int
+  action    String // SUBMIT | APPROVE | REJECT | RETURN | PUBLISH | ARCHIVE
+  feedback  String?
+  at        DateTime @default(now())
+
+  version AssessmentVersion @relation(fields: [versionId], references: [id])
+  actor   Account           @relation(fields: [actorId], references: [id])
+
+  @@index([versionId, at])
+}
+
+// ===== DB · Questions =====
+// Questions belong to one version, so editing a later version never changes earlier attempts.
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  TEXT
+}
+
+model Question {
+  id         Int          @id @default(autoincrement())
+  versionId  Int
+  order      Int
+  type       QuestionType @default(SINGLE_CHOICE)
+  text       String
+  skillArea  String?
+  points     Decimal      @default(1) @db.Decimal(6, 2)
+  createdAt  DateTime     @default(now())
+
+  version      AssessmentVersion    @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  options      AnswerOption[]
+  competencies QuestionCompetency[]
+  responses    AttemptResponse[]
+
+  @@unique([versionId, order])
+}
+
+model AnswerOption {
+  id         Int     @id @default(autoincrement())
+  questionId Int
+  order      Int
+  text       String
+  isCorrect  Boolean @default(false)
+
+  question  Question          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  responses AttemptResponse[]
+
+  @@unique([questionId, order])
+}
+
+model QuestionCompetency {
+  questionId   Int
+  competencyId Int
+  weight       Decimal @default(1) @db.Decimal(6, 2)
+
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+
+  @@id([questionId, competencyId])
+}
+
+// ===== DB · Assignments & deadlines =====
+
+enum AssignmentTarget {
+  INDIVIDUAL
+  DEPARTMENT
+  GRADE
+  STATION
+  LOCATION
+}
+
+model AssessmentAssignment {
+  id           Int              @id @default(autoincrement())
+  assessmentId Int
+  targetType   AssignmentTarget
+  staffId      Int?
+  departmentId Int?
+  gradeId      Int?
+  stationId    Int?
+  locationId   Int?
+  startsAt     DateTime
+  deadline     DateTime
+  maxAttempts  Int? // overrides the assessment's limit when set
+  createdById  Int
+  createdAt    DateTime         @default(now())
+
+  assessment Assessment          @relation(fields: [assessmentId], references: [id])
+  staff      StaffRecord?        @relation(fields: [staffId], references: [id])
+  department Department?         @relation(fields: [departmentId], references: [id])
+  grade      Grade?              @relation(fields: [gradeId], references: [id])
+  station    Station?            @relation(fields: [stationId], references: [id])
+  location   Location?           @relation(fields: [locationId], references: [id])
+  createdBy  Account             @relation("AssignedBy", fields: [createdById], references: [id])
+  extensions DeadlineExtension[]
+
+  @@index([assessmentId])
+}
+
+// A deadline extension for a whole assignment (staffId null) or one person.
+model DeadlineExtension {
+  id               Int      @id @default(autoincrement())
+  assignmentId     Int
+  staffId          Int?
+  originalDeadline DateTime
+  newDeadline      DateTime
+  reason           String
+  approvedById     Int
+  at               DateTime @default(now())
+
+  assignment AssessmentAssignment @relation(fields: [assignmentId], references: [id])
+  staff      StaffRecord?         @relation(fields: [staffId], references: [id])
+  approvedBy Account              @relation(fields: [approvedById], references: [id])
+
+  @@index([assignmentId, staffId])
+}
+
+// ===== DB · Attempts & responses =====
+// Only COMPLETED attempts count towards the final average.
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_MARKING
+  COMPLETED
+  ABANDONED
+  EXPIRED
+}
+
+model Attempt {
+  id             Int           @id @default(autoincrement())
+  assessmentId   Int
+  versionId      Int
+  staffId        Int
+  accountId      Int // which login took it (for the audit trail)
+  attemptNo      Int
+  status         AttemptStatus @default(IN_PROGRESS)
+  startedAt      DateTime      @default(now())
+  submittedAt    DateTime?
+  completedAt    DateTime?
+  activeSeconds  Int           @default(0) // time the page was actually visible; never affects scores
+  elapsedSeconds Int           @default(0) // wall-clock time from start to submit
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  assessment Assessment                @relation(fields: [assessmentId], references: [id])
+  version    AssessmentVersion         @relation(fields: [versionId], references: [id])
+  staff      StaffRecord               @relation(fields: [staffId], references: [id])
+  account    Account                   @relation(fields: [accountId], references: [id])
+  responses  AttemptResponse[]
+  results    CompetencyAttemptResult[]
+  timeLog    ActiveTimeSegment[]
+
+  // One row per attempt number per person per assessment: stops duplicate attempts from double clicks or tabs.
+  @@unique([staffId, assessmentId, attemptNo])
+  @@index([staffId, assessmentId, status])
+}
+
+model AttemptResponse {
+  id            Int       @id @default(autoincrement())
+  attemptId     Int
+  questionId    Int
+  optionId      Int?
+  textAnswer    String?
+  isCorrect     Boolean?
+  activeSeconds Int       @default(0)
+  savedAt       DateTime  @default(now())
+
+  attempt  Attempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question      @relation(fields: [questionId], references: [id])
+  option   AnswerOption? @relation(fields: [optionId], references: [id])
+
+  @@unique([attemptId, questionId])
+}
+
+// Visible-page time, saved in slices. tabId stops two open tabs being counted twice.
+model ActiveTimeSegment {
+  id         Int      @id @default(autoincrement())
+  attemptId  Int
+  questionId Int?
+  tabId      String
+  startedAt  DateTime
+  endedAt    DateTime
+  seconds    Int
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+// ===== DB · Results =====
+
+// Score (0 to 5, unrounded) for one competency in one completed attempt.
+model CompetencyAttemptResult {
+  attemptId    Int
+  competencyId Int
+  score        Decimal @db.Decimal(8, 6)
+  asked        Int
+  correct      Int
+
+  attempt    Attempt    @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+
+  @@id([attemptId, competencyId])
+}
+
+// Cached final average per person, assessment and competency. Rebuilt in the same transaction that completes
+// an attempt, and can be rebuilt any time from CompetencyAttemptResult (lib/scoring.js).
+model FinalCompetencyResult {
+  staffId          Int
+  assessmentId     Int
+  competencyId     Int
+  average          Decimal  @db.Decimal(8, 6)
+  attemptsIncluded Int
+  competencyStatus String // NOT_COMPETENT | COMPETENT | PROFICIENT
+  gapStatus        String // CRITICAL | MODERATE | NONE
+  scoringConfigId  Int
+  computedAt       DateTime @default(now())
+
+  staff         StaffRecord   @relation(fields: [staffId], references: [id])
+  assessment    Assessment    @relation(fields: [assessmentId], references: [id])
+  competency    Competency    @relation(fields: [competencyId], references: [id])
+  scoringConfig ScoringConfig @relation(fields: [scoringConfigId], references: [id])
+
+  @@id([staffId, assessmentId, competencyId])
+}
+
+// ===== DB · Scoring configuration =====
+// Versioned thresholds. The newest active row is used for new results; old rows stay for reproducing old reports.
+
+model ScoringConfig {
+  id                Int      @id @default(autoincrement())
+  version           Int      @unique
+  requiredLevel     Decimal  @default(5) @db.Decimal(4, 2)
+  competentFrom     Decimal  @default(4) @db.Decimal(4, 2)
+  proficientFrom    Decimal  @default(5) @db.Decimal(4, 2)
+  moderateGapFrom   Decimal  @default(2.5) @db.Decimal(4, 2) // below this = Critical Gap
+  noGapFrom         Decimal  @default(5) @db.Decimal(4, 2)
+  defaultMaxAttempts Int     @default(3)
+  reason            String
+  createdById       Int?
+  createdAt         DateTime @default(now())
+  active            Boolean  @default(true)
+
+  createdBy    Account?                @relation(fields: [createdById], references: [id])
+  versions     AssessmentVersion[]
+  finalResults FinalCompetencyResult[]
+}
+
+// ===== DB · Notifications =====
+
+model NotificationTemplate {
+  key       String   @id // e.g. "assessment.assigned"
+  title     String
+  body      String
+  channels  String[] @default(["in_app"])
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  accountId Int
+  type      String
+  title     String
+  body      String
+  link      String?
+  dedupeKey String?   @unique // stops the same reminder being sent twice
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  account    Account                @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([accountId, readAt])
+}
+
+model NotificationDelivery {
+  id             Int      @id @default(autoincrement())
+  notificationId Int
+  channel        String // in_app | email | sms
+  status         String // SENT | FAILED | SKIPPED
+  error          String?
+  at             DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+}
+
+// ===== DB · Support tickets =====
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_USER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Ticket {
+  id           Int            @id @default(autoincrement())
+  reference    String         @unique // e.g. "SKM-2026-000123"
+  requesterId  Int
+  assigneeId   Int?
+  title        String
+  category     String
+  description  String
+  priority     TicketPriority @default(MEDIUM)
+  status       TicketStatus   @default(OPEN)
+  assessmentId Int?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  requester   Account            @relation("TicketRequester", fields: [requesterId], references: [id])
+  assignee    Account?           @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  assessment  Assessment?        @relation(fields: [assessmentId], references: [id])
+  messages    TicketMessage[]
+  attachments TicketAttachment[]
+  events      TicketEvent[]
+
+  @@index([status, priority])
+  @@index([assigneeId])
+}
+
+// internal = staff-only note, never shown to the requester.
+model TicketMessage {
+  id       Int      @id @default(autoincrement())
+  ticketId Int
+  authorId Int
+  body     String
+  internal Boolean  @default(false)
+  at       DateTime @default(now())
+
+  ticket Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author Account @relation(fields: [authorId], references: [id])
+}
+
+model TicketAttachment {
+  id          Int      @id @default(autoincrement())
+  ticketId    Int
+  fileName    String
+  mimeType    String
+  sizeBytes   Int
+  storagePath String
+  at          DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model TicketEvent {
+  id       Int      @id @default(autoincrement())
+  ticketId Int
+  actorId  Int
+  field    String // status | assignee | priority
+  fromVal  String?
+  toVal    String?
+  at       DateTime @default(now())
+
+  ticket Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  Account @relation(fields: [actorId], references: [id])
+}
+
+// ===== DB · Audit log =====
+// Append-only: the first migration adds a trigger that refuses UPDATE and DELETE on this table.
+// Never store passwords, tokens or other secrets in before/after.
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    Int?
+  action     String // e.g. "auth.login", "account.role.change", "assessment.publish"
+  entityType String?
+  entityId   String?
+  outcome    String   @default("SUCCESS") // SUCCESS | FAILURE | DENIED
+  before     Json?
+  after      Json?
+  ip         String?
+  at         DateTime @default(now())
+
+  actor Account? @relation(fields: [actorId], references: [id])
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([entityType, entityId])
+}
+
+// ===== DB · System settings =====
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedById Int?
+  updatedAt   DateTime @updatedAt
+
+  updatedBy Account? @relation(fields: [updatedById], references: [id])
+}

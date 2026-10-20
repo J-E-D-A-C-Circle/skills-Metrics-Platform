@@ -1,4 +1,4 @@
-// Route /settings · Settings (General / User Management / Audit Log tabs, admin only) · drawn by components/SMSystem.jsx
+// Route /settings · Settings (General / Scoring / Notification templates / User Management / Audit Log tabs) · drawn by components/SMSettings.jsx (User Management: SMSystem.jsx)
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

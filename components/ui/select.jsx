@@ -3,7 +3,7 @@
 // select.jsx · Custom dropdown (shadcn-style Select) used instead of native <select>
 // Screen / URL: any dropdown in the app (filters, forms, settings, profile, staff drawer sort)
 // Who sees it: admin / manager / creator / staff (participant)
-// Used by: smUI.jsx (Sel), SkillMatrixApp.jsx, SMAssessments, SMCycles, SMFormBuilder, SMFramework, SMProfile, SMSystem   Depends on: react, react-dom (createPortal)
+// Used by: smUI.jsx (Sel), SkillMatrixApp.jsx, SMFramework, SMSystem   Depends on: react, react-dom (createPortal)
 // Sections (search for these markers): UI KIT
 // =============================================================================
 // Shadcn-style Select, written for this project (no Radix dependency; the brief allows xlsx only).

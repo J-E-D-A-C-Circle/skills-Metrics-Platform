@@ -1,4 +1,4 @@
-// Route /assessments · My Assessments list · drawn by components/SMAssessments.jsx
+// Route /assessments · My Assessments (assigned assessments, attempts, results) · drawn by components/SMMyAssessments.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

@@ -1,4 +1,4 @@
-// Route /framework · Skill Framework (Competencies / Target Profiles / Rating Scales) · drawn by components/SMFramework.jsx
+// Route /framework · Competency Framework · drawn by components/SMCompetencies.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

@@ -1,4 +1,4 @@
-// Route /cycles · Assessment Cycles (admin) · drawn by components/SMCycles.jsx
+// Route /cycles · Assignments & Deadlines · drawn by components/SMAssignments.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

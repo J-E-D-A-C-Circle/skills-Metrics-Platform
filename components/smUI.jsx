@@ -10,6 +10,8 @@
 import React, { useMemo, useState } from 'react';
 import { STATUS_C, STATUS_HINT, ALL } from './smModel';
 import { Select } from './ui/select';
+import { createPortal } from 'react-dom';
+import { COMPETENCY_LABEL, GAP_LABEL, COMPETENCY_COLOURS, GAP_COLOURS, formatAverage } from '../lib/scoring';
 
 // ===== UI KIT · Style constants =====
 export const CARD = { background: 'rgba(255,255,255,.62)', backdropFilter: 'blur(28px) saturate(180%)', WebkitBackdropFilter: 'blur(28px) saturate(180%)', border: '1px solid rgba(255,255,255,.85)', borderRadius: '22px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9),0 10px 30px rgba(15,35,65,.07)' };
@@ -144,6 +146,40 @@ export function StatusBadge({ status }) {
 export function ScopeBadge({ override }) {
   return override ? <Badge bg="#fef3c7" fg="#92400e"><i className="icon-git-branch" style={{ fontSize: '11px' }}></i>Department override</Badge>
     : <Badge bg="#e6f2ea" fg="#0d3b2a"><i className="icon-globe" style={{ fontSize: '11px' }}></i>Org-wide</Badge>;
+}
+
+// ===== UI KIT · Result badges (competency status, gap status, final average) =====
+// Text label + colour from lib/scoring.js, never colour alone. A missing result shows "Not assessed" or "Pending",
+// never 0 (a score of 0 is a real result). status: NOT_COMPETENT | COMPETENT | PROFICIENT; gap: CRITICAL | MODERATE | NONE.
+export function CompetencyBadge({ status, pending }) {
+  if (!status) return <Badge bg="#f3f4f6" fg="#6b7280">{pending ? 'Pending' : 'Not assessed'}</Badge>;
+  const c = COMPETENCY_COLOURS[status];
+  return <Badge bg={c[0]} fg={c[1]}><i className={status === 'PROFICIENT' ? 'icon-award' : status === 'COMPETENT' ? 'icon-check' : 'icon-triangle-alert'} style={{ fontSize: '11px' }}></i>{COMPETENCY_LABEL[status]}</Badge>;
+}
+export function GapStatusBadge({ gap, pending }) {
+  if (!gap) return <Badge bg="#f3f4f6" fg="#6b7280">{pending ? 'Pending' : 'Not assessed'}</Badge>;
+  const c = GAP_COLOURS[gap];
+  return <Badge bg={c[0]} fg={c[1]}><i className={gap === 'NONE' ? 'icon-circle-check' : gap === 'MODERATE' ? 'icon-circle-alert' : 'icon-octagon-alert'} style={{ fontSize: '11px' }}></i>{GAP_LABEL[gap]}</Badge>;
+}
+// Final average to 2 decimals (the unrounded value is what the server classifies).
+export const Avg = ({ value }) => <span style={{ font: "600 13px 'JetBrains Mono',monospace" }}>{value == null ? '—' : formatAverage(Number(value))}</span>;
+
+// ===== UI KIT · Confirm dialog =====
+// For consequential changes: <Confirm open title text confirmText danger onConfirm onCancel busy />.
+export function Confirm({ open, title, text, confirmText = 'Confirm', danger, onConfirm, onCancel, busy, children }) {
+  if (!open || typeof document === 'undefined') return null;
+  return createPortal(
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'rgba(15,35,65,.25)', backdropFilter: 'blur(6px)' }}>
+      <div role="alertdialog" aria-modal="true" onClick={e => e.stopPropagation()} style={{ width: 'min(460px,100%)', borderRadius: '20px', background: '#fff', boxShadow: '0 24px 60px rgba(15,35,65,.18)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ font: '600 16px Inter,sans-serif', color: '#111827' }}>{title}</div>
+        {text ? <div style={{ fontSize: '13.5px', color: '#4b5563', lineHeight: 1.5 }}>{text}</div> : null}
+        {children}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+          <Btn onClick={onCancel} disabled={busy}>Cancel</Btn>
+          <Btn kind={danger ? 'danger' : 'primary'} onClick={onConfirm} disabled={busy}>{busy ? 'Working…' : confirmText}</Btn>
+        </div>
+      </div>
+    </div>, document.body);
 }
 
 // ===== UI KIT · Empty state =====

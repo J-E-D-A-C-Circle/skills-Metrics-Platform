@@ -1,4 +1,4 @@
-// Route /report · Individual staff report, /report?id=<staffId> · drawn by components/SMStaffReport.jsx
+// Route /report · Individual competency profile, /report?id=<staff record id> · drawn by components/SMStaffProfile.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

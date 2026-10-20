@@ -1,0 +1,18 @@
+# =============================================================================
+# docker-compose.yml · Local PostgreSQL for development (docker compose up -d)
+# The password here must match DATABASE_URL in .env. Data is kept in the "skm-db" volume.
+# =============================================================================
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: skm
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: skill_matrix
+    ports:
+      - "5432:5432"
+    volumes:
+      - skm-db:/var/lib/postgresql/data
+volumes:
+  skm-db:

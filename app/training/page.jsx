@@ -1,4 +1,4 @@
-// Route /training · Training Needs (All Needs / Top Training Needs tabs) · drawn by components/SMTraining.jsx and SMAnalytics.jsx
+// Route /training · Development Priorities (All / Top Training Needs tabs) · drawn by components/SMPriorities.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 

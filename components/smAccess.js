@@ -18,45 +18,51 @@
 // ticking an action ticks what it needs, unticking the need unticks everything that depends on it.
 // Home, My Profile and Help & Guides are always open and have no keys.
 export const PERM_AREAS = [
-  { group: 'Assessments', area: 'cycles', page: 'cycles', label: 'Assessment Cycles', icon: 'icon-calendar-cog', actions: [
-    ['view', 'View cycles', 'See the cycle list and open a cycle read-only'],
-    ['create', 'Create & duplicate cycles', 'New cycle, or copy an existing one as a draft', 'view'],
-    ['edit', 'Edit & schedule cycles', 'Change a draft, scheduled or open cycle', 'view'],
-    ['import', 'Upload from spreadsheet', 'Upload an assessment or questions (Excel / CSV)', 'view'],
-    ['close', 'Close open cycles', 'End an open cycle so no new attempts start', 'view'],
-    ['archive', 'Archive & restore cycles', 'Hide old cycles or bring them back as drafts', 'view']] },
-  { group: 'Assessments', area: 'forms', page: 'forms', label: 'Forms', icon: 'icon-file-pen-line', actions: [
-    ['view', 'View forms', 'Open forms, preview and test them, see versions'],
-    ['create', 'Create & duplicate forms', 'New form, or copy an existing form', 'view'],
-    ['edit', 'Edit forms', 'Change questions and scoring, save drafts, restore versions', 'view'],
-    ['publish', 'Publish forms', 'Make a draft the live version used on assessment day', 'edit'],
-    ['archive', 'Archive forms', 'Retire a form so it can no longer be used', 'view']] },
-  { group: 'Assessments', area: 'staff-evals', page: 'staff-evals', label: 'Staff Evaluations', icon: 'icon-users', actions: [
-    ['view', 'View results', 'See staff, statuses and system scores'],
-    ['score', 'Score & adjust', 'Score the open-text answer and adjust a competency with a reason', 'view'],
-    ['confirm', 'Confirm & reopen results', 'Sign off a result, or reopen a confirmed one', 'view'],
-    ['report', 'Open individual reports', 'Full report for one staff member', 'view'],
-    ['export', 'Export results', 'Download CSV, Excel or JSON', 'view']] },
+  { group: 'Assessments', area: 'forms', page: 'forms', label: 'Assessment Content', icon: 'icon-file-pen-line', actions: [
+    ['view', 'View assessment content', 'Open assessments, preview them and see their versions and review history'],
+    ['create', 'Create drafts & upload questions', 'New assessment drafts, bulk question upload from the template', 'view'],
+    ['edit', 'Edit & submit drafts', 'Change questions, answers and competency mapping, then submit for review', 'view'],
+    ['review', 'Review content', 'Approve, reject or return submitted content (Administrators only)', 'view'],
+    ['publish', 'Publish content', 'Make approved content live so it can be assigned (Administrators only)', 'review'],
+    ['archive', 'Archive content', 'Retire an assessment so it can no longer be assigned', 'view']] },
+  { group: 'Assessments', area: 'cycles', page: 'cycles', label: 'Assignments & Deadlines', icon: 'icon-calendar-cog', actions: [
+    ['view', 'View assignments', 'See who each assessment is assigned to, with dates and progress'],
+    ['assign', 'Assign assessments', 'Assign to people, departments, grades, stations or locations', 'view'],
+    ['edit', 'Change dates & attempt limits', 'Change start dates, deadlines and attempt limits', 'view'],
+    ['extend', 'Extend deadlines', 'Give more time, with a recorded reason', 'view'],
+    ['release', 'Release results', 'Release results held back for later', 'view']] },
+  { group: 'Assessments', area: 'staff-evals', page: 'staff-evals', label: 'Team Results', icon: 'icon-users', actions: [
+    ['view', 'View team results', 'Staff in the departments you can see: completion, averages, competency and gap status'],
+    ['report', 'Open competency profiles', 'Full competency detail for one staff member', 'view'],
+    ['export', 'Export team results', 'Download Excel, PDF or CSV', 'view']] },
   { group: 'Assessments', area: 'assessments', page: 'assessments', label: 'Take assessments', icon: 'icon-clipboard-list', actions: [
-    ['view', 'Take assessments', 'My Assessments and the timed assessment']] },
-  { group: 'Analytics', area: 'analytics', page: 'analytics', label: 'Analytics', icon: 'icon-chart-column', actions: [
-    ['view', 'Overview dashboard', 'Proficiency, trends, gaps and distribution'],
-    ['departments', 'Departments tab', 'Every department at a glance'],
-    ['heatmap', 'Heatmap', 'Average gap by department and skill category']] },
-  { group: 'Analytics', area: 'training', page: 'training', label: 'Training Needs', icon: 'icon-graduation-cap', actions: [
-    ['view', 'All training needs', 'Needs by competency and by staff member'],
-    ['top', 'Top training needs', 'The biggest needs across departments'],
-    ['export', 'Export training needs', 'Download as CSV', 'view']] },
+    ['view', 'Take assessments', 'My Assessments: start, resume and submit assigned assessments']] },
+  { group: 'Analytics', area: 'analytics', page: 'analytics', label: 'Dashboards', icon: 'icon-chart-column', actions: [
+    ['view', 'Organisation dashboard', 'Staff, assessments, completion, competency and gap figures'],
+    ['departments', 'Department breakdown', 'Every department side by side'],
+    ['heatmap', 'Gap heatmap', 'Average result by department and competency']] },
+  { group: 'Analytics', area: 'training', page: 'training', label: 'Development Priorities', icon: 'icon-graduation-cap', actions: [
+    ['view', 'Development priorities', 'Critical and Moderate Gaps by competency and by staff member'],
+    ['top', 'Top priorities', 'The biggest gaps across departments'],
+    ['export', 'Export priorities', 'Download as CSV', 'view']] },
   { group: 'Analytics', area: 'reports', page: 'reports', label: 'Reports', icon: 'icon-file-spreadsheet', actions: [
-    ['view', 'Report builder', 'Pick fields and preview a report'],
-    ['export', 'Export reports', 'Download the report (CSV / Excel)', 'view'],
-    ['schedule', 'Scheduled reports', 'See, create and delete scheduled reports']] },
-  { group: 'Administration', area: 'framework', page: 'framework', label: 'Skill Framework', icon: 'icon-network', actions: [
-    ['view', 'View framework', 'Competency library and target profiles'],
-    ['competencies', 'Edit competencies', 'Add or remove competencies', 'view'],
-    ['profiles', 'Edit target profiles', 'Create, edit, remove and apply target profiles', 'view']] },
+    ['view', 'View reports', 'Open the reports, with filters'],
+    ['export', 'Export reports', 'Download reports as Excel, PDF or CSV', 'view']] },
+  { group: 'Administration', area: 'org', page: 'organisation', label: 'Organisation', icon: 'icon-building-2', actions: [
+    ['view', 'View organisation', 'Staff records, departments, grades, stations and locations'],
+    ['staff', 'Manage staff records', 'Add and edit staff, Staff IDs, departments, stations and grades; link login accounts', 'view'],
+    ['structure', 'Manage structure', 'Add and edit departments, grades, stations and locations', 'view'],
+    ['supervisors', 'Manage supervisors', 'Supervisor / HoD assignments and grade-to-station-manager mappings', 'view']] },
+  { group: 'Administration', area: 'framework', page: 'framework', label: 'Competency Framework', icon: 'icon-network', actions: [
+    ['view', 'View framework', 'Competency categories and competencies'],
+    ['competencies', 'Edit competencies', 'Add, edit and retire competencies and categories', 'view']] },
+  { group: 'Administration', area: 'tickets', page: 'tickets', label: 'Support Tickets', icon: 'icon-life-buoy', actions: [
+    ['manage', 'Manage all tickets', 'See every ticket, assign and reassign, set priority, add internal notes'],
+    ['resolve', 'Handle assigned tickets', 'Respond to and update tickets assigned to you']] },
   { group: 'Administration', area: 'settings', page: 'settings', label: 'Settings & User Management', icon: 'icon-settings', actions: [
-    ['general', 'System settings', 'Change assessment, security and data settings'],
+    ['general', 'System settings', 'Result-release and deadline policies'],
+    ['scoring', 'Scoring thresholds', 'Competent, Proficient and gap thresholds, required level and attempt limits (with history)'],
+    ['notifications', 'Notification templates', 'Change the wording of notifications'],
     ['users', 'View users', 'See the user list'],
     ['add-user', 'Add users', 'Create new accounts', 'users'],
     ['edit-user', 'Edit users', 'Change name, email, department and status', 'users'],
@@ -76,17 +82,22 @@ export const PERM_KEYS = PERM_AREAS.flatMap(a => a.actions.map(([x]) => key(a.ar
 export const PERM_INFO = Object.fromEntries(PERM_AREAS.flatMap(a => a.actions.map(([x, label, desc, needs]) =>
   [key(a.area, x), { area: a.area, areaLabel: a.label, action: x, label, desc, needs: needs ? key(a.area, needs) : null }])));
 // Keys that open the area's page (any one is enough).
-export const pageKeys = page => PERM_KEYS.filter(k => PERM_INFO[k].area === page);
+// A permission area can sit on a page with a different key (area "org" is the "organisation" page).
+const PAGE_OF = Object.fromEntries(PERM_AREAS.map(a => [a.area, a.page || a.area]));
+export const pageKeys = page => PERM_KEYS.filter(k => PAGE_OF[PERM_INFO[k].area] === page);
 
 // ===== ACCESS · Role defaults =====
 // The boxes a role ticks when it is picked. Admins get everything except taking assessments.
 const ALL_BUT = (...skip) => PERM_KEYS.filter(k => !skip.includes(k));
 export const ROLE_PERMS = {
-  Administrator: ALL_BUT('assessments.view'),
-  'Assessment Creator': ['forms.view', 'forms.create', 'forms.edit', 'forms.publish', 'forms.archive', 'assessments.view', 'framework.view', 'framework.competencies', 'framework.profiles'],
-  'Manager / Supervisor': ['staff-evals.view', 'staff-evals.score', 'staff-evals.confirm', 'staff-evals.report', 'staff-evals.export', 'assessments.view',
-    'analytics.view', 'analytics.departments', 'analytics.heatmap', 'training.view', 'training.top', 'training.export'],
+  Administrator: ALL_BUT('assessments.view', 'tickets.resolve'),
+  // Creators draft and submit content; an Administrator reviews and publishes it (lib/permissions.js enforces this).
+  'Assessment Creator': ['forms.view', 'forms.create', 'forms.edit', 'framework.view'],
+  'Manager / Supervisor': ['staff-evals.view', 'staff-evals.report', 'staff-evals.export', 'assessments.view', 'cycles.view',
+    'analytics.view', 'analytics.departments', 'analytics.heatmap', 'training.view', 'training.top', 'training.export', 'reports.view', 'reports.export'],
   Participant: ['assessments.view'],
+  // A designated ticket resolver only handles tickets assigned to them.
+  'Ticket Resolver': ['tickets.resolve'],
 };
 
 // ===== ACCESS · Department scope options =====

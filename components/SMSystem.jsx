@@ -7,8 +7,9 @@
 //   (Add, Edit, Change roles & permissions, Reset password, Delete, Export audit log) is a separate permission; everyone sees Help & Guides
 // Used by: SkillMatrixApp.jsx (rendered when the page group is "system", with props.view)
 //   Depends on: react-dom createPortal (pop-up dialogs), smUI (PageHeader), smAccess (access checkboxes), SMFramework (RatingScales cards), ui/select (Select), SMSystem.module.css
-// Sections (search for these markers): USERS · Seed data, AUDIT LOG · Sample log entries, AUDIT LOG · Saved entries (permission and account changes), HELP · FAQ content,
-//   USERS · Storage & helpers, SETTINGS · Main component, SETTINGS · View values, USERS · Search & role filter,
+// Users come from the database through /api/accounts (app/api/accounts/**); nothing about users is kept in the browser.
+// Sections (search for these markers): USERS · Roles, USERS · Server calls, AUDIT LOG · Sample log entries, AUDIT LOG · Saved entries (permission and account changes), HELP · FAQ content,
+//   USERS · Helpers, SETTINGS · Main component, SETTINGS · View values, USERS · Search & role filter,
 //   USERS · Add / edit user dialog, USERS · Permission rules (who may grant what), USERS · Tick box, USERS · Permission ticks (what the user can open and do) & department scope, USERS · Save user, USERS · Table rows & row actions, USERS · Delete confirmation,
 //   AUDIT LOG · Filters, rows & CSV export, SETTINGS · General settings values, HELP · Quick links, FAQ & support ticket,
 //   HELP · Rating Scales tab,
@@ -24,19 +25,9 @@ import { Select } from './ui/select';
 import { PERM_AREAS, PERM_INFO, FREE_TO_GRANT, SCOPES, defaultPerms, defaultScope, permsOf, scopeOf, deptsOf, visibleDepts, withKey, withoutKey, isCustom, permSummary } from './smAccess';
 
 
-// ===== USERS · Seed data (roles & starting user list) =====
-const ROLES = ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Participant'];
-const USERS = [
-  ['Adjei Denzil Asiam', 'denzilasiam.adjei@dvla.gov.gh', 'IT Department', 'Administrator', 'Active', 'Now'],
-  ['Joseph Ahor Abandoh-Sam', 'joseph.abandoh-sam@dvla.gov.gh', 'IT Department', 'Manager / Supervisor', 'Active', '12 min ago'],
-  ['Esi Mensah', 'esi.mensah@dvla.gov.gh', 'Human Resources', 'Assessment Creator', 'Active', '1 h ago'],
-  ['Ama Owusu', 'ama.owusu@dvla.gov.gh', 'IT Department', 'Participant', 'Active', 'Today'],
-  ['Kofi Boateng', 'kofi.boateng@dvla.gov.gh', 'IT Department', 'Participant', 'Active', 'Today'],
-  ['Efua Asante', 'efua.asante@dvla.gov.gh', 'IT Department', 'Participant', 'Active', 'Yesterday'],
-  ['Nana Appiah', 'nana.appiah@dvla.gov.gh', 'Research, Business Development & Innovation', 'Manager / Supervisor', 'Active', 'Yesterday'],
-  ['Akosua Ofori', 'akosua.ofori@dvla.gov.gh', 'Corporate Affairs', 'Participant', 'Suspended', '3 weeks ago'],
-  ['Kojo Quaye', 'kojo.quaye@dvla.gov.gh', 'Corporate Affairs', 'Manager / Supervisor', 'Active', '2 days ago'],
-];
+// ===== USERS · Roles =====
+// The built-in sample user list was removed on 19 Oct 2026: the table shows only real accounts from the database.
+const ROLES = ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Participant', 'Ticket Resolver'];
 // ===== AUDIT LOG · Sample log entries (demo data) =====
 const LOGS = [
   ['09:42:18', 'Abena Frimpong', 'Integrity', 'Left assessment window (2 of 3) · Q4 2026 IT Skills'],
@@ -60,38 +51,29 @@ const FAQ = [
   ['What is a target profile?', 'The level your job level (Assistant Officer up to Director) requires for each competency. Most profiles apply organisation-wide; some departments have their own override.'],
   ['Who can see my results?', 'You, your line manager and HR. Executive dashboards only show summary figures, never individual answers.'],
 ];
-// ===== USERS · Storage & helpers =====
-// Users are kept in localStorage "skm-users" (seeded from USERS on first load); the signed-in username is "skm-me".
-const UKEY = 'skm-users';
+// ===== USERS · Helpers =====
 const DOMAIN = '@dvla.gov.gh';
 // slug(): "First Last" -> suggested username "first.last". genPass(): random 10-character temporary password.
 function slug(name) { const p = name.toLowerCase().normalize('NFKD').replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter(Boolean); return p.length > 1 ? p[0] + '.' + p[p.length - 1] : (p[0] || ''); }
-function genPass() { const U = 'ABCDEFGHJKLMNPQRSTUVWXYZ', l = 'abcdefghijkmnpqrstuvwxyz', n = '23456789', y = '!@#$%&*?', all = U + l + n + y, pick = s => s[Math.floor(Math.random() * s.length)];
-  const a = [pick(U), pick(l), pick(n), pick(y)]; while (a.length < 10) a.push(pick(all)); return a.sort(() => Math.random() - 0.5).join(''); }
-function loadUsers() {
-  try { const u = JSON.parse(localStorage.getItem(UKEY) || 'null'); if (Array.isArray(u) && u.length) return u; } catch (e) {}
-  return USERS.map((u, i) => ({ id: i, name: u[0], email: u[1], dept: u[2], role: u[3], status: u[4], last: u[5], username: u[1].split('@')[0], password: 'Password@1', mustChange: false }));
+function genPass() { const U = 'ABCDEFGHJKLMNPQRSTUVWXYZ', l = 'abcdefghijkmnpqrstuvwxyz', n = '23456789', y = '!@#$%&*?', all = U + l + n + y, r = m => { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % m; }, pick = s => s[r(s.length)];
+  const a = [pick(U), pick(l), pick(n), pick(y)]; while (a.length < 10) a.push(pick(all)); for (let i = a.length - 1; i > 0; i--) { const j = r(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a.join(''); }
+// ===== USERS · Server calls =====
+// api(method, path, body): calls /api/accounts…, returns the JSON reply, or throws an Error with the server's message.
+async function api(method, path, body) {
+  const r = await fetch('/api/accounts' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error(d.error || 'Something went wrong. Please try again.');
+  return d;
 }
 const STATUSES = ['Active', 'Must change password', 'Suspended'];
 const isAdmin = u => u.role === 'Administrator';
 // Username of whoever is signed in (the seeded administrator when nobody has signed in yet).
 function meName() { try { return localStorage.getItem('skm-me') || 'denzilasiam.adjei'; } catch (e) { return 'denzilasiam.adjei'; } }
 // ===== AUDIT LOG · Saved entries (permission and account changes) =====
-// Changes made in User Management are written to localStorage "skm-audit" (newest first, last 200 kept) and shown
-// above the sample entries in the Audit Log tab.
+// Entries older versions saved in localStorage "skm-audit" (shown above the sample entries in the Audit Log tab).
+// User Management changes are now recorded on the server (AuditLog table); the Audit Log tab moves there in phase 8.
 const AKEY = 'skm-audit';
 function loadAudit() { try { const a = JSON.parse(localStorage.getItem(AKEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
-function addAudit(user, type, event) {
-  const t = new Date(), pad = n => String(n).padStart(2, '0');
-  try { localStorage.setItem(AKEY, JSON.stringify([{ time: t.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ':' + pad(t.getSeconds()), user, type, event }, ...loadAudit()].slice(0, 200))); } catch (e) {}
-}
-// Plain-English list of what changed between two permission lists, e.g. "added Confirm & reopen results; removed Export results".
-function permDiff(before, after) {
-  const name = k => PERM_INFO[k].areaLabel + ': ' + PERM_INFO[k].label;
-  const add = after.filter(k => !before.includes(k)).map(name), del = before.filter(k => !after.includes(k)).map(name);
-  return [add.length ? 'added ' + add.join(', ') : '', del.length ? 'removed ' + del.join(', ') : ''].filter(Boolean).join('; ');
-}
-const scopeText = (sc, depts) => sc === 'some' ? depts.join(', ') : (SCOPES.find(x => x[0] === sc) || [, sc])[1];
 const TYPEC = { Auth: ['#e0e7ff', '#3730a3'], Assessment: ['#dcfce7', '#15803d'], Integrity: ['#fee2e2', '#b91c1c'], Config: ['#fef3c7', '#92400e'], Export: ['#e0f2fe', '#0369a1'] };
 // ===== USERS · Tick box (used by the permission cards and department ticks) =====
 // on = ticked, mixed = some of the area's actions ticked (shows a dash), small = action-row size.
@@ -104,15 +86,24 @@ function PermBox({ on, mixed, small }) {
 // ===== SETTINGS · Main component (state & helpers) =====
 // st = General settings values (kept in memory only, not saved to storage).
 class SMSystem extends React.Component {
-  state = { toast: '', uq: '', uRole: 'All', users: loadUsers(),
+  state = { toast: '', uq: '', uRole: 'All', users: [], usersLoaded: false, uLoadErr: '', busy: false,
     adding: false, editId: null, nStatus: 'Active', confirmDel: null, nName: '', nEmail: '', nDept: 'IT Department', nRole: 'Participant', nPerms: defaultPerms('Participant'), nScope: defaultScope('Participant'), nDepts: [], nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, mustChange: true, sendEmail: true, created: null, nErr: '', aType: 'All',
     st: { duration: 45, start: '09:00', end: '17:00', tabLimit: 3, retention: '5', mfa: true, offline: true, encrypt: true, notify: true, anon: true }, sDirty: false,
     hq: '', open: { 0: true }, tSubject: '', tMsg: '' };
-  // Writes the seeded users to "skm-users" on first visit so other screens (e.g. Sign In) see the same accounts.
-  componentDidMount() { try { if (!localStorage.getItem(UKEY)) localStorage.setItem(UKEY, JSON.stringify(this.state.users)); } catch (e) {} }
-  // Every state change also saves the user list to "skm-users" when it changed.
-  setState(u, cb) { return super.setState(u, () => { this.persistUsers(); cb && cb(); }); }
-  persistUsers() { const u = this.state.users; if (u && u !== this._savedUsers) { this._savedUsers = u; try { localStorage.setItem(UKEY, JSON.stringify(u)); } catch (e) {} } }
+  // Loads the user list from the database, and clears the old browser-only list ("skm-users") left by earlier versions.
+  componentDidMount() { try { localStorage.removeItem('skm-users'); } catch (e) {} if (this.mayGrant('settings.users')) this.loadUsers(); }
+  loadUsers = async () => {
+    try { const d = await api('GET', ''); this.setState({ users: d.users, usersLoaded: true, uLoadErr: '' }); }
+    catch (e) { this.setState({ usersLoaded: true, uLoadErr: e.message }); }
+  };
+  // Runs one change on the server, then reloads the list. Returns the reply, or null when it failed (message shown).
+  change = async (method, path, body, onErr) => {
+    if (this.state.busy) return null;
+    this.setState({ busy: true });
+    try { const d = await api(method, path, body); await this.loadUsers(); return d; }
+    catch (e) { onErr ? onErr(e.message) : this.flash(e.message); return null; }
+    finally { this.setState({ busy: false }); }
+  };
   // One pop-up for both: Add user starts empty, Edit user starts from the chosen row.
   openAdd() { this.setState({ adding: true, editId: null, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, nDept: 'IT Department', nRole: 'Participant', nPerms: this.roleDefaults('Participant', []), nScope: defaultScope('Participant'), nDepts: [], nStatus: 'Active', tried: false, nErr: '', created: null }); }
   openEdit(u) { this.setState({ adding: true, editId: u.id, nName: u.name, nEmail: u.email, nUser: u.username || '', userTouched: true, emailTouched: true, nDept: u.dept, nRole: u.role, nPerms: permsOf(u), nScope: scopeOf(u), nDepts: deptsOf(u), nStatus: u.status, tried: false, nErr: '', created: null }); }
@@ -145,7 +136,7 @@ class SMSystem extends React.Component {
     const view = (rawView === 'system' ? 'settings' : rawView) || 'users';
     const q = s.uq.trim().toLowerCase();
     // Editor's own department visibility: someone limited to some departments only sees (and can only give) those.
-    const meU = s.users.find(u => (u.username || '') === meName()), editorVis = meU ? visibleDepts(meU, meU.dept) : null, actor = meU ? meU.name : 'Administrator';
+    const meU = s.users.find(u => (u.username || '') === meName()), editorVis = meU ? visibleDepts(meU, meU.dept) : null;
     const may = k => this.mayGrant(k);
     const users = s.users.filter(u => (!editorVis || editorVis.includes(u.dept)) && (s.uRole === 'All' || u.role === s.uRole) && (!q || (u.name + u.email).toLowerCase().includes(q)));
     // A work email can be typed in full, or just the part before the @ (completed with @dvla.gov.gh).
@@ -208,41 +199,39 @@ class SMSystem extends React.Component {
       nPass: s.nPass, onNPass: e => this.setState({ nPass: e.target.value, nErr: '' }), passType: s.showPass ? 'text' : 'password', passIcon: s.showPass ? 'icon-eye-off' : 'icon-eye',
       toggleShowPass: () => this.setState({ showPass: !s.showPass }), genPass: () => this.setState({ nPass: genPass(), showPass: true }),
       passBorder: s.nPass && !passOk ? '#fca5a5' : 'rgba(15,35,65,.14)', passHint: passOk ? 'Strong enough for a temporary password' : 'At least 8 characters with uppercase, lowercase and a number', passHintColor: passOk ? '#15803d' : '#b45309',
-      newToggles: [['mustChange', 'Ask for a new password at first sign-in', 'The temporary password only works once'], ['sendEmail', 'Email sign-in details to the user', 'Sends the username and temporary password to their work email']]
+      // The "Email sign-in details" toggle was taken out until notifications are built (no email is sent yet).
+      newToggles: [['mustChange', 'Ask for a new password at first sign-in', 'The temporary password only works once']]
         .map(([k, label, desc]) => ({ label, desc, justify: s[k] ? 'flex-end' : 'flex-start', bg: s[k] ? '#0d3b2a' : '#d1d5db', toggle: () => this.setState({ [k]: !this.state[k] }) })),
       nErr: s.nErr,
       // ===== USERS · Save user (add or edit) =====
-      saveUser: () => {
+      // The server checks everything again (permissions, last Administrator, departments) and its message is shown here.
+      saveUser: async () => {
         if (!canAdd) { const n = [!nameOk, !emailOk || emailTaken, !userOk || userTaken, !editing && !passOk].filter(Boolean).length; this.setState({ tried: true, nErr: n === 1 ? 'Fix the highlighted field to continue.' : 'Fix the ' + n + ' highlighted fields to continue.' }); return; }
+        if (s.nScope === 'some' && !s.nDepts.length) { this.setState({ nErr: 'Tick at least one department under Selected departments.' }); return; }
+        const fail = m => this.setState({ nErr: m });
         if (editing) {
           if (!editUser) { this.closeModal(); return; }
-          // Last-admin guard: the only Administrator cannot be given another role or be suspended.
+          // Last-admin guard: the only Administrator cannot be given another role or be suspended (checked again on the server).
           if (isAdmin(editUser) && adminCount === 1 && s.nRole !== 'Administrator') { this.setState({ nErr: editUser.name + ' is the only Administrator. Make someone else an Administrator first.' }); return; }
           if (isAdmin(editUser) && adminCount === 1 && s.nStatus === 'Suspended') { this.setState({ nErr: 'The only Administrator cannot be suspended.' }); return; }
-          if (s.nScope === 'some' && !s.nDepts.length) { this.setState({ nErr: 'Tick at least one department under Selected departments.' }); return; }
-          const { access: _old, ...base } = editUser;
-          const next = { ...base, name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [], status: s.nStatus, mustChange: s.nStatus === 'Must change password' };
-          // Lock-out guard: at least one active user must keep "Change roles & permissions", or nobody could manage access again.
-          const after = s.users.map(x => x.id === editUser.id ? next : x);
-          if (!after.some(x => x.status !== 'Suspended' && permsOf(x).includes('settings.access') && permsOf(x).includes('settings.users'))) { this.setState({ nErr: 'At least one active user must keep "View users" and "Change roles & permissions", or nobody could manage access.' }); return; }
-          // Audit log: record role, permission and department changes.
-          const pd = permDiff(permsOf(editUser), next.perms);
-          if (editUser.role !== next.role) addAudit(actor, 'Config', 'Changed role: ' + next.name + ' → ' + next.role);
-          if (pd) addAudit(actor, 'Config', 'Changed permissions for ' + next.name + ': ' + pd);
-          if (scopeText(scopeOf(editUser), deptsOf(editUser)) !== scopeText(next.scope, next.depts)) addAudit(actor, 'Config', 'Changed departments ' + next.name + ' can see: ' + scopeText(next.scope, next.depts));
-          // Keep the signed-in person signed in if they renamed their own username.
+          const body = { ...(may('settings.edit-user') ? { name: nameParts.join(' '), email, username: uname, dept: s.nDept, status: s.nStatus } : {}),
+            ...(this.permLocked() ? {} : { role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [] }) };
+          const r = await this.change('PATCH', '/' + editUser.id, body, fail);
+          if (!r) return;
+          // Keep the signed-in person's stored username in step if they renamed their own.
           if ((editUser.username || '') === me && uname !== me) { try { localStorage.setItem('skm-me', uname); } catch (e) {} }
-          this.setState({ users: after, adding: false, editId: null, tried: false, nErr: '' });
-          this.flash('Changes saved for ' + next.name);
+          this.setState({ adding: false, editId: null, tried: false, nErr: '' });
+          this.flash('Changes saved for ' + r.user.name);
           return;
         }
-        // New user: added to the top of the list; the "User created" card then shows the sign-in details once.
-        if (s.nScope === 'some' && !s.nDepts.length) { this.setState({ nErr: 'Tick at least one department under Selected departments.' }); return; }
-        const u = { id: Date.now(), name: nameParts.join(' '), email, username: uname, password: s.nPass, mustChange: s.mustChange, dept: s.nDept, role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [], status: s.mustChange ? 'Must change password' : 'Active', last: 'Never signed in' };
-        const note = (s.sendEmail ? 'Sign-in details have been emailed to ' + u.email + '. ' : 'Share these details with them securely. ') + (s.mustChange ? 'They will be asked to set their own password the first time they sign in.' : 'They can sign in with this password straight away.');
-        addAudit(actor, 'Config', 'Created user ' + u.name + ' (' + u.role + ', ' + permSummary(u) + ', ' + scopeText(u.scope, u.depts) + ')');
-        this.setState({ users: [u, ...s.users], adding: false, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, nErr: '', created: { ...u, title: u.name + ' has been added', note } });
-        this.flash('User created' + (s.sendEmail ? ', details emailed' : '')); },
+        // New user: saved in the database; the "User created" card then shows the sign-in details once.
+        const r = await this.change('POST', '', { name: nameParts.join(' '), email, username: uname, dept: s.nDept, role: s.nRole, perms: s.nPerms, scope: s.nScope, depts: s.nScope === 'some' ? s.nDepts : [], password: s.nPass, mustChange: s.mustChange }, fail);
+        if (!r) return;
+        const u = { ...r.user, password: s.nPass };
+        // Emails are not sent yet (notifications come in a later phase), so the details are always shown here to pass on.
+        const note = 'Share these details with them securely. ' + (s.mustChange ? 'They will be asked to set their own password the first time they sign in.' : 'They can sign in with this password straight away.');
+        this.setState({ adding: false, nName: '', nEmail: '', nUser: '', userTouched: false, emailTouched: false, tried: false, nPass: genPass(), showPass: false, nErr: '', created: { ...u, title: u.name + ' has been added', note } });
+        this.flash('User created'); },
       created: s.created, dismissCreated: () => this.setState({ created: null }),
       copyCreds: () => { const c = s.created; const t = 'Skill Matrix sign-in\nUsername: ' + c.username + '\nEmail: ' + c.email + '\nTemporary password: ' + c.password; try { navigator.clipboard.writeText(t); } catch (e) {} this.flash('Sign-in details copied'); },
       trySignIn: () => go('signin'),
@@ -251,23 +240,24 @@ class SMSystem extends React.Component {
         // Row buttons follow the signed-in user's permissions; your own role and ticks cannot be changed from here.
         self: (u.username || '') === me, mayEdit: may('settings.edit-user') || may('settings.access'), mayReset: may('settings.password'), mayDel: may('settings.delete-user'),
         mayRole: may('settings.access') && (u.username || '') !== me, mayStatus: may('settings.edit-user') && (u.username || '') !== me, summary: permSummary(u),
-        reset: () => { if (!may('settings.password')) return; addAudit(actor, 'Config', 'Reset password for ' + u.name); const p = genPass(); this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, password: p, mustChange: true, status: x.status === 'Suspended' ? 'Suspended' : 'Must change password' } : x), created: { ...u, password: p, title: 'Password reset for ' + u.name, note: 'Give ' + u.name.split(' ')[0] + ' this temporary password. They will set a new one the next time they sign in.' } }); this.flash('Temporary password generated'); },
+        // Reset password: the server makes the temporary password and signs them out everywhere.
+        reset: async () => { if (!may('settings.password')) return; const r = await this.change('POST', '/' + u.id + '/password'); if (!r) return;
+          this.setState({ created: { ...u, password: r.password, title: 'Password reset for ' + u.name, note: 'Give ' + u.name.split(' ')[0] + ' this temporary password. They will set a new one the next time they sign in.' } }); this.flash('Temporary password generated'); },
         // Last-admin guard (table role dropdown): changing the only Administrator's role is refused.
-        onRole: e => { const r = e.target.value; if (!may('settings.access') || (u.username || '') === me) return; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; }
-          const { access: _old, ...base } = u, perms = this.roleDefaults(r, permsOf(u)), next = { ...base, role: r, perms, scope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), depts: [] };
-          const after = this.state.users.map(x => x.id === u.id ? next : x);
-          if (!after.some(x => x.status !== 'Suspended' && permsOf(x).includes('settings.access') && permsOf(x).includes('settings.users'))) { this.flash('At least one active user must keep "Change roles & permissions".'); return; }
-          addAudit(actor, 'Config', 'Changed role: ' + u.name + ' → ' + r + ' (permissions reset to the role defaults)');
-          this.setState({ users: after }); this.flash(u.name + ' is now ' + r); },
+        onRole: async e => { const r = e.target.value; if (!may('settings.access') || (u.username || '') === me) return; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; }
+          // Changing the role resets the ticks and departments to that role's defaults.
+          const done = await this.change('PATCH', '/' + u.id, { role: r, perms: this.roleDefaults(r, permsOf(u)), scope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), depts: [] });
+          if (done) this.flash(u.name + ' is now ' + r); },
         edit: () => this.openEdit(u), custom: isCustom(u),
         // Delete is blocked for your own account (self-delete) and for the last Administrator; the reason shows as the button tooltip.
         delBlock: (u.username || '') === me ? 'You cannot delete your own account while signed in' : isAdmin(u) && adminCount === 1 ? 'The only Administrator cannot be deleted' : '',
         del: () => { if (!may('settings.delete-user') || (u.username || '') === me || (isAdmin(u) && adminCount === 1)) return; this.setState({ confirmDel: u }); },
-        toggle: () => (!may('settings.edit-user') || (u.username || '') === me) ? undefined : this.setState({ users: this.state.users.map(x => x.id === u.id ? { ...x, status: x.status === 'Suspended' ? (x.mustChange ? 'Must change password' : 'Active') : 'Suspended' } : x) }) })),
-      userCount: users.length + ' of ' + s.users.length + ' users',
+        toggle: () => { if (!may('settings.edit-user') || (u.username || '') === me) return; this.change('PATCH', '/' + u.id, { status: u.status === 'Suspended' ? (u.mustChange ? 'Must change password' : 'Active') : 'Suspended' }); } })),
+      // Footer: loading, a load error from the server, or the count.
+      userCount: !s.usersLoaded ? 'Loading users…' : s.uLoadErr ? s.uLoadErr : users.length + ' of ' + s.users.length + ' users',
       // ===== USERS · Delete confirmation =====
       confirmDel: s.confirmDel, cancelDel: () => this.setState({ confirmDel: null }),
-      doDel: () => { const u = s.confirmDel; if (!u || !may('settings.delete-user')) return; addAudit(actor, 'Config', 'Deleted user ' + u.name); this.setState({ users: s.users.filter(x => x.id !== u.id), confirmDel: null, created: s.created && s.created.id === u.id ? null : s.created }); this.flash(u.name + ' has been deleted'); },
+      doDel: async () => { const u = s.confirmDel; if (!u || !may('settings.delete-user')) return; const r = await this.change('DELETE', '/' + u.id); if (!r) return; this.setState({ confirmDel: null, created: s.created && s.created.id === u.id ? null : s.created }); this.flash(u.name + ' has been deleted'); },
       // ===== AUDIT LOG · Filters, rows & CSV export =====
       // IP addresses are generated for the demo; Export downloads the filtered rows as CSV.
       aTypes: ['All', 'Auth', 'Assessment', 'Integrity', 'Config', 'Export'].map(t => { const on = s.aType === t; return { label: t, pick: () => this.setState({ aType: t }), bg: on ? '#0d3b2a' : '#fff', fg: on ? '#fff' : '#374151', border: on ? '#0d3b2a' : 'rgba(15,35,65,.14)' }; }),

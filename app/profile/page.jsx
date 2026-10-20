@@ -1,4 +1,4 @@
-// Route /profile · My Profile (account, skills, history, plan, evidence tabs) · drawn by components/SMProfile.jsx
+// Route /profile · My Profile (Account / Skills / History tabs) · drawn by components/SMProfile.jsx
 // Every route file just mounts components/AppRouter.jsx; the URL decides what SkillMatrixApp shows.
 import AppRouter from '@/components/AppRouter';
 
