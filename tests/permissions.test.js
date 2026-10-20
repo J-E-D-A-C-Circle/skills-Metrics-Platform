@@ -5,6 +5,7 @@
 // =============================================================================
 import { describe, it, expect } from 'vitest';
 import { effectivePermissions, hasPermission, visibleDepartmentIds, canSeeDepartment, mayGrant, primaryRole } from '../lib/permissions.js';
+import { defaultScope, scopeOf, visibleDepts } from '../components/smAccess.js';
 
 // ===== TEST · Role defaults & hard rules =====
 describe('roles', () => {
@@ -53,6 +54,12 @@ describe('department scope', () => {
   it('all departments', () => {
     expect(visibleDepartmentIds({ deptScope: 'ALL' })).toBeNull();
     expect(canSeeDepartment({ deptScope: 'ALL' }, 99)).toBe(true);
+  });
+  it('every role and grade starts on its own department; wider access is only ever granted', () => {
+    for (const role of ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Participant', 'Ticket Resolver', undefined]) expect(defaultScope(role)).toBe('own');
+    expect(visibleDepts({ role: 'Assessment Creator' }, 'Human Resources')).toEqual(['Human Resources']);
+    expect(visibleDepts({ role: 'Participant' }, 'Research, Business Development & Innovation')).toEqual(['Research, Business Development & Innovation']);
+    expect(scopeOf({ role: 'Assessment Creator', scope: 'all' })).toBe('all');
   });
 });
 

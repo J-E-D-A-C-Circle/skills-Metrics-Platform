@@ -173,7 +173,7 @@ class SMSystem extends React.Component {
       nameHint: s.tried && !nameOk ? (s.nName.trim() ? 'Enter both the first and last name, e.g. Isaac Addy' : 'Enter the full name') : 'First and last name, as held by HR', nameHintColor: s.tried && !nameOk ? '#b91c1c' : '#6b7280',
       emailBorder: (rawEmail && (!emailOk || emailTaken)) || (s.tried && !emailOk) ? '#fca5a5' : 'rgba(15,35,65,.14)',
       emailHint: !rawEmail ? (s.tried ? 'Enter a work email' : 'Filled in from the name. You can type just the part before the @.') : !emailOk ? 'Use a work email like isaac.addy@dvla.gov.gh' : emailTaken ? 'A user with this email already exists' : !rawEmail.includes('@') ? 'Will be saved as ' + email : 'Looks good',
-      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => { if (this.permLocked()) return; const r = e.target.value; this.setState({ nRole: r, nPerms: this.roleDefaults(r, s.nPerms), nScope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), nDepts: [] }); },
+      emailHintColor: !rawEmail ? (s.tried ? '#b91c1c' : '#6b7280') : !emailOk || emailTaken ? '#b91c1c' : '#15803d', onNDept: e => this.setState({ nDept: e.target.value }), onNRole: e => { if (this.permLocked()) return; const r = e.target.value; this.setState({ nRole: r, nPerms: this.roleDefaults(r, s.nPerms), nScope: defaultScope(r), nDepts: [] }); },
       // Edit user: details need "Edit users"; role and ticks need "Change roles & permissions" (never on your own account).
       detailsLocked: editing && !may('settings.edit-user'), roleLocked: this.permLocked(),
       // ===== USERS · Permission ticks (what the user can open and do) & department scope =====
@@ -185,7 +185,7 @@ class SMSystem extends React.Component {
         return { area: a.area, label: a.label, icon: a.icon, count: n + ' of ' + keys.length, on: n === keys.length, mixed: n > 0 && n < keys.length, toggle: () => this.toggleArea(keys, n === keys.length),
           items: a.actions.map(([x, label, desc]) => { const k = a.area + '.' + x; return { k, label, desc, on: s.nPerms.includes(k), locked: this.permLocked() || !may(k), toggle: () => this.togglePerm(k) }; }) }; }) })),
       permCount: s.nPerms.length + ' of ' + Object.keys(PERM_INFO).length + ' ticked',
-      resetAccess: () => { if (this.permLocked()) return; this.setState({ nPerms: this.roleDefaults(s.nRole, s.nPerms), nScope: editorVis && defaultScope(s.nRole) === 'all' ? 'own' : defaultScope(s.nRole), nDepts: [] }); },
+      resetAccess: () => { if (this.permLocked()) return; this.setState({ nPerms: this.roleDefaults(s.nRole, s.nPerms), nScope: defaultScope(s.nRole), nDepts: [] }); },
       clearAccess: () => { if (this.permLocked()) return; this.setState({ nPerms: s.nPerms.filter(k => !may(k)) }); },
       // Departments they can see: All (only if you see all yourself), Own department, or Selected departments (ticks below).
       nScope: s.nScope, scopeOpts: SCOPES.map(([v, label]) => { const off = this.permLocked() || (v === 'all' && !!editorVis); return { v, label, on: s.nScope === v, off, pick: () => { if (!off) this.setState({ nScope: v }); } }; }),
@@ -246,7 +246,7 @@ class SMSystem extends React.Component {
         // Last-admin guard (table role dropdown): changing the only Administrator's role is refused.
         onRole: async e => { const r = e.target.value; if (!may('settings.access') || (u.username || '') === me) return; if (isAdmin(u) && adminCount === 1 && r !== 'Administrator') { this.flash(u.name + ' is the only Administrator. Make someone else an Administrator first.'); return; }
           // Changing the role resets the ticks and departments to that role's defaults.
-          const done = await this.change('PATCH', '/' + u.id, { role: r, perms: this.roleDefaults(r, permsOf(u)), scope: editorVis && defaultScope(r) === 'all' ? 'own' : defaultScope(r), depts: [] });
+          const done = await this.change('PATCH', '/' + u.id, { role: r, perms: this.roleDefaults(r, permsOf(u)), scope: defaultScope(r), depts: [] });
           if (done) this.flash(u.name + ' is now ' + r); },
         edit: () => this.openEdit(u), custom: isCustom(u),
         // Delete is blocked for your own account (self-delete) and for the last Administrator; the reason shows as the button tooltip.

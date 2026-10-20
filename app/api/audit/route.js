@@ -16,10 +16,10 @@ import { AuditQuery, auditWhere, auditRow, OUTCOMES } from '@/lib/server/setting
 // ===== AUDIT LOG · Read =====
 // Also returns the actions and record types present, for the filter drop-downs.
 export const GET = handle(async req => {
-  await requirePermission('settings.audit');
+  const ctx = await requirePermission('settings.audit');
   const p = AuditQuery.safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!p.success) throw badRequest('Some filters are not valid.', { fields: p.error.flatten().fieldErrors });
-  const f = p.data, where = auditWhere(f);
+  const f = p.data, where = auditWhere(f, { visibleDepartmentIds: ctx.visibleDepartmentIds, selfId: ctx.account.id });
   const [rows, total, actions, entities] = await Promise.all([
     db.auditLog.findMany({ where, orderBy: [{ at: 'desc' }, { id: 'desc' }], skip: (f.page - 1) * f.size, take: f.size, include: { actor: { select: { id: true, displayName: true, username: true } } } }),
     db.auditLog.count({ where }),

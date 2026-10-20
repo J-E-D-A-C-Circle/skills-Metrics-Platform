@@ -81,6 +81,13 @@ describe('audit log filters & CSV', () => {
     expect(w.AND).toContainEqual({ actorId: null });
     expect(auditWhere(AuditQuery.parse({}))).toEqual({});
   });
+  it('limits the log to the departments the viewer can see, plus their own entries', () => {
+    const f = AuditQuery.parse({});
+    expect(auditWhere(f, { visibleDepartmentIds: null, selfId: 7 })).toEqual({});
+    const w = auditWhere(f, { visibleDepartmentIds: [3], selfId: 7 });
+    expect(w.AND).toContainEqual({ OR: [{ actorId: 7 }, { actor: { staff: { departmentId: { in: [3] } } } }] });
+    expect(auditWhere(f, { visibleDepartmentIds: [], selfId: 7 }).AND[0].OR[1].actor.staff.departmentId.in).toEqual([]);
+  });
   it('refuses bad dates and outcomes', () => {
     expect(AuditQuery.safeParse({ from: '19/10/2026' }).success).toBe(false);
     expect(AuditQuery.safeParse({ outcome: 'MAYBE' }).success).toBe(false);

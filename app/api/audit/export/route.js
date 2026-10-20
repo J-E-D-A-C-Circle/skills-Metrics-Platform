@@ -19,7 +19,7 @@ export const GET = handle(async req => {
   const p = AuditQuery.safeParse(Object.fromEntries(req.nextUrl.searchParams));
   if (!p.success) throw badRequest('Some filters are not valid.', { fields: p.error.flatten().fieldErrors });
   const { page, size, ...filters } = p.data;
-  const rows = await db.auditLog.findMany({ where: auditWhere(filters), orderBy: [{ at: 'desc' }, { id: 'desc' }], take: MAX_ROWS, include: { actor: { select: { displayName: true, username: true } } } });
+  const rows = await db.auditLog.findMany({ where: auditWhere(filters, { visibleDepartmentIds: ctx.visibleDepartmentIds, selfId: ctx.account.id }), orderBy: [{ at: 'desc' }, { id: 'desc' }], take: MAX_ROWS, include: { actor: { select: { displayName: true, username: true } } } });
   const csv = toCsv(['When (UTC)', 'Actor', 'Username', 'Action', 'Record type', 'Record id', 'Outcome', 'IP address', 'Before', 'After'],
     rows.map(r => [r.at.toISOString(), r.actor?.displayName || 'System', r.actor?.username || '', r.action, r.entityType, r.entityId, r.outcome, r.ip, r.before, r.after]));
   await audit({ actorId: ctx.account.id, action: 'audit.export', entityType: 'AuditLog', after: { filters, rows: rows.length, format: 'csv' }, ip: clientIp(req) });

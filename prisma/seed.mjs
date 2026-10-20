@@ -109,7 +109,7 @@ async function main() {
       // (prompt section 5.3).
       const roles = role === 'SUPERVISOR' || role === 'TICKET_RESOLVER' ? [role, 'STAFF'] : [role];
       await db.account.create({ data: {
-        username, email: username + '@dvla.gov.gh', displayName: name, passwordHash: hash, status: 'ACTIVE', staffId: staff.id, deptScope: role === 'CREATOR' ? 'ALL' : 'OWN',
+        username, email: username + '@dvla.gov.gh', displayName: name, passwordHash: hash, status: 'ACTIVE', staffId: staff.id, deptScope: 'OWN',
         roles: { create: [...new Set(roles)].map(r => ({ role: r })) },
         permissions: { create: [...new Set(roles.flatMap(r => ROLE_PERMS[ROLE_LABEL[r]] || []))].map(key => ({ key })) },
         supervisorLinks: role === 'SUPERVISOR' ? { create: [{ departmentId: dept[code].id }] } : undefined,

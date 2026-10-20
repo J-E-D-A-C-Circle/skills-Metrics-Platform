@@ -102,12 +102,13 @@ export const ROLE_PERMS = {
 
 // ===== ACCESS · Department scope options =====
 // Which departments' staff and results the user can see. 'some' uses the user's `depts` list.
+// Everyone starts on their own department, whatever their role or grade (RBDI sees RBDI, HR sees HR). Selected or
+// all departments are only ever given deliberately by an administrator in User Management.
 export const SCOPES = [['all', 'All departments'], ['own', 'Own department only'], ['some', 'Selected departments']];
-export const ROLE_SCOPE = { 'Manager / Supervisor': 'own' };
 
 // ===== ACCESS · Reading a user's permissions =====
 export const defaultPerms = role => [...(ROLE_PERMS[role] || ROLE_PERMS.Participant)];
-export const defaultScope = role => ROLE_SCOPE[role] || 'all';
+export const defaultScope = () => 'own';
 // Older users only have `access` (page keys from the first version of the checkboxes): give every action on those pages.
 const fromPages = pages => PERM_KEYS.filter(k => pages.includes(PERM_INFO[k].area));
 export const permsOf = u => {
