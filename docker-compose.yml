@@ -53,6 +53,16 @@ services:
       db:
         condition: service_healthy
 
+  adminer:
+    image: adminer:latest
+    container_name: skm-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   skm-db:
   app-storage:
