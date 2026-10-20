@@ -2,7 +2,7 @@
 // Route POST /api/assignments · assign a published assessment to people, departments, grades, stations or locations
 // =============================================================================
 // Used by: components/SMAssignments.jsx (Assignments page, /cycles)
-// Depends on: lib/server/{db,session,scope,audit,notify,http,assigned}, ./progress.js, ./rules.js
+// Depends on: lib/server/{db,session,http}, ./progress.js, ./rules.js, ./create.js (target checks, save & notify)
 // Sections (search for these markers): ASSIGNMENTS LIST · Read, ASSIGNMENTS LIST · Totals, NEW ASSIGNMENT · Input,
 //   NEW ASSIGNMENT · Checks, NEW ASSIGNMENT · Save & notify
 // Needs "View assignments" to list and "Assign assessments" to create. Supervisors only see people in their scope
@@ -11,13 +11,10 @@
 import { z } from 'zod';
 import { db } from '@/lib/server/db';
 import { requirePermission } from '@/lib/server/session';
-import { assertStaffVisible } from '@/lib/server/scope';
-import { audit } from '@/lib/server/audit';
-import { notify, fmtDate } from '@/lib/server/notify';
-import { coveredWhere } from '@/lib/server/assigned';
-import { json, handle, readBody, badRequest, forbidden, clientIp } from '@/lib/server/http';
-import { loadProgress, canSeeAssignment, takerAccounts, assignmentRow, plain } from './progress';
-import { TARGETS, TARGET_FIELD, TARGET_LABEL, targetAllowed, checkDates, summarize, assignmentState, pageOf } from './rules';
+import { json, handle, readBody, badRequest, clientIp } from '@/lib/server/http';
+import { loadProgress, canSeeAssignment, assignmentRow } from './progress';
+import { TARGETS, TARGET_FIELD, TARGET_LABEL, checkDates, summarize, assignmentState, pageOf } from './rules';
+import { checkTarget, saveAssignments } from './create';
 
 // ===== ASSIGNMENTS LIST · Read =====
 // Query: assessmentId, state (UPCOMING | OPEN | CLOSED), q (assessment or target name), page, pageSize.
@@ -58,7 +55,6 @@ const Body = z.object({
   assessmentId: z.number().int().positive(), targetType: z.enum(TARGETS), targetIds: z.array(z.number().int().positive()).min(1).max(100),
   startsAt: z.coerce.date(), deadline: z.coerce.date(), maxAttempts: z.number().int().min(1).max(10).nullable().optional(),
 });
-const TARGET_MODEL = { DEPARTMENT: 'department', GRADE: 'grade', STATION: 'station', LOCATION: 'location' };
 
 export const POST = handle(async req => {
   const ctx = await requirePermission('cycles.assign');
@@ -72,37 +68,13 @@ export const POST = handle(async req => {
   if (dateErr) throw badRequest(dateErr, { fields: { deadline: [dateErr] } });
   if (b.deadline <= now) throw badRequest('The deadline must be in the future.', { fields: { deadline: ['in the past'] } });
   const targetIds = [...new Set(b.targetIds)];
-  for (const id of targetIds) {
-    if (b.targetType === 'INDIVIDUAL') {
-      const s = await db.staffRecord.findUnique({ where: { id }, select: { id: true, status: true, departmentId: true, supervisorId: true } });
-      assertStaffVisible(ctx, s);
-      if (s.status !== 'ACTIVE') throw badRequest('Only active staff can be given an assessment.');
-    } else {
-      if (!targetAllowed(ctx.visibleDepartmentIds, b.targetType, id)) throw forbidden(b.targetType === 'DEPARTMENT' ? 'You can only assign to departments you manage.' : 'Only people who can see every department can assign by grade, station or location.');
-      const t = await db[TARGET_MODEL[b.targetType]].findUnique({ where: { id } });
-      if (!t) throw badRequest('That ' + TARGET_LABEL[b.targetType].toLowerCase() + ' was not found.');
-      if (t.active === false) throw badRequest(t.name + ' is inactive, so it cannot be assigned to.');
-    }
-  }
+  for (const id of targetIds) await checkTarget(db, ctx, b.targetType, id);
   const field = TARGET_FIELD[b.targetType];
   const dup = await db.assessmentAssignment.findFirst({ where: { assessmentId: assessment.id, targetType: b.targetType, [field]: { in: targetIds } } });
   if (dup) throw badRequest('This assessment is already assigned to one of these ' + (b.targetType === 'INDIVIDUAL' ? 'people' : TARGET_LABEL[b.targetType].toLowerCase() + 's') + '. Change that assignment\'s dates instead.');
 
   // ===== NEW ASSIGNMENT · Save & notify =====
-  // Everyone covered is told once (people reached by two of the new targets get one message).
-  const result = await db.$transaction(async tx => {
-    const created = [], told = new Set();
-    let notified = 0;
-    for (const id of targetIds) {
-      const a = await tx.assessmentAssignment.create({ data: { assessmentId: assessment.id, targetType: b.targetType, [field]: id, startsAt: b.startsAt, deadline: b.deadline, maxAttempts: b.maxAttempts ?? null, createdById: ctx.account.id } });
-      await audit({ actorId: ctx.account.id, action: 'assignment.create', entityType: 'AssessmentAssignment', entityId: a.id, after: plain({ assessmentId: assessment.id, title: assessment.title, targetType: b.targetType, targetId: id, startsAt: b.startsAt, deadline: b.deadline, maxAttempts: b.maxAttempts ?? null }), ip: clientIp(req) }, tx);
-      const covered = (await tx.staffRecord.findMany({ where: coveredWhere(a), select: { id: true } })).map(s => s.id).filter(sid => !told.has(sid));
-      covered.forEach(sid => told.add(sid));
-      const accounts = [...(await takerAccounts(covered, tx)).values()].flat();
-      notified += await notify({ accountIds: accounts, key: 'assessment.assigned', vars: { title: assessment.title, startsAt: fmtDate(b.startsAt), deadline: fmtDate(b.deadline) }, link: '/assessments', dedupe: 'assigned:' + a.id }, tx);
-      created.push(a.id);
-    }
-    return { created, covered: told.size, notified };
-  }, { timeout: 30000 });
+  // Everyone covered is told once (create.js saveAssignments).
+  const result = await db.$transaction(tx => saveAssignments(tx, ctx, assessment, { ...b, targetIds }, clientIp(req)), { timeout: 30000 });
   return json(result, 201);
 });

@@ -32,8 +32,11 @@ async function mySection(ctx) {
   ]);
   const ticketOpen = await db.ticket.count({ where: { requesterId: ctx.account.id, status: { in: OPEN_TICKET } } });
   const assigned = p.assessments.filter(a => a.assigned);
+  // How many competencies the person's assigned (published) assessments measure, for "x of y assessed" on Home.
+  const measured = assigned.length ? (await db.questionCompetency.findMany({ where: { question: { version: { status: 'PUBLISHED', assessmentId: { in: assigned.map(a => a.id) } } } }, distinct: ['competencyId'], select: { competencyId: true } })).length : 0;
   return {
-    staff: p.staff, counts: p.counts, completion: p.completion, pendingRelease: p.pendingRelease,
+    measured,
+    staff: p.staff, config: p.config, counts: p.counts, completion: p.completion, pendingRelease: p.pendingRelease,
     assessments: assigned.map(({ results, ...a }) => a), results: p.results,
     history: p.history.slice(0, 6).map(({ scores, ...h }) => h),
     attempts: { used: assigned.reduce((s, a) => s + a.used, 0), remaining: assigned.reduce((s, a) => s + a.remaining, 0) },

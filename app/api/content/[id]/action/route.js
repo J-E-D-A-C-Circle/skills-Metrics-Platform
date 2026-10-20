@@ -2,7 +2,7 @@
 //   submit · approve · return · reject · publish · archive · new-version
 // =============================================================================
 // Used by: components/SMContent.jsx (workflow buttons on the assessment page)
-// Depends on: lib/server/{db,session,audit,notify,http,content}, app/api/content/_shared.js
+// Depends on: lib/server/{db,session,audit,notify,http,content,audience}, app/api/content/_shared.js
 // Sections (search for these markers): WORKFLOW · Input, WORKFLOW · Checks, WORKFLOW · Submit, WORKFLOW · Review,
 //   WORKFLOW · Publish, WORKFLOW · Archive, WORKFLOW · New version
 // Permissions: submit = "Edit & submit drafts" (author only) · approve / return / reject = "Review content" ·
@@ -18,6 +18,7 @@ import { audit } from '@/lib/server/audit';
 import { notify, adminAccounts } from '@/lib/server/notify';
 import { json, handle, readBody, clientIp, ApiError, forbidden } from '@/lib/server/http';
 import { TRANSITIONS, STATUS_LABEL, LIMITS, isOwnWork, versionAuthorId, assessmentProblems, competencyMap, plainQuestion, QUESTION_INCLUDE, questionCreate, syncAssessmentStatus, pendingKey, IN_PROGRESS, EDITABLE } from '@/lib/server/content';
+import { assignPlannedAudience } from '@/lib/server/audience';
 import { getAssessment, editableVersion, idParam, ensureTemplates } from '../../_shared';
 
 // ===== WORKFLOW · Input =====
@@ -82,7 +83,9 @@ export const POST = handle(async (req, { params }) => {
 
     // ===== WORKFLOW · Publish =====
     // The approved version goes live; any older live or approved version is marked Archived (superseded) but keeps
-    // its attempts and results. Settings waiting for this version are applied now.
+    // its attempts and results. Settings waiting for this version are applied now. A planned audience (chosen when
+    // the assessment was created) is assigned now with the publisher's rights (lib/server/audience.js).
+    let audience = null;
     if (b.action === 'publish') {
       const live = a.versions.find(x => x.status === 'PUBLISHED');
       if (live && live.versionNo > v.versionNo) throw new ApiError(409, 'A newer version is already published.');
@@ -95,6 +98,7 @@ export const POST = handle(async (req, { params }) => {
       const pending = await tx.systemSetting.findUnique({ where: { key: pendingKey(v.id) } });
       if (pending) { await tx.assessment.update({ where: { id: a.id }, data: pending.value }); await tx.systemSetting.delete({ where: { key: pending.key } }); }
       await notify({ accountIds: authors.filter(x => x !== me), key: 'content.published', vars, link, dedupe: 'content.published:' + v.id }, tx);
+      audience = await assignPlannedAudience(tx, ctx, await tx.assessment.findUnique({ where: { id: a.id } }), ip);
     }
 
     // ===== WORKFLOW · Archive =====
@@ -124,7 +128,7 @@ export const POST = handle(async (req, { params }) => {
     const status = await syncAssessmentStatus(tx, a.id);
     await audit({ actorId: me, action: 'assessment.' + (b.action === 'new-version' ? 'version.create' : b.action), entityType: 'AssessmentVersion', entityId: newVersion ? newVersion.id : v.id,
       before: { status: v.status, versionNo: v.versionNo }, after: { assessmentId: a.id, assessmentStatus: status, versionNo: newVersion ? newVersion.versionNo : v.versionNo, feedback: b.feedback || undefined }, ip }, tx);
-    return { status, versionNo: newVersion ? newVersion.versionNo : v.versionNo };
+    return { status, versionNo: newVersion ? newVersion.versionNo : v.versionNo, audience };
   }, { timeout: 60000 });
   return json({ ok: true, ...out });
 });

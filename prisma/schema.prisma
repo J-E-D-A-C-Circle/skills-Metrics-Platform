@@ -366,6 +366,10 @@ model Assessment {
   resultRelease    ResultRelease    @default(IMMEDIATE)
   resultsReleasedAt DateTime?
   sourceRef        String?          @unique // e.g. "bank:rbdi-1" for content loaded from the DVLA banks
+  // Who it is for, chosen when the assessment is created (before building). The assignments are made from it
+  // automatically when a version is published: { targetType, targetIds, startsAt, deadline, done? }.
+  // See lib/server/audience.js. The Assignments page stays the place for later changes.
+  plannedAssignment Json?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

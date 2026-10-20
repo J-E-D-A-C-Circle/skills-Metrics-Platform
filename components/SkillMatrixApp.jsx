@@ -320,7 +320,9 @@ const ROLE_LABEL = { admin: 'Administrator', creator: 'Assessment Creator', mana
 const myPerms = role => { const me = readMe(); return me ? permsOf(me) : defaultPerms(ROLE_LABEL[role]); };
 const navItems = role => {
   const perms = myPerms(role), on = i => !i.feature || FT[i.feature];
-  return PAGES.filter(i => on(i) && pageKeys(i.key).some(k => perms.includes(k)));
+  // Home is open to every signed-in role (it is in ALWAYS and has no permission of its own), so it always stays at
+  // the top of the sidebar; every other page needs at least one of its permissions.
+  return PAGES.filter(i => on(i) && (ALWAYS.includes(i.key) || pageKeys(i.key).some(k => perms.includes(k))));
 };
 const can = (role, key) => navItems(role).some(i => i.key === key);
 const hasPerm = (role, k) => myPerms(role).includes(k);

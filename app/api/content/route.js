@@ -1,8 +1,9 @@
 // Route GET /api/content · the Assessment Content list (search, status filter, paging)
-// Route POST /api/content · create a new assessment draft (version 1, Draft)
+// Route POST /api/content · create a new assessment draft (version 1, Draft), optionally with who it is for
+//   (the planned audience, assigned automatically when it is published: lib/server/audience.js)
 // =============================================================================
 // Used by: components/SMContent.jsx (list and "New assessment")
-// Depends on: lib/server/{db,session,audit,http,content}, app/api/content/_shared.js
+// Depends on: lib/server/{db,session,audit,http,content,audience}, app/api/content/_shared.js
 // Sections (search for these markers): CONTENT LIST · Filters, CONTENT LIST · Read, NEW DRAFT · Input, NEW DRAFT · Save
 // Needs "View assessment content" to list and "Create drafts" to create. Creators see shared content plus their own;
 // Administrators see everything.
@@ -13,6 +14,7 @@ import { requirePermission } from '@/lib/server/session';
 import { audit } from '@/lib/server/audit';
 import { json, handle, readBody, clientIp } from '@/lib/server/http';
 import { STATUSES, LIMITS, versionAuthorId, syncAssessmentStatus } from '@/lib/server/content';
+import { checkedPlan, AudienceBody } from '@/lib/server/audience';
 import { visibleWhere } from './_shared';
 
 // ===== CONTENT LIST · Filters =====
@@ -70,6 +72,7 @@ const Body = z.object({
   instructions: z.string().trim().max(LIMITS.instructions).optional().default(''),
   maxAttempts: z.coerce.number().int().min(1).max(LIMITS.maxAttempts).optional(),
   resultRelease: z.enum(['IMMEDIATE', 'AFTER_DEADLINE', 'MANUAL']).optional().default('IMMEDIATE'),
+  audience: AudienceBody,
 });
 
 // ===== NEW DRAFT · Save =====
@@ -79,14 +82,15 @@ export const POST = handle(async req => {
   const b = await readBody(req, Body);
   const created = await db.$transaction(async tx => {
     const cfg = await tx.scoringConfig.findFirst({ where: { active: true }, orderBy: { version: 'desc' } });
+    const plan = await checkedPlan(tx, ctx, b.audience);
     const a = await tx.assessment.create({ data: {
       title: b.title, description: b.description || null, instructions: b.instructions || null, createdById: ctx.account.id, status: 'DRAFT',
-      maxAttempts: b.maxAttempts ?? cfg?.defaultMaxAttempts ?? 3, resultRelease: b.resultRelease,
+      maxAttempts: b.maxAttempts ?? cfg?.defaultMaxAttempts ?? 3, resultRelease: b.resultRelease, ...(plan ? { plannedAssignment: plan } : {}),
     } });
     const v = await tx.assessmentVersion.create({ data: { assessmentId: a.id, versionNo: 1, status: 'DRAFT', scoringConfigId: cfg?.id ?? null } });
     await tx.assessmentReviewEvent.create({ data: { versionId: v.id, actorId: ctx.account.id, action: 'CREATE' } });
     await syncAssessmentStatus(tx, a.id);
-    await audit({ actorId: ctx.account.id, action: 'assessment.create', entityType: 'Assessment', entityId: a.id, after: { title: a.title, maxAttempts: a.maxAttempts, resultRelease: a.resultRelease, versionNo: 1 }, ip: clientIp(req) }, tx);
+    await audit({ actorId: ctx.account.id, action: 'assessment.create', entityType: 'Assessment', entityId: a.id, after: { title: a.title, maxAttempts: a.maxAttempts, resultRelease: a.resultRelease, versionNo: 1, plannedAssignment: plan }, ip: clientIp(req) }, tx);
     return a;
   });
   return json({ id: created.id }, 201);

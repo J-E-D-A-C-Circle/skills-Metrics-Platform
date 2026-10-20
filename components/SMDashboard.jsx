@@ -1,23 +1,27 @@
 'use client';
 // =============================================================================
-// SMDashboard.jsx · Home: a dashboard built for the signed-in person's roles from live records
+// SMDashboard.jsx · Home: the original Home design (SMHome.jsx) for the signed-in person, then the sections built for
+//   their roles from live records
 // Screen / URL: / and /home
-// Who sees it: everyone. Staff: their assessments, deadlines, attempts and released results. Supervisors: also a
-//   team summary. Administrators: organisation KPIs, completion, gaps, content awaiting review, tickets and recent
-//   activity. Assessment Creators: their content by status. Ticket resolvers: tickets assigned to them.
+// Who sees it: everyone. Everyone: the welcome banner with the DVLA building and the facts row. People who take
+//   assessments: the green-to-gold assessment strip, KPI cards, Priority Skill Gaps, Quick Actions, calendar and their
+//   recent activity (SMHome.jsx). Supervisors: also a team summary. Administrators: organisation KPIs, completion, gaps,
+//   content awaiting review, tickets and recent activity. Assessment Creators: their content by status. Ticket
+//   resolvers: tickets assigned to them.
 // Used by: SkillMatrixApp.jsx (page "home")
-// Depends on: smUI.jsx, smApi.js, SMTeamResults.jsx (helpers), SMOrgDashboard.jsx (charts), lib/scoring.js;
-//   GET /api/dashboard
-// Sections (search for these markers): HOME · Screen, HOME · Welcome, HOME · My assessments, HOME · My results,
-//   HOME · Activity, notifications & tickets, HOME · Team, HOME · Organisation, HOME · Content, HOME · Assigned tickets
+// Depends on: SMHome.jsx (welcome banner + personal home), smUI.jsx, smApi.js, SMTeamResults.jsx (helpers),
+//   SMOrgDashboard.jsx (charts), lib/scoring.js; GET /api/dashboard
+// Sections (search for these markers): HOME · Screen, HOME · Welcome, HOME · Activity, notifications & tickets,
+//   HOME · Team, HOME · Organisation, HOME · Content, HOME · Assigned tickets
 // Empty states only: nothing on this page is made up.
 // =============================================================================
 import React from 'react';
-import { Page, Card, Btn, Badge, CompetencyBadge, GapStatusBadge, Avg, EmptyState, DataTable, KpiTile, CARD } from './smUI';
+import { Page, Card, Btn, Badge, Avg, EmptyState, DataTable, KpiTile } from './smUI';
 import { useLoad, fmtDate, fmtDateTime } from './smApi';
 import { ProgressBadge, GapCounts, pct, goTeam } from './SMTeamResults';
 import { StackBar, gapParts, statusParts, HBars } from './SMOrgDashboard';
 import { GAP_COLOURS } from '../lib/scoring';
+import PersonalHome, { WelcomeCard } from './SMHome';
 
 const grid = min => ({ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(' + min + ',1fr))', gap: '16px' });
 const ASM_LABEL = { DRAFT: 'Draft', SUBMITTED: 'Awaiting review', RETURNED: 'Returned for revision', REJECTED: 'Rejected', APPROVED: 'Approved', PUBLISHED: 'Published', ARCHIVED: 'Archived' };
@@ -30,30 +34,17 @@ const Muted = ({ children }) => <span style={{ fontSize: '12px', color: '#6b7280
 // ===== HOME · Screen =====
 export default function SMDashboard({ me, go }) {
   const { data: d, error } = useLoad('/api/dashboard');
-  const first = (me?.name || '').split(/\s+/)[0];
   const perms = me?.perms || [];
   return (
     <Page>
       {/* ===== HOME · Welcome ===== */}
-      <div style={{ ...CARD, overflow: 'hidden' }}>
-        <div style={{ background: 'linear-gradient(135deg,#054218 0%,#043b16 100%)', color: '#fff', padding: '22px clamp(16px,2.4vw,28px)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '14px' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '13px', opacity: 0.8 }}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-            <h1 style={{ margin: '4px 0 0', fontSize: 'clamp(22px,3vw,28px)', fontWeight: 700, letterSpacing: '-0.4px' }}>Welcome back{first ? ', ' + first : ''}</h1>
-            <div style={{ fontSize: '13.5px', opacity: 0.85, marginTop: '6px' }}>{[me?.role, me?.staffNo ? 'Staff ID ' + me.staffNo : null, me?.dept, me?.grade, me?.station].filter(Boolean).join(' · ')}</div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {d?.me ? <Btn kind="primary" icon="icon-clipboard-list" onClick={() => go('assessments')}>My Assessments</Btn> : null}
-            {perms.includes('staff-evals.view') ? <Btn icon="icon-users" onClick={() => go('staff-evals')}>Team Results</Btn> : null}
-            <Btn icon="icon-user" onClick={() => go('profile')}>My Profile</Btn>
-          </div>
-        </div>
-      </div>
+      {/* People who take assessments get the full personal Home (SMHome.jsx); everyone else the welcome banner and
+          facts row above their role sections. */}
+      {d && d.me ? <PersonalHome me={me} m={d.me} go={go}><MyActivity m={d.me} go={go} /></PersonalHome> : <WelcomeCard me={me} staff={null} current={null} go={go} />}
       {error ? <Card><EmptyState icon="icon-circle-alert" title="Your dashboard could not be loaded" text={error} /></Card>
         : !d ? <Card><EmptyState icon="icon-loader" title="Loading your dashboard…" /></Card>
         : <>
           {d.org ? <OrgSection o={d.org} go={go} perms={perms} /> : null}
-          {d.me ? <MySection m={d.me} go={go} /> : null}
           {d.team ? <TeamSection t={d.team} go={go} perms={perms} /> : null}
           {d.content ? <ContentSection c={d.content} go={go} /> : null}
           {d.tickets ? <TicketSection t={d.tickets} go={go} /> : null}
@@ -63,54 +54,6 @@ export default function SMDashboard({ me, go }) {
   );
 }
 const Heading = ({ children, sub }) => <div style={{ marginTop: '6px' }}><div style={{ font: '700 18px Inter,sans-serif', letterSpacing: '-0.2px' }}>{children}</div>{sub ? <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '3px' }}>{sub}</div> : null}</div>;
-
-// ===== HOME · My assessments =====
-function MySection({ m, go }) {
-  const c = m.completion, list = [...m.assessments].sort((a, b) => (a.status === 'COMPLETED') - (b.status === 'COMPLETED') || new Date(a.deadline) - new Date(b.deadline));
-  const upcoming = list.filter(a => ['NOT_STARTED', 'IN_PROGRESS', 'UPCOMING'].includes(a.status) && a.deadline);
-  return <>
-    <Heading sub="Your assigned assessments, deadlines and attempts">My assessments</Heading>
-    <div style={grid('150px')}>
-      <KpiTile label="Assigned" value={c.assigned} sub={c.upcoming ? c.upcoming + ' opening later' : 'assessments'} onClick={() => go('assessments')} />
-      <KpiTile label="Not started" value={c.notStarted} />
-      <KpiTile label="In progress" value={c.inProgress} />
-      <KpiTile label="Completed" value={c.completed} subColor={c.completed ? '#15803d' : undefined} sub={pct(c.rate) + ' of open assessments'} />
-      <KpiTile label="Overdue" value={c.overdue} sub={c.overdue ? 'deadline passed' : 'none overdue'} subColor={c.overdue ? '#b91c1c' : undefined} />
-      <KpiTile label="Attempts remaining" value={m.attempts.remaining} sub={m.attempts.used + ' used so far'} />
-    </div>
-    <div style={grid('340px')}>
-      <Card title="Assessments" sub={upcoming.length ? 'Next deadline ' + fmtDate(upcoming[0].deadline) : null} actions={<Btn small kind="ghost" onClick={() => go('assessments')}>Open My Assessments</Btn>}>
-        {!list.length ? <EmptyState icon="icon-clipboard-list" title="No assessments assigned to you" text="When an assessment is assigned to you it will appear here with its deadline." /> : list.map(a =>
-          <Row key={a.id} onClick={['NOT_STARTED', 'IN_PROGRESS'].includes(a.status) ? () => go('take', undefined, a.id) : () => go('assessments')}>
-            <span style={{ flex: '1 1 200px', minWidth: 0 }}><span style={{ display: 'block', fontWeight: 600, fontSize: '13.5px' }}>{a.title}</span>
-              <Muted>{a.deadline ? (a.status === 'UPCOMING' ? 'Opens ' + fmtDate(a.startsAt) + ' · ' : '') + 'Deadline ' + fmtDate(a.deadline) : ''} · {a.used} of {a.maxAttempts} attempts used · {a.remaining} remaining</Muted></span>
-            <ProgressBadge status={a.status} label={a.statusLabel} />
-            {a.status === 'NOT_STARTED' ? <Badge bg="#e6f2ea" fg="#0d3b2a">Start <i className="icon-arrow-right" style={{ fontSize: '11px' }}></i></Badge> : a.status === 'IN_PROGRESS' ? <Badge bg="#e6f2ea" fg="#0d3b2a">Resume <i className="icon-arrow-right" style={{ fontSize: '11px' }}></i></Badge> : null}
-          </Row>)}
-      </Card>
-      <MyResults m={m} go={go} />
-    </div>
-    <MyActivity m={m} go={go} />
-  </>;
-}
-
-// ===== HOME · My results =====
-function MyResults({ m, go }) {
-  const c = m.counts, worst = m.results.filter(r => r.gapStatus !== 'NONE').slice(0, 5);
-  return (
-    <Card title="My competency results" sub={c.assessed ? c.assessed + ' competencies · overall average ' + c.overallDisplay : 'Final average of all your completed attempts'} actions={<Btn small kind="ghost" onClick={() => go('profile', 'skills')}>Skill Profile</Btn>}>
-      {m.pendingRelease ? <div style={{ fontSize: '12.5px', color: '#92400e', background: '#fef3c7', borderRadius: '10px', padding: '8px 12px', marginBottom: '10px' }}>{m.pendingRelease} completed assessment{m.pendingRelease === 1 ? ' is' : 's are'} waiting for results to be released.</div> : null}
-      {!c.assessed ? <EmptyState icon="icon-chart-column" title="No results yet" text="Your results appear here once you complete an assessment and the results are released." />
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}><GapCounts c={c} /><Badge bg="#dbeafe" fg="#1d4ed8">{c.competent} Competent</Badge><Badge bg="#dcfce7" fg="#15803d">{c.proficient} Proficient</Badge></div>
-          <StackBar parts={gapParts(c)} legend={false} />
-          <div><div style={{ font: '600 12px Inter,sans-serif', color: '#374151', marginBottom: '4px' }}>{worst.length ? 'Biggest gaps' : 'No gaps: every competency is at 5.00'}</div>
-            {worst.map(r => <div key={r.competency.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid rgba(15,35,65,.06)' }}>
-              <span style={{ flex: '1 1 150px', minWidth: 0, fontSize: '13px' }}>{r.competency.name}</span><Avg value={r.average} /><CompetencyBadge status={r.competencyStatus} /><GapStatusBadge gap={r.gapStatus} /></div>)}</div>
-        </div>}
-    </Card>
-  );
-}
 
 // ===== HOME · Activity, notifications & tickets =====
 function MyActivity({ m, go }) {

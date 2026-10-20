@@ -77,7 +77,7 @@ Every route checks the session and the permission named in its header comment, f
 | `app/api/lookups` | names for drop-down lists and the scoring thresholds in use |
 | `app/api/org/*` | staff records (with placement history and Excel/CSV import), departments, grades, stations, locations, supervisors |
 | `app/api/competencies/*` | competency framework and categories |
-| `app/api/content/*` | assessment content: drafts, questions, bulk upload, submit / approve / return / reject / publish / archive, new versions |
+| `app/api/content/*` | assessment content: drafts (with who it is for), questions (add, edit, delete, re-order and sections in one PUT), bulk upload, submit / approve / return / reject / publish (makes the planned assignments) / archive, new versions |
 | `app/api/assignments/*` | assignments, progress, extensions, result release |
 | `app/api/my/*`, `app/api/attempts/*` | My Assessments, starting / resuming, autosave, active page time, submit (scores written in `lib/server/results.js`) |
 | `app/api/dashboard/*`, `app/api/team/*`, `app/api/staff/*`, `app/api/me` | dashboards, team results, development priorities, individual profiles, My Profile |
@@ -98,7 +98,8 @@ components/
   SkillMatrixApp.jsx    shell: header, bell, sidebar, tabs, page guard, which screen draws which page
   smUI.jsx · smApi.js · smAccess.js   UI kit · browser API helpers · permission list and role defaults
   SMDashboard.jsx       Home for every role          SMMyAssessments.jsx · SMTake.jsx   My Assessments · taking one
-  SMContent.jsx         Assessment Content           SMAssignments.jsx   Assignments & deadlines
+  SMContent.jsx         Assessment Content list, New assessment (+ who it is for)   SMAssignments.jsx   Assignments & deadlines
+  SMFormBuilder.jsx     drag-and-drop Form Builder for one assessment (Build, Rubric & Scoring, Preview & Test, Versions, Settings)
   SMTeamResults.jsx     Team Results                 SMStaffProfile.jsx  individual competency profile (/report)
   SMOrgDashboard.jsx    Dashboards                   SMPriorities.jsx    Development Priorities
   SMReports.jsx         Reports & exports            SMOrganisation.jsx  Organisation CMS
@@ -108,12 +109,14 @@ components/
   SMSignIn.jsx          sign in and first password   dvlaBanks.js        the DVLA question banks (seed source)
 lib/
   scoring.js            THE scoring engine (0-5, final average of completed attempts, Competent / Proficient, gaps)
+  formBuilder.js        Form Builder canvas model: sections (= skill areas), drag-and-drop moves, what to save
   permissions.js        effective permissions, hard rules, department scope
   server/               db, sessions, passwords, audit, scope, notify, assigned (who is assigned / deadlines /
-                        progress), results, analytics, reports, exporters, org, content, tickets, settings, reminders
+                        progress), results, analytics, reports, exporters, org, content, audience (planned audience,
+                        assigned on publish), tickets, settings, reminders
 prisma/                 schema.prisma · migrations/ · seed.mjs · seed-data.mjs · seed-demo-results.mjs
 tests/                  vitest: scoring, permissions, results, attempts, content, assignments, org, analytics,
-                        reports, tickets, settings
+                        reports, tickets, settings, formBuilder (canvas, re-ordering, planned audience on publish)
 ```
 
 ## Where to find things in the code
@@ -125,7 +128,9 @@ Every file starts with a header saying what it is, its web address, who uses it 
 | Header, bell, sidebar, tabs, page guard | components/SkillMatrixApp.jsx | `HEADER ·`, `NOTIFICATIONS ·`, `SIDEBAR ·`, `ROUTER ·`, `PAGE ROUTER ·` |
 | Home | SMDashboard.jsx | `HOME · My assessments`, `HOME · Team`, `HOME · Organisation`, `HOME · Content` |
 | My Assessments / taking one | SMMyAssessments.jsx, SMTake.jsx | `MY ASSESSMENTS · Assessment card`, `TAKE · Question`, `TAKE · Review`, `TAKE · Active page time` |
-| Assessment Content | SMContent.jsx | `CONTENT · Workflow actions`, `CONTENT · Question editor`, `CONTENT · Bulk upload` |
+| Assessment Content | SMContent.jsx | `CONTENT · List page`, `CONTENT · New assessment drawer`, `CONTENT · Who it is for (planned audience)`, `CONTENT · Workflow actions`, `CONTENT · Bulk upload` |
+| Form Builder | SMFormBuilder.jsx, lib/formBuilder.js | `FORMS · Question types palette`, `FORMS · Canvas`, `FORMS · Inspector`, `FORMS · Saving`, `FORMS · Rubric & Scoring tab`, `FORMS · Preview tab`, `BUILDER · Sections` |
+| Planned audience (assigned on publish) | lib/server/audience.js, app/api/assignments/create.js | `AUDIENCE · On publish`, `CREATE · Save & notify` |
 | Assignments | SMAssignments.jsx | `ASSIGNMENTS · New assignment drawer`, `ASSIGNMENTS · Dialogs (edit, extend, cancel)` |
 | Team Results / profile | SMTeamResults.jsx, SMStaffProfile.jsx | `TEAM · Summary table`, `TEAM · Matrix`, `PROFILE · Screen` |
 | Dashboards / priorities | SMOrgDashboard.jsx, SMPriorities.jsx | `DASHBOARDS · Overview`, `DASHBOARDS · Heatmap`, `PRIORITIES · Top needs` |
