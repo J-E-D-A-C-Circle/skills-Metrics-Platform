@@ -677,9 +677,10 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
     return 1;
   }
 
-  function getRole(desig) {
+  function getRole(desig, fullName = '') {
     const d = desig.toUpperCase();
     if (d.includes('ASSISTANT MANAGER HR')) return 'CREATOR';
+    if (fullName.toLowerCase().includes('mensah') && d.includes('HR')) return 'CREATOR';
     if (d.includes('DIRECTOR') || d.includes('MANAGER')) return 'SUPERVISOR';
     return 'STAFF';
   }
@@ -710,6 +711,41 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
       id: 2, staffNo: 'DVLA-IT-001', firstName: 'Abena', lastName: 'Sarpong', otherNames: null,
       email: 'abena.sarpong@dvla.gov.gh', designation: 'Technical Support Specialist', departmentId: 1, gradeId: 2, stationId: 1,
       username: 'support.it', role: 'TICKET_RESOLVER', deptScope: 'OWN'
+    },
+    {
+      id: 101, staffNo: 'DVLA-HR-DEMO-01', firstName: 'Esi', lastName: 'Mensah', otherNames: null,
+      email: 'creator.hr@dvla.gov.gh', designation: 'Assessment Specialist', departmentId: 2, gradeId: 3, stationId: 1,
+      username: 'creator.hr', role: 'CREATOR', deptScope: 'OWN'
+    },
+    {
+      id: 102, staffNo: 'DVLA-HR-DEMO-02', firstName: 'Esi', lastName: 'Mensah', otherNames: null,
+      email: 'esi.mensah@dvla.gov.gh', designation: 'Assessment Specialist', departmentId: 2, gradeId: 3, stationId: 1,
+      username: 'esi.mensah', role: 'CREATOR', deptScope: 'OWN'
+    },
+    {
+      id: 103, staffNo: 'DVLA-RBDI-DEMO-01', firstName: 'Kwame', lastName: 'Appiah', otherNames: null,
+      email: 'manager.rbdi@dvla.gov.gh', designation: 'Manager RBDI', departmentId: 3, gradeId: 3, stationId: 1,
+      username: 'manager.rbdi', role: 'SUPERVISOR', deptScope: 'OWN'
+    },
+    {
+      id: 104, staffNo: 'DVLA-RBDI-DEMO-02', firstName: 'Kofi', lastName: 'Mensah', otherNames: null,
+      email: 'staff.rbdi@dvla.gov.gh', designation: 'Assistant Officer RBDI', departmentId: 3, gradeId: 1, stationId: 1,
+      username: 'staff.rbdi', role: 'STAFF', deptScope: 'OWN'
+    },
+    {
+      id: 105, staffNo: 'DVLA-HR-DEMO-03', firstName: 'Ama', lastName: 'Osei', otherNames: null,
+      email: 'staff.hr@dvla.gov.gh', designation: 'HR Officer', departmentId: 2, gradeId: 2, stationId: 1,
+      username: 'staff.hr', role: 'STAFF', deptScope: 'OWN'
+    },
+    {
+      id: 106, staffNo: 'DVLA-IT-DEMO-02', firstName: 'Kojo', lastName: 'Asante', otherNames: null,
+      email: 'resolver.it@dvla.gov.gh', designation: 'IT Support Engineer', departmentId: 1, gradeId: 2, stationId: 1,
+      username: 'resolver.it', role: 'TICKET_RESOLVER', deptScope: 'OWN'
+    },
+    {
+      id: 107, staffNo: 'DVLA-CA-DEMO-01', firstName: 'Akua', lastName: 'Darko', otherNames: null,
+      email: 'manager.ca@dvla.gov.gh', designation: 'Manager Corporate Affairs', departmentId: 4, gradeId: 3, stationId: 1,
+      username: 'manager.ca', role: 'SUPERVISOR', deptScope: 'OWN'
     }
   ];
 
@@ -722,7 +758,7 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
     const isHR = r.Department.trim().toUpperCase().includes('HUMAN');
     const deptId = isHR ? 2 : 3;
     const gradeId = getGradeId(desig);
-    const role = getRole(desig);
+    const role = getRole(desig, fullName);
     const username = getUsername(fullName);
     const email = `${username}@dvla.gov.gh`;
     const isTamale = String(r['Location\t'] || r['Location'] || '').toUpperCase().includes('TAMALE');
