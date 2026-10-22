@@ -1,8 +1,13 @@
 // =============================================================================
 // scripts/db-reset.mjs · Reset MySQL database and re-seed
 // =============================================================================
+import fs from 'node:fs';
 import mysql from 'mysql2/promise';
 import { execSync } from 'node:child_process';
+
+if (fs.existsSync('.env')) {
+  process.loadEnvFile?.('.env');
+}
 
 async function main() {
   const dbUrl = process.env.DATABASE_URL || 'mysql://skm:change-me@localhost:3306/skill_matrix';

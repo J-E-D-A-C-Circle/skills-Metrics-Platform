@@ -1,7 +1,12 @@
 // =============================================================================
 // scripts/db-migrate.mjs · Run database migrations or push schema to MySQL
 // =============================================================================
+import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+
+if (fs.existsSync('.env')) {
+  process.loadEnvFile?.('.env');
+}
 
 console.log('Running Drizzle database migration / push...');
 try {

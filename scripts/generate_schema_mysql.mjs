@@ -38,6 +38,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 SET NAMES utf8mb4;
 
+CREATE DATABASE IF NOT EXISTS \`skill_matrix\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE \`skill_matrix\`;
+
 -- =============================================================================
 -- 1. TABLES
 -- =============================================================================

@@ -181,6 +181,6 @@ The session is the `skm_session` cookie (scripts can't read it). The browser kee
 - **Passwords and secrets:** set strong values in `.env` (database password, `JOBS_SECRET`), serve over HTTPS (the session cookie is marked Secure in production) and turn `SEED_DEMO` off.
 - **Email / SMS:** notifications are in-app. Templates already have email/SMS channels that switch on when a mail or SMS service is configured (`NOTIFY_EMAIL` / `NOTIFY_SMS`); the sending itself still needs wiring to DVLA's service.
 - **Reminders:** schedule `/api/jobs/reminders` (see Run it).
-- **Backups:** the PostgreSQL database and the `storage/` folder.
+- **Backups:** the MySQL database and the `storage/` folder.
 - **Dependency:** `xlsx` 0.18.5 from npm has known advisories for crafted files. Uploaded spreadsheets are therefore only read in the uploader's own browser, never on the server; the server only writes spreadsheets. Moving to SheetJS 0.20.x from `https://cdn.sheetjs.com/` is still recommended.
 - **Single sign-on:** sign-in is local accounts; SSO can be added later.
