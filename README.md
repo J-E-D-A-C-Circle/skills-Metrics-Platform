@@ -21,11 +21,11 @@ The competency framework, question banks and scales come from the DVLA documents
 
 ```bash
 cp .env.example .env          # set SEED_ADMIN_PASSWORD and any custom settings
-docker compose up -d --build  # builds and starts MySQL 8, phpMyAdmin (port 8080) and Next.js (port 3000)
+docker compose up -d --build  # builds and starts MySQL 8, phpMyAdmin (port 8085) and Next.js (port 3000)
 docker compose exec app npm run db:seed # seed initial administrator and frameworks
 ```
 - App: [http://localhost:3000](http://localhost:3000)
-- phpMyAdmin: [http://localhost:8080](http://localhost:8080) (User: `skm`, Password: `change-me`, or root `change-me-root`)
+- phpMyAdmin: [http://localhost:8085](http://localhost:8085) (User: `skm`, Password: `change-me`, or root `change-me-root`)
 
 ### Option B: Local Node.js Development (Docker for MySQL only)
 

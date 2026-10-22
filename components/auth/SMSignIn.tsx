@@ -13,7 +13,7 @@ import { PASSWORD_RULES } from '@/lib/passwordRules';
 
 
 // ===== SIGN IN · Constants =====
-// Accounts live on the server (PostgreSQL). Passwords are checked by POST /api/auth/login and never stored in the browser.
+// Accounts live on the server (MySQL). Passwords are checked by POST /api/auth/login and never stored in the browser.
 // The rules for a new password come from lib/passwordRules.js, which the server also enforces.
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) })
   .then(async r => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))

@@ -3,7 +3,7 @@
 // Run: npm test
 // Sections (search for these markers): TEST · Setup, TEST · Marking answers, TEST · Final rows (section 26 cases),
 //   TEST · Rebuild from stored attempts, TEST · Completing an attempt
-// The database is replaced by a small in-memory stand-in, so these run without PostgreSQL.
+// The database is replaced by a small in-memory stand-in, so these run without MySQL.
 // =============================================================================
 import { describe, it, expect, vi } from 'vitest';
 
