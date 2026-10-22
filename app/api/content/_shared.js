@@ -72,7 +72,7 @@ const EXTRA_TEMPLATES = [
 ];
 export async function ensureTemplates(tx = db) {
   for (const [key, title, body] of EXTRA_TEMPLATES) {
-    if (!(await tx.notificationTemplate.findUnique({ where: { key } }))) await tx.notificationTemplate.create({ data: { key, title, body } }).catch(() => {});
+    if (!(await tx.notificationTemplate.findUnique({ where: { key } }))) await tx.notificationTemplate.create({ data: { key, title, body, channels: ['in_app'] } }).catch(() => {});
   }
 }
 

@@ -1,8 +1,8 @@
 # DVLA · Skill Matrix & Assessment Platform (Next.js)
 
-A Next.js 15 (App Router) application for DVLA staff competency assessments, built to the "Skills Metrics prompt" specification: a PostgreSQL database, secure sign-in, permissions checked on the server, assessment content with review and publishing, assignments and deadlines, assessments without a countdown timer, one scoring engine for every screen and export, dashboards, reports (Excel, PDF, CSV), support tickets, notifications and an append-only audit log. It keeps the DVLA green liquid-glass look.
+A Next.js 15 (App Router) application for DVLA staff competency assessments, built with MySQL 8, phpMyAdmin, and Drizzle ORM: secure sign-in, permissions checked on the server, assessment content with review and publishing, assignments and deadlines, assessments without a countdown timer, one scoring engine for every screen and export, dashboards, reports (Excel, PDF, CSV), support tickets, notifications and an append-only audit log. It keeps the DVLA green liquid-glass look.
 
-**Build status (20 Oct 2026):** all nine phases of the build plan are in place and tested (unit tests, an end-to-end workflow check and every page opened for each role). Nothing here has been pushed to GitHub yet.
+**Build status (21 Oct 2026):** fully switched to MySQL 8 + phpMyAdmin + Drizzle ORM. All 12 test suites (237 tests) passing.
 
 ## Source content
 
@@ -17,23 +17,24 @@ The competency framework, question banks and scales come from the DVLA documents
 
 ## Run it
 
-### Option A: Run Entire Stack via Docker (App + PostgreSQL)
+### Option A: Run Entire Stack via Docker (App + MySQL 8 + phpMyAdmin)
 
 ```bash
 cp .env.example .env          # set SEED_ADMIN_PASSWORD and any custom settings
-docker compose up -d --build  # builds and starts both PostgreSQL and Next.js
+docker compose up -d --build  # builds and starts MySQL 8, phpMyAdmin (port 8080) and Next.js (port 3000)
 docker compose exec app npm run db:seed # seed initial administrator and frameworks
 ```
-Open [http://localhost:3000](http://localhost:3000).
+- App: [http://localhost:3000](http://localhost:3000)
+- phpMyAdmin: [http://localhost:8080](http://localhost:8080) (User: `skm`, Password: `change-me`, or root `change-me-root`)
 
-### Option B: Local Node.js Development (Docker for PostgreSQL only)
+### Option B: Local Node.js Development (Docker for MySQL only)
 
 ```bash
-cp .env.example .env          # then set DATABASE_URL, a temporary SEED_ADMIN_PASSWORD and JOBS_SECRET
-docker compose up -d db       # starts only PostgreSQL
-npm install                   # also generates the database client
-npm run db:migrate            # creates the tables
-npm run db:seed               # departments, competencies, the 8 question banks, notification templates, the first administrator
+cp .env.example .env          # DATABASE_URL="mysql://skm:change-me@localhost:3306/skill_matrix"
+docker compose up -d db       # starts MySQL 8 and loads schema.sql
+npm install                   # install dependencies
+npm run db:push               # synchronize schema via Drizzle Kit (or npm run db:migrate)
+npm run db:seed               # seeds baseline organisation, competencies, question banks, staff & admin
 npm run dev                   # open http://localhost:3000
 npm test                      # unit tests (scoring, permissions, every module's rules)
 ```
@@ -110,32 +111,31 @@ Every route checks the session and the permission named in its header comment, f
 ## Structure
 
 ```
-app/<route>/page.jsx    one folder per URL; each renders <AppRouter initialPage="<route>" />
-app/api/**              server routes (above)
+app/
+  (admin)/              admin pages (settings, users, audit, organisation, framework, scales, targets, library, cycles, schedules, forms, builder, system)
+  (participant)/        participant pages (home, profile, take, assessments, evidence, plan)
+  (manager)/            manager pages (team, team-evals, staff-evals, feedback, approvals)
+  (analytics)/          analytics & reporting (analytics, dashboard, heatmap, reports, report, training)
+  (support)/            support pages (tickets, help)
+  (auth)/               authentication (signin)
+  api/**                server API routes (accounts, assignments, attempts, content, org, reports, tickets, etc.)
 components/
-  AppRouter.jsx         URL -> app (page, ?tab, ?id); back/forward
-  SkillMatrixApp.jsx    shell: header, bell, sidebar, tabs, page guard, which screen draws which page
-  smUI.jsx · smApi.js · smAccess.js   UI kit · browser API helpers · permission list and role defaults
-  SMDashboard.jsx       Home for every role          SMMyAssessments.jsx · SMTake.jsx   My Assessments · taking one
-  SMContent.jsx         Assessment Content list, New assessment (+ who it is for)   SMAssignments.jsx   Assignments & deadlines
-  SMFormBuilder.jsx     drag-and-drop Form Builder for one assessment (Build, Rubric & Scoring, Preview & Test, Versions, Settings)
-  SMTeamResults.jsx     Team Results                 SMStaffProfile.jsx  individual competency profile (/report)
-  SMOrgDashboard.jsx    Dashboards                   SMPriorities.jsx    Development Priorities
-  SMReports.jsx         Reports & exports            SMOrganisation.jsx  Organisation CMS
-  SMCompetencies.jsx    Competency Framework         SMTickets.jsx       Support Tickets
-  SMSettings.jsx        Settings (general, scoring, templates, audit)   SMSystem.jsx  User Management
-  SMProfile.jsx         My Profile                   SMHelp.jsx          Help & Guides, Rating Scales
-  SMSignIn.jsx          sign in and first password   dvlaBanks.js        the DVLA question banks (seed source)
+  admin/                administration CMS components (Organisation, Settings, System, Competencies, Content, Framework, FormBuilder)
+  participant/          participant assessment components (Home, MyAssessments, Profile, Take)
+  analytics/            analytics, dashboard, heatmap and reporting components (Dashboard, OrgDashboard, Reports, Priorities, StaffProfile, TeamResults)
+  support/              support ticket and help center components (Tickets, Help)
+  auth/                 authentication gateway components (SignIn)
+  layout/               app shell (SkillMatrixApp) & client-side router (AppRouter)
+  shared/               shared UI kit (smUI), models (smModel), banks (dvlaBanks), and permission utilities (smAccess)
+drizzle/                drizzle/schema.js (MySQL 8 schema definition & relations)
 lib/
   scoring.js            THE scoring engine (0-5, final average of completed attempts, Competent / Proficient, gaps)
   formBuilder.js        Form Builder canvas model: sections (= skill areas), drag-and-drop moves, what to save
   permissions.js        effective permissions, hard rules, department scope
-  server/               db, sessions, passwords, audit, scope, notify, assigned (who is assigned / deadlines /
-                        progress), results, analytics, reports, exporters, org, content, audience (planned audience,
-                        assigned on publish), tickets, settings, reminders
-prisma/                 schema.prisma · migrations/ · seed.mjs · seed-data.mjs · seed-demo-results.mjs
+  server/               db (Drizzle ORM), drizzleBridge, sessions, passwords, audit, scope, notify, assigned, results, etc.
+scripts/                seed-mysql.mjs, db-reset.mjs, db-migrate.mjs, generate_schema_mysql.mjs
 tests/                  vitest: scoring, permissions, results, attempts, content, assignments, org, analytics,
-                        reports, tickets, settings, formBuilder (canvas, re-ordering, planned audience on publish)
+                        reports, tickets, settings, formBuilder
 ```
 
 ## Where to find things in the code

@@ -11,7 +11,6 @@
 // is published (kept in SystemSetting "content.pending-settings.<versionId>"), so live content never changes.
 // =============================================================================
 import { z } from 'zod';
-import { Prisma } from '@prisma/client';
 import { db } from '@/lib/server/db';
 import { requirePermission } from '@/lib/server/session';
 import { audit } from '@/lib/server/audit';
@@ -86,7 +85,7 @@ export const PATCH = handle(async (req, { params }) => {
     if (audience !== undefined) {
       if (a.plannedAssignment && a.plannedAssignment.done) throw new ApiError(409, 'The planned audience was already assigned when this assessment was published. Make changes on the Assignments page.');
       const plan = await checkedPlan(tx, ctx, audience);
-      await tx.assessment.update({ where: { id: a.id }, data: { plannedAssignment: plan === null ? Prisma.DbNull : plan } });
+      await tx.assessment.update({ where: { id: a.id }, data: { plannedAssignment: plan ?? null } });
       await audit({ actorId: ctx.account.id, action: 'assessment.audience', entityType: 'Assessment', entityId: a.id, before: { plannedAssignment: a.plannedAssignment ?? null }, after: { plannedAssignment: plan }, ip: clientIp(req) }, tx);
     }
     const live = a.versions.some(x => x.status === 'PUBLISHED');

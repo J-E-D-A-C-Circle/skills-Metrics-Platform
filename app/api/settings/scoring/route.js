@@ -34,7 +34,6 @@ export const POST = handle(async req => {
   if (errs.length) throw badRequest(errs.join('. ') + '.', { problems: errs });
   const ip = clientIp(req);
   await db.$transaction(async tx => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('skm-scoring-config'))`;
     const active = plainConfig(await tx.scoringConfig.findFirst({ where: { active: true }, orderBy: { version: 'desc' } }));
     if (sameConfig(active, b)) throw badRequest('These are already the thresholds in use. Change at least one value.');
     const last = await tx.scoringConfig.findFirst({ orderBy: { version: 'desc' }, select: { version: true } });
