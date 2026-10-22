@@ -677,10 +677,9 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
     return 1;
   }
 
-  function getRole(desig, fullName = '') {
+  function getRole(desig) {
     const d = desig.toUpperCase();
     if (d.includes('ASSISTANT MANAGER HR')) return 'CREATOR';
-    if (fullName.toLowerCase().includes('mensah') && d.includes('HR')) return 'CREATOR';
     if (d.includes('DIRECTOR') || d.includes('MANAGER')) return 'SUPERVISOR';
     return 'STAFF';
   }
@@ -706,50 +705,10 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
       id: 1, staffNo: 'DVLA-ADM-001', firstName: 'System', lastName: 'Administrator', otherNames: null,
       email: 'admin@dvla.gov.gh', designation: 'Senior Systems Administrator', departmentId: 1, gradeId: 4, stationId: 1,
       username: 'admin', role: 'ADMIN', deptScope: 'ALL'
-    },
-    {
-      id: 2, staffNo: 'DVLA-IT-001', firstName: 'Abena', lastName: 'Sarpong', otherNames: null,
-      email: 'abena.sarpong@dvla.gov.gh', designation: 'Technical Support Specialist', departmentId: 1, gradeId: 2, stationId: 1,
-      username: 'support.it', role: 'TICKET_RESOLVER', deptScope: 'OWN'
-    },
-    {
-      id: 101, staffNo: 'DVLA-HR-DEMO-01', firstName: 'Esi', lastName: 'Mensah', otherNames: null,
-      email: 'creator.hr@dvla.gov.gh', designation: 'Assessment Specialist', departmentId: 2, gradeId: 3, stationId: 1,
-      username: 'creator.hr', role: 'CREATOR', deptScope: 'OWN'
-    },
-    {
-      id: 102, staffNo: 'DVLA-HR-DEMO-02', firstName: 'Esi', lastName: 'Mensah', otherNames: null,
-      email: 'esi.mensah@dvla.gov.gh', designation: 'Assessment Specialist', departmentId: 2, gradeId: 3, stationId: 1,
-      username: 'esi.mensah', role: 'CREATOR', deptScope: 'OWN'
-    },
-    {
-      id: 103, staffNo: 'DVLA-RBDI-DEMO-01', firstName: 'Kwame', lastName: 'Appiah', otherNames: null,
-      email: 'manager.rbdi@dvla.gov.gh', designation: 'Manager RBDI', departmentId: 3, gradeId: 3, stationId: 1,
-      username: 'manager.rbdi', role: 'SUPERVISOR', deptScope: 'OWN'
-    },
-    {
-      id: 104, staffNo: 'DVLA-RBDI-DEMO-02', firstName: 'Kofi', lastName: 'Mensah', otherNames: null,
-      email: 'staff.rbdi@dvla.gov.gh', designation: 'Assistant Officer RBDI', departmentId: 3, gradeId: 1, stationId: 1,
-      username: 'staff.rbdi', role: 'STAFF', deptScope: 'OWN'
-    },
-    {
-      id: 105, staffNo: 'DVLA-HR-DEMO-03', firstName: 'Ama', lastName: 'Osei', otherNames: null,
-      email: 'staff.hr@dvla.gov.gh', designation: 'HR Officer', departmentId: 2, gradeId: 2, stationId: 1,
-      username: 'staff.hr', role: 'STAFF', deptScope: 'OWN'
-    },
-    {
-      id: 106, staffNo: 'DVLA-IT-DEMO-02', firstName: 'Kojo', lastName: 'Asante', otherNames: null,
-      email: 'resolver.it@dvla.gov.gh', designation: 'IT Support Engineer', departmentId: 1, gradeId: 2, stationId: 1,
-      username: 'resolver.it', role: 'TICKET_RESOLVER', deptScope: 'OWN'
-    },
-    {
-      id: 107, staffNo: 'DVLA-CA-DEMO-01', firstName: 'Akua', lastName: 'Darko', otherNames: null,
-      email: 'manager.ca@dvla.gov.gh', designation: 'Manager Corporate Affairs', departmentId: 4, gradeId: 3, stationId: 1,
-      username: 'manager.ca', role: 'SUPERVISOR', deptScope: 'OWN'
     }
   ];
 
-  let nextId = 3;
+  let nextId = 2;
   for (const r of rawRows) {
     const empId = String(r['Employee Id']).trim();
     const fullName = r['Employee Name'].trim();
@@ -758,7 +717,7 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
     const isHR = r.Department.trim().toUpperCase().includes('HUMAN');
     const deptId = isHR ? 2 : 3;
     const gradeId = getGradeId(desig);
-    const role = getRole(desig, fullName);
+    const role = getRole(desig);
     const username = getUsername(fullName);
     const email = `${username}@dvla.gov.gh`;
     const isTamale = String(r['Location\t'] || r['Location'] || '').toUpperCase().includes('TAMALE');
@@ -782,20 +741,26 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
   }
 
   // Insert Staff Records
-  sql.push(`-- Official Staff Records & Accounts`);
+  sql.push(`-- Official Staff Records & Accounts (Strict 18 Accounts: 1 Admin, 4 Creators, 8 Supervisors, 5 Staff)
+DELETE FROM \`AccountRole\`;
+DELETE FROM \`AccountPermission\`;
+DELETE FROM \`SupervisorAssignment\`;
+DELETE FROM \`Account\`;
+DELETE FROM \`StaffRecord\`;
+`);
   sql.push(`INSERT INTO \`StaffRecord\` (\`id\`, \`staffNo\`, \`firstName\`, \`lastName\`, \`otherNames\`, \`email\`, \`designation\`, \`departmentId\`, \`gradeId\`, \`stationId\`, \`status\`) VALUES`);
   const sRows = staffRecords.map(s =>
     `(${s.id}, ${escapeSql(s.staffNo)}, ${escapeSql(s.firstName)}, ${escapeSql(s.lastName)}, ${escapeSql(s.otherNames)}, ${escapeSql(s.email)}, ${escapeSql(s.designation)}, ${s.departmentId}, ${s.gradeId}, ${s.stationId}, 'ACTIVE')`
   );
-  sql.push(sRows.join(',\n') + '\nON DUPLICATE KEY UPDATE \`firstName\` = VALUES(\`firstName\`), \`lastName\` = VALUES(\`lastName\`), \`designation\` = VALUES(\`designation\`);\n');
+  sql.push(sRows.join(',\n') + ';\n');
 
   // Insert Accounts
   sql.push(`INSERT INTO \`Account\` (\`id\`, \`username\`, \`email\`, \`displayName\`, \`passwordHash\`, \`status\`, \`staffId\`, \`deptScope\`) VALUES`);
   const aRows = staffRecords.map(s => {
-    const dispName = s.otherNames ? `${s.firstName} ${s.otherNames} ${s.lastName}` : `${s.firstName} ${s.lastName}`;
+    const dispName = `${s.firstName} ${s.lastName}`;
     return `(${s.id}, ${escapeSql(s.username)}, ${escapeSql(s.email)}, ${escapeSql(dispName)}, '${HASH}', 'ACTIVE', ${s.id}, ${escapeSql(s.deptScope)})`;
   });
-  sql.push(aRows.join(',\n') + '\nON DUPLICATE KEY UPDATE \`passwordHash\` = VALUES(\`passwordHash\`), \`status\` = \'ACTIVE\';\n');
+  sql.push(aRows.join(',\n') + ';\n');
 
   // Insert Roles
   sql.push(`INSERT INTO \`AccountRole\` (\`accountId\`, \`role\`) VALUES`);

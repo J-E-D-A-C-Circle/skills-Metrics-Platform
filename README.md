@@ -41,25 +41,41 @@ npm test                      # unit tests (scoring, permissions, every module's
 
 Sign in as **admin** with password `Password123!`.
 
-### Demo Accounts for Testing & Presentation (Password: `Password123!`)
+### Accounts for Testing & Presentation (Password: `Password123!`)
 
-| Username | Role | Department | Designation / Purpose |
+#### 1. Administrator
+| Username | Email | Name | Designation |
 |---|---|---|---|
-| `admin` | Administrator | IT Department | Full system admin & configuration |
-| `creator.hr` | Assessment Creator | Human Resources | Designs and drafts assessment tools |
-| `manager.rbdi` | Manager / Supervisor | RBDI | Views team skill matrices & gap analysis |
-| `staff.rbdi` | Participant (Staff) | RBDI | Takes RBDI Assistant Officer assessments |
-| `staff.hr` | Participant (Staff) | Human Resources | Takes HR Officer assessments |
-| `resolver.it` | Ticket Resolver | IT Department | Resolves technical support requests |
-| `manager.ca` | Manager / Supervisor | Corporate Affairs | Corporate Affairs team oversight |
+| `admin` | `admin@dvla.gov.gh` | System Administrator | Senior Systems Administrator |
 
-| Username | Role | Department |
-|---|---|---|
-| `esi.mensah` | Assessment Creator | Human Resources |
-| `joseph.abandoh-sam` | Manager / Supervisor (+ takes assessments) | IT Department |
-| `nana.appiah`, `kojo.quaye` | Manager / Supervisor | RBDI, Corporate Affairs |
-| `ama.owusu`, `kofi.boateng`, `efua.asante` | Participant (Ama and Efua start with no attempts) | IT Department |
-| `abena.sarpong` | Ticket Resolver (+ takes assessments) | IT Department |
+#### 2. Assessment Creator
+| Username | Email | Name | Department | Designation |
+|---|---|---|---|---|
+| `anita.dwumfour` | `anita.dwumfour@dvla.gov.gh` | Anita Dwumfour | Human Resources | Assistant Manager HR |
+| `frank.nyarko` | `frank.nyarko@dvla.gov.gh` | Frank Nyarko | Human Resources | Assistant Manager HR |
+| `hagar.poku` | `hagar.poku@dvla.gov.gh` | Hagar Poku | Human Resources | Assistant Manager HR |
+| `patricia.ofori` | `patricia.ofori@dvla.gov.gh` | Patricia Ofori | Human Resources | Assistant Manager HR |
+
+#### 3. Supervisor / Manager
+| Username | Email | Name | Department | Designation |
+|---|---|---|---|---|
+| `abraham.antobreh` | `abraham.antobreh@dvla.gov.gh` | Abraham Antobreh | RBDI | Assistant Manager RBDI |
+| `abraham.zaato` | `abraham.zaato@dvla.gov.gh` | Abraham Zaato | RBDI | Deputy Director RBDI |
+| `albert.wotorgbui` | `albert.wotorgbui@dvla.gov.gh` | Albert Wotorgbui | RBDI | Deputy Director RBDI |
+| `benjamin.peh` | `benjamin.peh@dvla.gov.gh` | Benjamin Peh | RBDI | Manager RBDI |
+| `ephraim.sackey` | `ephraim.sackey@dvla.gov.gh` | Ephraim Sackey | Human Resources | Director HR |
+| `gifty.addo-kissi` | `gifty.addo-kissi@dvla.gov.gh` | Gifty Addo-Kissi | Human Resources | Deputy Director HR |
+| `rebecca.mensah` | `rebecca.mensah@dvla.gov.gh` | Rebecca Mensah | Human Resources | Manager HR |
+| `samuel.gyampo` | `samuel.gyampo@dvla.gov.gh` | Samuel Gyampo | Human Resources | Manager HR |
+
+#### 4. Participant (Staff)
+| Username | Email | Name | Department | Designation |
+|---|---|---|---|---|
+| `desmond.opoku` | `desmond.opoku@dvla.gov.gh` | Desmond Opoku | Human Resources | Administrative Officer |
+| `joseph.ohemeng` | `joseph.ohemeng@dvla.gov.gh` | Joseph Ohemeng | RBDI | RBDI Officer |
+| `joyce.amable` | `joyce.amable@dvla.gov.gh` | Joyce Amable | Human Resources | Senior HR Officer |
+| `makafui.adisenu-doe` | `makafui.adisenu-doe@dvla.gov.gh` | Makafui Adisenu-Doe | RBDI | Senior Administrative Officer |
+| `salome.osabutey` | `salome.osabutey@dvla.gov.gh` | Salome Osabutey | Human Resources | HR Officer |
 
 **Deadline reminders:** `POST /api/jobs/reminders` with header `x-jobs-secret: $JOBS_SECRET` sends "closes soon" and "has closed" notifications (never twice). Run it on a schedule, for example hourly with cron:
 `0 * * * * curl -fsS -X POST -H "x-jobs-secret: $JOBS_SECRET" http://localhost:3000/api/jobs/reminders`
