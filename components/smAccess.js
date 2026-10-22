@@ -1,1 +1,1 @@
-export * from './shared/smAccess';
+export * from './shared/smAccess.js';

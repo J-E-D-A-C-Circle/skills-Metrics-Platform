@@ -1,1 +1,1 @@
-export * from './shared/smApi';
+export * from './shared/smApi.js';

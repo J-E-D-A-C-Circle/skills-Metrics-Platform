@@ -1,1 +1,1 @@
-export * from './shared/dvlaBanks';
+export * from './shared/dvlaBanks.js';

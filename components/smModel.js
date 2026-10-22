@@ -1,1 +1,1 @@
-export * from './shared/smModel';
+export * from './shared/smModel.js';

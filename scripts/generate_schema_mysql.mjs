@@ -679,8 +679,8 @@ ON DUPLICATE KEY UPDATE \`title\` = VALUES(\`title\`), \`body\` = VALUES(\`body\
 
   function getRole(desig) {
     const d = desig.toUpperCase();
-    if (d.includes('DIRECTOR') || d.includes('MANAGER HR') || d.includes('MANAGER RBDI')) return 'SUPERVISOR';
     if (d.includes('ASSISTANT MANAGER HR')) return 'CREATOR';
+    if (d.includes('DIRECTOR') || d.includes('MANAGER')) return 'SUPERVISOR';
     return 'STAFF';
   }
 
