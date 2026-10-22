@@ -134,7 +134,7 @@ class SMSignIn extends React.Component {
         {/* Deep green wash: darker on the left where the text sits, lighter on the right behind the card. */}
         <div style={{ position: "absolute", inset: "0", background: "linear-gradient(105deg, rgba(8,40,28,.92) 0%, rgba(11,52,36,.78) 45%, rgba(13,59,42,.55) 100%)" }}></div>
         <div className="skm-signin-glow" style={{ position: "absolute", width: "520px", height: "520px", right: "-120px", top: "-140px", borderRadius: "50%", background: "radial-gradient(circle, rgba(47,179,107,.38), transparent 68%)", pointerEvents: "none" }}></div>
-        <div className="skm-signin-glow" style={{ position: "absolute", width: "420px", height: "420px", left: "-100px", bottom: "-160px", borderRadius: "50%", background: "radial-gradient(circle, rgba(242,165,22,.18), transparent 68%)", pointerEvents: "none", animationDelay: "-6s" }}></div>
+        <div className="skm-signin-glow" style={{ position: "absolute", width: "420px", height: "420px", left: "-100px", bottom: "-160px", borderRadius: "50%", background: "radial-gradient(circle, rgba(47,179,107,.20), transparent 68%)", pointerEvents: "none", animationDelay: "-6s" }}></div>
 
         {/* ===== SIGN IN · Brand side (left, wide screens only) ===== */}
         {(__v.showBrand) ? (
@@ -147,7 +147,7 @@ class SMSignIn extends React.Component {
             </div>
             <div style={{ maxWidth: "520px", textShadow: "0 2px 18px rgba(0,0,0,.3)" }}>
               <div style={{ display: "inline-block", fontSize: "11.5px", fontWeight: "700", letterSpacing: "1.2px", textTransform: "uppercase", color: "#9be3bd", background: "rgba(47,179,107,.18)", border: "1px solid rgba(155,227,189,.35)", borderRadius: "999px", padding: "5px 12px", marginBottom: "18px" }}>Driver &amp; Vehicle Licensing Authority</div>
-              <div style={{ fontSize: "clamp(32px,3.6vw,50px)", fontWeight: "800", letterSpacing: "-1.2px", lineHeight: "1.08" }}>Know your skills.<br /><span style={{ background: "linear-gradient(90deg,#7ff0b0,#f7d27a)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>Close the gaps.</span></div>
+              <div style={{ fontSize: "clamp(32px,3.6vw,50px)", fontWeight: "800", letterSpacing: "-1.2px", lineHeight: "1.08", color: "#ffffff" }}>Know your skills.<br />Close the gaps.</div>
               <div style={{ fontSize: "15.5px", color: "#d4eadd", marginTop: "16px", lineHeight: "1.65" }}>Assessments, automatic scoring, manager review and training needs, all in one place.</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "30px" }}>
                 {HIGHLIGHTS.map(([title, text]) => (
@@ -166,7 +166,7 @@ class SMSignIn extends React.Component {
         <div style={{ position: "relative", zIndex: 1, flex: "1 1 45%", minWidth: "0", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(20px,4vw,48px) clamp(16px,3vw,40px)" }}>
           <div className="skm-signin-card" style={{ position: "relative", overflow: "hidden", width: "100%", maxWidth: "448px", boxSizing: "border-box", display: "flex", flexDirection: "column", gap: "22px", padding: "clamp(28px,4vw,42px) clamp(24px,4vw,40px) clamp(22px,3vw,28px)", borderRadius: "30px", background: "linear-gradient(180deg, rgba(255,255,255,.94), rgba(244,250,246,.90))", backdropFilter: "blur(34px) saturate(180%)", WebkitBackdropFilter: "blur(34px) saturate(180%)", border: "1px solid rgba(255,255,255,.9)", boxShadow: "inset 0 1px 0 #fff, 0 2px 0 rgba(47,179,107,.18), 0 34px 80px rgba(3,22,14,.5), 0 0 0 6px rgba(255,255,255,.08)" }}>
             {/* Accent bar across the top of the card and a soft green glow behind the emblem. */}
-            <div style={{ position: "absolute", top: "0", left: "0", right: "0", height: "5px", background: "linear-gradient(90deg,#15904c,#2fb36b 45%,#f2a516)" }}></div>
+            <div style={{ position: "absolute", top: "0", left: "0", right: "0", height: "5px", background: "linear-gradient(90deg,#15904c,#2fb36b 50%,#34d399)" }}></div>
             <div style={{ position: "absolute", top: "-90px", left: "50%", width: "260px", height: "200px", transform: "translateX(-50%)", background: "radial-gradient(ellipse, rgba(47,179,107,.22), transparent 70%)", pointerEvents: "none" }}></div>
             {/* Emblem: the DVLA logo in a white ring. Always shown so the card stands on its own. */}
             <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
