@@ -127,6 +127,7 @@ export const accounts = mysqlTable('Account', {
   email: varchar('email', { length: 191 }).notNull().unique(),
   displayName: varchar('displayName', { length: 191 }).notNull(),
   passwordHash: varchar('passwordHash', { length: 255 }).notNull(),
+  role: roleEnum('role').default('STAFF').notNull(),
   status: accountStatusEnum('status').default('MUST_CHANGE_PASSWORD').notNull(),
   staffId: int('staffId').references(() => staffRecords.id),
   deptScope: deptScopeEnum('deptScope').default('OWN').notNull(),

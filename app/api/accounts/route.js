@@ -54,8 +54,9 @@ export const POST = handle(async req => {
     const staff = await tx.staffRecord.create({ data: { staffNo: 'NEW-' + b.username, firstName: parts[0], lastName: parts[parts.length - 1], otherNames: parts.slice(1, -1).join(' ') || null, email: b.email, departmentId: deptId } });
     const a = await tx.account.create({ data: {
       username: b.username, email: b.email, displayName: parts.join(' '), passwordHash,
+      role: roles[0],
       status: b.mustChange ? 'MUST_CHANGE_PASSWORD' : 'ACTIVE', passwordSetAt: b.mustChange ? null : new Date(), staffId: staff.id, deptScope: SCOPE_DB[b.scope],
-      roles: { create: roles.map(role => ({ role })) }, permissions: { create: perms.map(key => ({ key })) },
+      roles: { create: [{ role: roles[0] }] }, permissions: { create: perms.map(key => ({ key })) },
       scopeDepartments: { create: scopeIds.map(departmentId => ({ departmentId })) },
     }, include: ACCOUNT_INCLUDE });
     await audit({ actorId: ctx.account.id, action: 'account.create', entityType: 'Account', entityId: a.id, after: { username: a.username, roles, perms, scope: b.scope, depts: b.depts, dept: b.dept }, ip: clientIp(req) }, tx);

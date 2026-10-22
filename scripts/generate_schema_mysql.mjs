@@ -153,6 +153,7 @@ CREATE TABLE IF NOT EXISTS \`Account\` (
     \`email\` VARCHAR(191) NOT NULL,
     \`displayName\` VARCHAR(191) NOT NULL,
     \`passwordHash\` VARCHAR(255) NOT NULL,
+    \`role\` ENUM('ADMIN', 'CREATOR', 'SUPERVISOR', 'STAFF', 'TICKET_RESOLVER') NOT NULL DEFAULT 'STAFF',
     \`status\` ENUM('ACTIVE', 'MUST_CHANGE_PASSWORD', 'SUSPENDED', 'DISABLED') NOT NULL DEFAULT 'MUST_CHANGE_PASSWORD',
     \`staffId\` INT NULL,
     \`deptScope\` ENUM('ALL', 'OWN', 'SELECTED') NOT NULL DEFAULT 'OWN',
@@ -755,10 +756,10 @@ DELETE FROM \`StaffRecord\`;
   sql.push(sRows.join(',\n') + ';\n');
 
   // Insert Accounts
-  sql.push(`INSERT INTO \`Account\` (\`id\`, \`username\`, \`email\`, \`displayName\`, \`passwordHash\`, \`status\`, \`staffId\`, \`deptScope\`) VALUES`);
+  sql.push(`INSERT INTO \`Account\` (\`id\`, \`username\`, \`email\`, \`displayName\`, \`passwordHash\`, \`role\`, \`status\`, \`staffId\`, \`deptScope\`) VALUES`);
   const aRows = staffRecords.map(s => {
     const dispName = `${s.firstName} ${s.lastName}`;
-    return `(${s.id}, ${escapeSql(s.username)}, ${escapeSql(s.email)}, ${escapeSql(dispName)}, '${HASH}', 'ACTIVE', ${s.id}, ${escapeSql(s.deptScope)})`;
+    return `(${s.id}, ${escapeSql(s.username)}, ${escapeSql(s.email)}, ${escapeSql(dispName)}, '${HASH}', '${s.role}', 'ACTIVE', ${s.id}, ${escapeSql(s.deptScope)})`;
   });
   sql.push(aRows.join(',\n') + ';\n');
 

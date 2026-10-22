@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS `Account` (
     `email` VARCHAR(191) NOT NULL,
     `displayName` VARCHAR(191) NOT NULL,
     `passwordHash` VARCHAR(255) NOT NULL,
+    `role` ENUM('ADMIN', 'CREATOR', 'SUPERVISOR', 'STAFF', 'TICKET_RESOLVER') NOT NULL DEFAULT 'STAFF',
     `status` ENUM('ACTIVE', 'MUST_CHANGE_PASSWORD', 'SUSPENDED', 'DISABLED') NOT NULL DEFAULT 'MUST_CHANGE_PASSWORD',
     `staffId` INT NULL,
     `deptScope` ENUM('ALL', 'OWN', 'SELECTED') NOT NULL DEFAULT 'OWN',
@@ -664,25 +665,25 @@ INSERT INTO `StaffRecord` (`id`, `staffNo`, `firstName`, `lastName`, `otherNames
 (17, '100523', 'Joseph', 'Ohemeng', 'Junior', 'joseph.ohemeng@dvla.gov.gh', 'RBDI OFFICER', 3, 2, 1, 'ACTIVE'),
 (18, '100648', 'Albert', 'Wotorgbui', NULL, 'albert.wotorgbui@dvla.gov.gh', 'DEPUTY DIRECTOR RBDI', 3, 4, 1, 'ACTIVE');
 
-INSERT INTO `Account` (`id`, `username`, `email`, `displayName`, `passwordHash`, `status`, `staffId`, `deptScope`) VALUES
-(1, 'admin', 'admin@dvla.gov.gh', 'System Administrator', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 1, 'ALL'),
-(2, 'rebecca.mensah', 'rebecca.mensah@dvla.gov.gh', 'Rebecca Mensah', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 2, 'OWN'),
-(3, 'anita.dwumfour', 'anita.dwumfour@dvla.gov.gh', 'Anita Dwumfour', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 3, 'OWN'),
-(4, 'hagar.poku', 'hagar.poku@dvla.gov.gh', 'Hagar Poku', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 4, 'OWN'),
-(5, 'gifty.addo-kissi', 'gifty.addo-kissi@dvla.gov.gh', 'Gifty Addo-Kissi', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 5, 'OWN'),
-(6, 'samuel.gyampo', 'samuel.gyampo@dvla.gov.gh', 'Samuel Gyampo', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 6, 'OWN'),
-(7, 'patricia.ofori', 'patricia.ofori@dvla.gov.gh', 'Patricia Ofori', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 7, 'OWN'),
-(8, 'joyce.amable', 'joyce.amable@dvla.gov.gh', 'Joyce Amable', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 8, 'OWN'),
-(9, 'frank.nyarko', 'frank.nyarko@dvla.gov.gh', 'Frank Nyarko', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 9, 'OWN'),
-(10, 'ephraim.sackey', 'ephraim.sackey@dvla.gov.gh', 'Ephraim Sackey', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 10, 'OWN'),
-(11, 'desmond.opoku', 'desmond.opoku@dvla.gov.gh', 'Desmond Opoku', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 11, 'OWN'),
-(12, 'salome.osabutey', 'salome.osabutey@dvla.gov.gh', 'Salome Osabutey', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 12, 'OWN'),
-(13, 'abraham.antobreh', 'abraham.antobreh@dvla.gov.gh', 'Abraham Antobreh', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 13, 'OWN'),
-(14, 'abraham.zaato', 'abraham.zaato@dvla.gov.gh', 'Abraham Zaato', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 14, 'OWN'),
-(15, 'benjamin.peh', 'benjamin.peh@dvla.gov.gh', 'Benjamin Peh', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 15, 'OWN'),
-(16, 'makafui.adisenu-doe', 'makafui.adisenu-doe@dvla.gov.gh', 'Makafui Adisenu-Doe', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 16, 'OWN'),
-(17, 'joseph.ohemeng', 'joseph.ohemeng@dvla.gov.gh', 'Joseph Ohemeng', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 17, 'OWN'),
-(18, 'albert.wotorgbui', 'albert.wotorgbui@dvla.gov.gh', 'Albert Wotorgbui', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ACTIVE', 18, 'OWN');
+INSERT INTO `Account` (`id`, `username`, `email`, `displayName`, `passwordHash`, `role`, `status`, `staffId`, `deptScope`) VALUES
+(1, 'admin', 'admin@dvla.gov.gh', 'System Administrator', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'ADMIN', 'ACTIVE', 1, 'ALL'),
+(2, 'rebecca.mensah', 'rebecca.mensah@dvla.gov.gh', 'Rebecca Mensah', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 2, 'OWN'),
+(3, 'anita.dwumfour', 'anita.dwumfour@dvla.gov.gh', 'Anita Dwumfour', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'CREATOR', 'ACTIVE', 3, 'OWN'),
+(4, 'hagar.poku', 'hagar.poku@dvla.gov.gh', 'Hagar Poku', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'CREATOR', 'ACTIVE', 4, 'OWN'),
+(5, 'gifty.addo-kissi', 'gifty.addo-kissi@dvla.gov.gh', 'Gifty Addo-Kissi', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 5, 'OWN'),
+(6, 'samuel.gyampo', 'samuel.gyampo@dvla.gov.gh', 'Samuel Gyampo', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 6, 'OWN'),
+(7, 'patricia.ofori', 'patricia.ofori@dvla.gov.gh', 'Patricia Ofori', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'CREATOR', 'ACTIVE', 7, 'OWN'),
+(8, 'joyce.amable', 'joyce.amable@dvla.gov.gh', 'Joyce Amable', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'STAFF', 'ACTIVE', 8, 'OWN'),
+(9, 'frank.nyarko', 'frank.nyarko@dvla.gov.gh', 'Frank Nyarko', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'CREATOR', 'ACTIVE', 9, 'OWN'),
+(10, 'ephraim.sackey', 'ephraim.sackey@dvla.gov.gh', 'Ephraim Sackey', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 10, 'OWN'),
+(11, 'desmond.opoku', 'desmond.opoku@dvla.gov.gh', 'Desmond Opoku', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'STAFF', 'ACTIVE', 11, 'OWN'),
+(12, 'salome.osabutey', 'salome.osabutey@dvla.gov.gh', 'Salome Osabutey', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'STAFF', 'ACTIVE', 12, 'OWN'),
+(13, 'abraham.antobreh', 'abraham.antobreh@dvla.gov.gh', 'Abraham Antobreh', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 13, 'OWN'),
+(14, 'abraham.zaato', 'abraham.zaato@dvla.gov.gh', 'Abraham Zaato', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 14, 'OWN'),
+(15, 'benjamin.peh', 'benjamin.peh@dvla.gov.gh', 'Benjamin Peh', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 15, 'OWN'),
+(16, 'makafui.adisenu-doe', 'makafui.adisenu-doe@dvla.gov.gh', 'Makafui Adisenu-Doe', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'STAFF', 'ACTIVE', 16, 'OWN'),
+(17, 'joseph.ohemeng', 'joseph.ohemeng@dvla.gov.gh', 'Joseph Ohemeng', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'STAFF', 'ACTIVE', 17, 'OWN'),
+(18, 'albert.wotorgbui', 'albert.wotorgbui@dvla.gov.gh', 'Albert Wotorgbui', 'scrypt$32768$8$1$FcO6pcNPFgyj87mbN4shYQ==$32hJ0OEFIihATbvRA2fdG/yzBvm8NgxJGm63z9KNnMAjjASw7So/qXfmhPQxPO+ecVBUzqyjjkp2fyiOx5OTDw==', 'SUPERVISOR', 'ACTIVE', 18, 'OWN');
 
 INSERT INTO `AccountRole` (`accountId`, `role`) VALUES
 (1, 'ADMIN'),

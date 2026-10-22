@@ -73,11 +73,12 @@ export const PATCH = handle(async (req, { params }) => {
       }
       else staffId = (await tx.staffRecord.create({ data: { staffNo: 'NEW-' + (b.username || a.username), ...staffData } })).id;
     }
-    if (b.role !== undefined) { await tx.accountRole.deleteMany({ where: { accountId: a.id } }); await tx.accountRole.createMany({ data: roles.map(role => ({ accountId: a.id, role })) }); }
+    if (b.role !== undefined) { await tx.accountRole.deleteMany({ where: { accountId: a.id } }); await tx.accountRole.createMany({ data: [{ accountId: a.id, role: roles[0] }] }); }
     if (b.perms !== undefined) { await tx.accountPermission.deleteMany({ where: { accountId: a.id } }); await tx.accountPermission.createMany({ data: perms.map(key => ({ accountId: a.id, key })) }); }
     if (b.scope !== undefined || b.depts !== undefined) { await tx.accountScopeDepartment.deleteMany({ where: { accountId: a.id } }); await tx.accountScopeDepartment.createMany({ data: scopeIds.map(departmentId => ({ accountId: a.id, departmentId })) }); }
     const u = await tx.account.update({ where: { id: a.id }, include: ACCOUNT_INCLUDE, data: {
       username: b.username, email: b.email, displayName: b.name ? parts.join(' ') : undefined, status, staffId, deptScope: SCOPE_DB[scope],
+      ...(b.role !== undefined ? { role: roles[0] } : {}),
     } });
     if (status === 'SUSPENDED' && a.status !== 'SUSPENDED') await tx.session.updateMany({ where: { accountId: a.id, revokedAt: null }, data: { revokedAt: new Date() } });
     await audit({ actorId: ctx.account.id, action: 'account.update', entityType: 'Account', entityId: a.id, ip: clientIp(req),
