@@ -56,9 +56,9 @@ export const GET = handle(async req => {
     rows: rows.map(a => {
       const latest = a.versions[0], live = a.versions.find(v => v.status === 'PUBLISHED');
       return {
-        id: a.id, title: a.title, status: a.status, createdBy: a.createdBy.displayName, updatedAt: a.updatedAt, source: a.sourceRef ? 'DVLA question bank' : null,
+        id: a.id, title: a.title, status: a.status, createdBy: a.createdBy?.displayName || 'System', updatedAt: a.updatedAt, source: a.sourceRef ? 'DVLA question bank' : null,
         versionNo: latest?.versionNo ?? null, versionStatus: latest?.status ?? null, liveVersionNo: live?.versionNo ?? null,
-        questions: latest?._count.questions ?? 0, attempts: a.versions.reduce((s, v) => s + v._count.attempts, 0),
+        questions: latest?._count?.questions ?? 0, attempts: (a.versions || []).reduce((s, v) => s + (v._count?.attempts || 0), 0),
         mine: !!latest && versionAuthorId(latest, a) === ctx.account.id,
       };
     }),
