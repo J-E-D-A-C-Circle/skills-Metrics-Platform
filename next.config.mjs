@@ -18,5 +18,26 @@ const nextConfig = {
     config.resolve.alias['@'] = __dirname;
     return config;
   },
+  async headers() {
+    return [
+      {
+        source: '/outlook/taskpane',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://webmail.dvla.gov.gh https://*.office.com https://*.office365.com https://*.outlook.com http://localhost:* https://localhost:*;",
+          },
+        ],
+      },
+      {
+        source: '/api/outlook/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization, x-requested-with' },
+        ],
+      },
+    ];
+  },
 };
 export default nextConfig;

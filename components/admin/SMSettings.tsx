@@ -78,6 +78,36 @@ function GeneralView({ toast }) {
           <div style={{ fontSize: '12px', color: '#6b7280' }}>Attempt limits and score thresholds are under <b>Scoring &amp; Attempts</b>.</div>
         </div>
       </Card>
+      <Card
+        title="Outlook Add-in &amp; Calendar Integration"
+        sub="Distribute test reminders to staff DVLA Outlook accounts (webmail.dvla.gov.gh)."
+        actions={<a href="/outlook" style={{ textDecoration: 'none' }}><Btn small kind="secondary" icon="icon-external-link">Setup Guide</Btn></a>}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ font: '600 12.5px Inter,sans-serif', color: '#0f172a', marginBottom: '4px' }}>1. Add-in Manifest URL &amp; File</div>
+            <div style={{ fontSize: '11.5px', color: '#64748b', marginBottom: '8px' }}>For installing the add-in in webmail.dvla.gov.gh via URL or file:</div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input readOnly value={typeof window !== 'undefined' ? `${window.location.origin}/api/outlook/manifest` : '/api/outlook/manifest'} style={{ ...INPUT, flex: 1, fontSize: '11.5px', fontFamily: 'monospace' }} />
+              <Btn small kind="primary" icon="icon-copy" onClick={() => { if (typeof window !== 'undefined') { navigator.clipboard.writeText(`${window.location.origin}/api/outlook/manifest`); toast('Add-in URL copied'); } }}>Copy</Btn>
+              <a href="/outlook/manifest.xml" download="manifest.xml" style={{ textDecoration: 'none' }}>
+                <Btn small kind="secondary" icon="icon-download">XML</Btn>
+              </a>
+            </div>
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+            <div style={{ font: '600 12.5px Inter,sans-serif', color: '#0f172a', marginBottom: '4px' }}>2. Live Calendar Feed Endpoint</div>
+            <div style={{ fontSize: '11.5px', color: '#64748b', marginBottom: '8px' }}>For subscribing in webmail.dvla.gov.gh Calendar (&quot;Subscribe from web&quot;) with 24h &amp; 2h reminders:</div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input readOnly value={typeof window !== 'undefined' ? `${window.location.origin}/api/outlook/feed` : '/api/outlook/feed'} style={{ ...INPUT, flex: 1, fontSize: '11.5px', fontFamily: 'monospace' }} />
+              <Btn small kind="primary" icon="icon-copy" onClick={() => { if (typeof window !== 'undefined') { navigator.clipboard.writeText(`${window.location.origin}/api/outlook/feed`); toast('Feed endpoint copied'); } }}>Copy</Btn>
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px' }}>Staff can get their personalized token link directly from their <b>My Profile</b> settings.</div>
+          </div>
+        </div>
+        </div>
+      </Card>
     </div>
     <Confirm open={ask} title="Save these settings?" confirmText="Save settings" busy={busy} onCancel={() => setAsk(false)} onConfirm={save}
       text="The change is recorded in the audit log. Existing assessments and assignments keep their own settings.">

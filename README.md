@@ -82,6 +82,14 @@ Sign in as **admin** with password `Password123!`.
 
 **Ticket attachments** are saved under `STORAGE_DIR` (default `storage/` in the project, ignored by git). Back it up with the database.
 
+**DVLA Outlook Add-in & Calendar Reminders (`webmail.dvla.gov.gh`):**
+- Setup & Guide Hub: `/outlook`
+- Manifest URL (for "Add from URL"): `https://<host>/api/outlook/manifest`
+- Manifest File (for "Add from file"): `public/outlook/manifest.xml` (or `/outlook/manifest.xml`)
+- Live Taskpane: `/outlook/taskpane`
+- Live iCal Feed: `/api/outlook/feed?email=<email>&token=<token>` (OWA "Subscribe from web")
+- Direct `.ics` Reminders: `/api/outlook/ics?assessmentId=<id>` (sets 24-hour and 2-hour native Outlook alarm notifications)
+
 ## What each role gets
 
 What a person sees comes from their permission ticks (Settings > User Management), not from the role name; the role only picks the starting ticks. The server checks every permission again on every request.
@@ -122,6 +130,8 @@ Every route checks the session and the permission named in its header comment, f
 | `app/api/notifications` | the header bell |
 | `app/api/settings/*`, `app/api/audit/*` | general settings, scoring versions, notification templates, audit log and its export |
 | `app/api/jobs/reminders` | deadline reminders (secret header or an admin session) |
+| `app/api/outlook/*` | Outlook Add-in manifest XML, test schedules, iCalendar (.ics) exports, and live subscription feed |
+| `app/outlook`, `app/outlook/taskpane` | DVLA Outlook Add-in Taskpane and webmail installation guide hub |
 | `app/api/health` | database check |
 
 ## Structure

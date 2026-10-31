@@ -48,7 +48,18 @@ export default function SMMyAssessments({ go, vw }) {
 
   return (
     <Page>
-      <PageHeader title="My Assessments" description="Assessments assigned to you, their deadlines, your attempts and your results." actions={<Btn icon="icon-refresh-cw" onClick={reload} disabled={loading}>Refresh</Btn>} />
+      <PageHeader
+        title="My Assessments"
+        description="Assessments assigned to you, their deadlines, your attempts and your results."
+        actions={
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <a href="/outlook" style={{ textDecoration: 'none' }}>
+              <Btn icon="icon-calendar" kind="secondary">Outlook Add-in &amp; Calendar</Btn>
+            </a>
+            <Btn icon="icon-refresh-cw" onClick={reload} disabled={loading}>Refresh</Btn>
+          </div>
+        }
+      />
       {error ? <Card><EmptyState icon="icon-circle-alert" title="Your assessments couldn't be loaded" text={error} action={<Btn kind="primary" onClick={reload}>Try again</Btn>} /></Card> : null}
       {!error && loading && !data ? <Card><div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>Loading your assessments…</div></Card> : null}
 
@@ -97,6 +108,7 @@ export default function SMMyAssessments({ go, vw }) {
               {it.canResume ? <Btn kind="primary" icon="icon-play" onClick={() => go('take', undefined, it.assessmentId)}>Resume attempt</Btn> : null}
               {it.canStart ? <Btn kind="primary" icon="icon-play" onClick={() => go('take', undefined, it.assessmentId)}>{it.used ? 'Retake' : 'Start'}</Btn> : null}
               {it.completed ? <Btn icon="icon-chart-column" onClick={() => openResults(it)}>View results</Btn> : null}
+              {it.deadline ? <a href={`/api/outlook/ics?assessmentId=${it.assessmentId}`} download={`dvla-test-${it.assessmentId}.ics`} style={{ textDecoration: 'none' }}><Btn kind="ghost" icon="icon-calendar">Outlook reminder (.ics)</Btn></a> : null}
               {it.attempts.length ? <Btn kind="ghost" icon={hist ? 'icon-chevron-up' : 'icon-history'} onClick={() => setOpen(o => ({ ...o, [it.assessmentId]: !hist }))}>{hist ? 'Hide attempt history' : 'Attempt history (' + it.attempts.length + ')'}</Btn> : null}
             </div>
             {/* ===== MY ASSESSMENTS · Attempt history ===== */}

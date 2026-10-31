@@ -12,6 +12,7 @@ import { db } from '@/lib/server/db';
 import { requireUser } from '@/lib/server/session';
 import { personProfile } from '@/lib/server/analytics';
 import { ROLE_LABEL } from '@/lib/permissions';
+import { generateCalendarToken } from '@/lib/server/calendar';
 import { json, handle } from '@/lib/server/http';
 
 // ===== MY PROFILE · Read =====
@@ -25,9 +26,17 @@ export const GET = handle(async () => {
     const u = ctx.user;
     staff = { id: u.staffId, staffNo: u.staffNo, name: u.name, department: u.dept, grade: u.grade, station: u.station, location: u.location, designation: u.designation };
   }
+  const calendarToken = generateCalendarToken(ctx.user.staffNo, a.email);
+  const outlook = {
+    manifestUrl: '/api/outlook/manifest',
+    manifestFileUrl: '/outlook/manifest.xml',
+    feedUrl: `/api/outlook/feed?email=${encodeURIComponent(a.email || '')}&token=${calendarToken}`,
+    icsUrl: `/api/outlook/ics?email=${encodeURIComponent(a.email || '')}`,
+    setupUrl: '/outlook',
+  };
   return json({
     account: { username: a.username, email: a.email, name: a.displayName, status: ctx.user.status, roles: ctx.user.roles.map(r => ROLE_LABEL[r] || r), lastLoginAt: a.lastLoginAt, passwordSetAt: a.passwordSetAt, createdAt: a.createdAt,
       scope: a.deptScope === 'ALL' ? 'All departments' : a.deptScope === 'SELECTED' ? 'Selected departments: ' + (ctx.user.depts.join(', ') || '—') : 'Own department' },
-    staff, participant, profile,
+    staff, participant, profile, outlook,
   });
 });

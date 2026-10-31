@@ -92,8 +92,118 @@ function AccountTab({ data, toast }) {
     {s ? <Card title="Staff record" sub="Your organisational details. Ask an administrator if anything is wrong.">
       <InfoGrid items={[['Staff ID', s.staffNo], ['Department', s.department], ['Grade', s.grade], ['Station', s.station], ['Location', s.location], ['Designation', s.designation], ['Supervisor / HoD', s.supervisor]]} /></Card>
       : <Card title="Staff record"><div style={{ fontSize: '13.5px', color: '#4b5563' }}>This account is not linked to a staff record. Administrator accounts never take assessments, so there are no results or history here.</div></Card>}
+    <OutlookSettingsCard data={data} toast={toast} />
     <PasswordCard toast={toast} />
   </>;
+}
+
+// ===== MY PROFILE · Outlook & Calendar Integration =====
+function OutlookSettingsCard({ data, toast }) {
+  const o = data.outlook || {};
+  const [copiedManifest, setCopiedManifest] = useState(false);
+  const [copiedFeed, setCopiedFeed] = useState(false);
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') setOrigin(window.location.origin);
+  }, []);
+
+  const fullManifestUrl = (origin || '') + (o.manifestUrl || '/api/outlook/manifest');
+  const fullFeedUrl = (origin || '') + (o.feedUrl || '');
+
+  const copyManifest = () => {
+    navigator.clipboard.writeText(fullManifestUrl);
+    setCopiedManifest(true);
+    toast && toast('Outlook Add-in URL copied to clipboard');
+    setTimeout(() => setCopiedManifest(false), 3000);
+  };
+
+  const copyFeed = () => {
+    navigator.clipboard.writeText(fullFeedUrl);
+    setCopiedFeed(true);
+    toast && toast('Personal Calendar Subscription URL copied');
+    setTimeout(() => setCopiedFeed(false), 3000);
+  };
+
+  return (
+    <Card
+      title="Outlook & Calendar Integration"
+      sub="Synchronize assessment dates and receive deadline reminders directly in your official DVLA Outlook account (webmail.dvla.gov.gh)."
+      actions={
+        <a href={o.setupUrl || '/outlook'} style={{ textDecoration: 'none' }}>
+          <Btn small kind="secondary" icon="icon-external-link">Open Setup Guide</Btn>
+        </a>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Link 1: Outlook Add-in (URL & File) */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>🧩</span>
+              <span style={{ font: '600 13.5px Inter,sans-serif', color: '#0f172a' }}>
+                1. DVLA Outlook Add-in (URL &amp; File)
+              </span>
+            </div>
+            <Badge bg="#e6f2ea" fg="#0d3b2a">Outlook Webmail</Badge>
+          </div>
+          <div style={{ font: '400 12.5px Inter,sans-serif', color: '#64748b', marginBottom: '10px', lineHeight: 1.45 }}>
+            Install the official add-in into <b>webmail.dvla.gov.gh</b> to view upcoming tests in your Outlook ribbon and add appointments with one click.
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px' }}>
+            <span style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fullManifestUrl}
+            </span>
+            <Btn small kind="primary" icon="icon-copy" onClick={copyManifest}>
+              {copiedManifest ? 'Copied!' : 'Copy URL'}
+            </Btn>
+            <a href={o.manifestFileUrl || '/outlook/manifest.xml'} download="manifest.xml" style={{ textDecoration: 'none' }}>
+              <Btn small kind="secondary" icon="icon-download">Download XML</Btn>
+            </a>
+          </div>
+
+          <div style={{ font: '400 11.5px Inter,sans-serif', color: '#64748b' }}>
+            💡 <b>Installation in webmail.dvla.gov.gh:</b> Settings → Customize actions / Manage add-ins → <b>My add-ins</b> → <b>Custom add-ins</b> → <b>Add from URL</b> (paste copied link) or <b>Add from file</b>.
+          </div>
+        </div>
+
+        {/* Link 2: Live Calendar Feed & Reminders */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>🔔</span>
+              <span style={{ font: '600 13.5px Inter,sans-serif', color: '#0f172a' }}>
+                2. Live Calendar Feed &amp; Reminders (Subscribe from web)
+              </span>
+            </div>
+            <Badge bg="#e0f2fe" fg="#0369a1">24h &amp; 2h Alarms</Badge>
+          </div>
+          <div style={{ font: '400 12.5px Inter,sans-serif', color: '#64748b', marginBottom: '10px', lineHeight: 1.45 }}>
+            Subscribe to your personal live test calendar. Whenever new assessments are assigned or deadlines extended, Outlook automatically updates with audio and popup reminder alerts.
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px' }}>
+            <span style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fullFeedUrl}
+            </span>
+            <Btn small kind="primary" icon="icon-copy" onClick={copyFeed}>
+              {copiedFeed ? 'Copied!' : 'Copy Feed URL'}
+            </Btn>
+            {o.icsUrl && (
+              <a href={o.icsUrl} download="dvla-tests.ics" style={{ textDecoration: 'none' }}>
+                <Btn small kind="secondary" icon="icon-download">Download .ics</Btn>
+              </a>
+            )}
+          </div>
+
+          <div style={{ font: '400 11.5px Inter,sans-serif', color: '#64748b' }}>
+            💡 <b>How to subscribe in webmail.dvla.gov.gh Calendar:</b> Switch to Calendar view → <b>Add calendar</b> → <b>Subscribe from web</b> → paste the copied Feed URL above.
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 // ===== MY PROFILE · Change password =====
