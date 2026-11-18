@@ -22,7 +22,7 @@ const Body = z.object({
   mode: z.enum(['check', 'import']),
   replace: z.boolean().optional().default(false),
   fileName: z.string().max(200).optional().default(''),
-  rows: z.array(z.array(Cell).max(40)).min(1).max(LIMITS.importRows + 50),
+  rows: z.array(z.array(Cell).max(40)).min(1).max(LIMITS.importRows + 200),
 });
 
 export const POST = handle(async (req, { params }) => {
@@ -54,6 +54,6 @@ export const POST = handle(async (req, { params }) => {
     await tx.assessment.update({ where: { id: a.id }, data: { updatedAt: new Date() } });
     await audit({ actorId: ctx.account.id, action: 'assessment.questions.import', entityType: 'AssessmentVersion', entityId: v.id, after: { assessmentId: a.id, versionNo: v.versionNo, fileName: b.fileName, imported: parsed.questions.length, replaced: b.replace }, ip: clientIp(req) }, tx);
     return { ...summary, imported: parsed.questions.length };
-  }, { timeout: 120000 });
+  }, { timeout: 300000 });
   return json(result);
 });

@@ -58,4 +58,14 @@ describe('Word Document (.docx) upload and parsing', () => {
     expect(parsed.errors.length).toBe(0);
     expect(parsed.questions.length).toBe(1);
   });
+
+  it('supports large question batches of up to 5000 questions', () => {
+    const rows = [['Question', 'Type', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct answer(s)', 'Points', 'Skill area', 'Competency codes']];
+    for (let i = 1; i <= 1500; i++) {
+      rows.push([`Question number ${i} for assessment`, 'Single choice', 'Option 1', 'Option 2', '', '', 'A', 1, 'General', 'service']);
+    }
+    const parsed = parseImportRows(rows, dummyComps);
+    expect(parsed.fileErrors.length).toBe(0);
+    expect(parsed.questions.length).toBe(1500);
+  });
 });

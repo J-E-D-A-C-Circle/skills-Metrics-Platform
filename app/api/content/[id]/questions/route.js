@@ -36,7 +36,7 @@ export const POST = handle(async (req, { params }) => {
 // ===== ARRANGE QUESTIONS · Input =====
 // Every question of the version, in the new order, with its section title (null = no section).
 const Arrange = z.object({
-  questions: z.array(z.object({ id: z.number().int().positive(), skillArea: z.string().max(LIMITS.skillArea + 20).nullable().optional() })).max(2000),
+  questions: z.array(z.object({ id: z.number().int().positive(), skillArea: z.string().max(LIMITS.skillArea + 20).nullable().optional() })).max(15000),
 });
 // Lift every order out of the way first so the unique (versionId, order) rule never trips mid-update.
 const LIFT = 1000000;

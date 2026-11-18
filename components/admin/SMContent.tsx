@@ -486,7 +486,7 @@ function Notices({ data, onLatest, onNewest }) {
 // ===== CONTENT · Bulk upload =====
 // 1 download the template · 2 pick an .xlsx / .csv file (read in the browser) · 3 the server checks every row and lists
 // problems by row number · 4 import, only when every row is valid, in one transaction.
-const MAX_FILE = 2 * 1024 * 1024;
+const MAX_FILE = 50 * 1024 * 1024; // 50 MB to easily support large question banks (>30MB)
 function BulkUpload({ open, id, data, onClose, onDone }) {
   const [file, setFile] = useState(null), [rows, setRows] = useState(null), [replace, setReplace] = useState(false);
   const [check, setCheck] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState(''), [confirm, setConfirm] = useState(false);
@@ -503,7 +503,7 @@ function BulkUpload({ open, id, data, onClose, onDone }) {
       setErr('Choose a Word document (.docx), Excel (.xlsx), or CSV file.');
       return;
     }
-    if (f.size > MAX_FILE) { setErr('The file is larger than 2 MB. Split it into smaller files.'); return; }
+    if (f.size > MAX_FILE) { setErr('The file is larger than 50 MB. Split it into smaller files.'); return; }
     try {
       let r = [];
       if (/\.docx$/i.test(f.name)) {
@@ -533,7 +533,7 @@ function BulkUpload({ open, id, data, onClose, onDone }) {
             <a href="/api/content/template" download style={{ textDecoration: 'none' }}><Btn icon="icon-download">Download Excel template</Btn></a>
           </div>
         </Card>
-        <Card title="2. Upload your file" sub="Word (.docx), Excel (.xlsx) or CSV, up to 2 MB and 1,000 questions.">
+        <Card title="2. Upload your file" sub="Word (.docx), Excel (.xlsx) or CSV, up to 50 MB and 5,000 questions.">
           <div style={{ display: 'grid', gap: '10px' }}>
             <input type="file" accept=".docx,.doc,.xlsx,.xls,.csv" onChange={e => pick(e.target.files && e.target.files[0])} aria-label="Question file" style={{ font: '400 13px Inter,sans-serif' }} />
             <Toggle on={replace} onClick={() => { const r = !replace; setReplace(r); if (rows) run('check', rows, r); }} label="Replace the questions already in this version" desc={replace ? 'All ' + data.version.questions.length + ' current questions will be removed first.' : 'New questions are added after the ' + data.version.questions.length + ' already there.'} />
