@@ -65,6 +65,7 @@ export async function loadProgress(assessmentIds, ctx, now = new Date(), tx = db
 // A scoped viewer sees an assignment when it covers someone they can see, or its target is inside their scope.
 export function canSeeAssignment(ctx, a, coveredIds) {
   if (ctx.visibleDepartmentIds === null) return true;
+  if (ctx.stationId && a.targetType === 'STATION' && a.stationId === ctx.stationId) return true;
   if ((coveredIds || []).length) return true;
   if (a.targetType === 'DEPARTMENT') return ctx.visibleDepartmentIds.includes(a.departmentId);
   if (a.targetType === 'INDIVIDUAL' && a.staff) { try { assertStaffVisible(ctx, a.staff); return true; } catch (e) { return false; } }
@@ -73,7 +74,9 @@ export function canSeeAssignment(ctx, a, coveredIds) {
 // Changing an assignment, extending it for everyone or cancelling it needs the same reach as creating it.
 export function assertCanManage(ctx, a) {
   if (a.targetType === 'INDIVIDUAL') { assertStaffVisible(ctx, a.staff); return; }
-  if (!targetAllowed(ctx.visibleDepartmentIds, a.targetType, a.departmentId)) throw forbidden('This assignment covers departments outside the ones you can manage.');
+  if (ctx.stationId && a.targetType === 'STATION' && a.stationId === ctx.stationId) return;
+  const targetId = a[a.targetType?.toLowerCase() + 'Id'] ?? a.departmentId;
+  if (!targetAllowed(ctx.visibleDepartmentIds, a.targetType, targetId, ctx.stationId)) throw forbidden('This assignment covers departments outside the ones you can manage.');
 }
 export async function findAssignment(id, tx = db) {
   const a = await tx.assessmentAssignment.findUnique({ where: { id }, include: ASSIGNMENT_INCLUDE });

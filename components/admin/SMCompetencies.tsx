@@ -10,7 +10,7 @@
 // Deactivating a competency or category only stops it being used for new content; saved results never change.
 // =============================================================================
 import React, { useMemo, useState } from 'react';
-import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, Drawer, INPUT, LABEL } from '@/components/shared/smUI';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, Drawer, INPUT, LABEL, KpiTile } from '@/components/shared/smUI';
 import { api, qs, useLoad, fmtDate } from '@/components/shared/smApi';
 import { IMPORTANCE, scoreColours } from '@/lib/scoring';
 
@@ -35,7 +35,7 @@ export default function SMCompetencies(S) {
   const mayEdit = perms.includes('framework.competencies');
   const toast = m => (S.toast ? S.toast(m) : null);
   const [q, setQ] = useState('');
-  const [f, setF] = useState({ departmentId: '', categoryId: '', status: '' });
+  const [f, setF] = useState({ departmentId: '', categoryId: '', status: '', skillType: '' });
   const [open, setOpen] = useState(null); // { id } | { id, edit } | { create, categoryId? }
   const [cat, setCat] = useState(null); // category being added / edited ({} = new)
   const { data, error, loading, reload } = useLoad('/api/competencies' + qs(f));
@@ -44,7 +44,7 @@ export default function SMCompetencies(S) {
     const t = q.trim().toLowerCase();
     return (data ? data.rows : []).filter(c => !t || [c.code, c.name, c.short, c.category && c.category.group, ...(c.skillAreas || [])].some(x => String(x || '').toLowerCase().includes(t)));
   }, [data, q]);
-  const filtered = !!(q.trim() || f.departmentId || f.categoryId || f.status);
+  const filtered = !!(q.trim() || f.departmentId || f.categoryId || f.status || f.skillType);
   const groups = useMemo(() => {
     if (!data) return [];
     return data.categories.filter(k => (!f.categoryId || String(k.id) === f.categoryId) && (!filtered || rows.some(c => c.categoryId === k.id)))
@@ -52,16 +52,35 @@ export default function SMCompetencies(S) {
   }, [data, rows, f.categoryId, filtered]);
   const depts = data ? data.departments : [];
   const deptName = id => (depts.find(d => d.id === id) || {}).name;
+  const m = data?.metrics || {
+    totalCompetencies: data?.total || 0,
+    totalSkillAreas: 0,
+    generalCompetencies: 0,
+    generalSkillAreas: 0,
+    technicalCompetencies: 0,
+    technicalSkillAreas: 0,
+  };
+  const inViewSkillAreas = useMemo(() => rows.reduce((s, r) => s + (Array.isArray(r.skillAreas) ? r.skillAreas.length : 0), 0), [rows]);
+
   return (
     <Page>
       <PageHeader title="Competency Framework" description="Competencies grouped by category. General skills apply to every department; technical ones belong to one department. Assessment questions are mapped to these competencies."
         actions={mayEdit ? <><Btn icon="icon-folder-plus" onClick={() => setCat({})}>Add category</Btn><Btn kind="primary" icon="icon-plus" onClick={() => setOpen({ create: true })}>Add competency</Btn></> : null}
         filters={<>
           <Search value={q} onChange={setQ} placeholder="Search name, code, category or skill area" />
+          <Sel value={f.skillType} onChange={set('skillType')} title="Skill Type" options={[['', 'All Skill Types'], ['technical', 'Technical Skills Only'], ['general', 'General Skills Only']]} />
           <Sel value={f.departmentId} onChange={set('departmentId')} title="Department" options={[['', 'All departments'], ['general', 'General skills (every department)'], ...depts.map(d => [String(d.id), d.name + (d.active ? '' : ' (inactive)')])]} />
           <Sel value={f.categoryId} onChange={set('categoryId')} title="Category" options={[['', 'All categories'], ...(data ? data.categories : []).map(k => [String(k.id), catName(k) + (k.active ? '' : ' (inactive)')])]} />
           <Sel value={f.status} onChange={set('status')} title="Status" options={[['', 'Active and inactive'], ['active', 'Active only'], ['inactive', 'Inactive only']]} />
         </>} />
+
+      {/* ===== FRAMEWORK · Skill Metrics Tiles ===== */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
+        <KpiTile label="Total Competencies" value={m.totalCompetencies} sub={`${m.totalSkillAreas} total skill areas`} onClick={() => setF({ departmentId: '', categoryId: '', status: '', skillType: '' })} />
+        <KpiTile label="Technical Skills" value={m.technicalCompetencies} sub={`${m.technicalSkillAreas} specific skill areas`} onClick={() => setF(x => ({ ...x, skillType: 'technical', departmentId: '' }))} />
+        <KpiTile label="General Skills" value={m.generalCompetencies} sub={`${m.generalSkillAreas} specific skill areas`} onClick={() => setF(x => ({ ...x, skillType: 'general', departmentId: 'general' }))} />
+        <KpiTile label="Active In View" value={rows.length} sub={`${inViewSkillAreas} skill areas matched`} subColor="#15803d" />
+      </div>
       {/* ===== FRAMEWORK · Category groups ===== */}
       <Card title={data ? rows.length + (filtered ? ' of ' + data.total : '') + ' competencies' : 'Competencies'} sub={data ? data.categories.length + ' categories · ' + data.rows.filter(c => c.active).length + ' active in this view' : null} flush>
         {error ? <EmptyState icon="icon-circle-alert" title="Could not load the framework" text={error} action={<Btn icon="icon-refresh-cw" onClick={reload}>Try again</Btn>} />
@@ -94,7 +113,7 @@ function CompRow({ c, dept, onOpen }) {
         <span style={{ ...MONO, marginRight: '6px' }}>{c.code}</span><span style={{ fontWeight: 500 }}>{c.name}</span>
         {c.skillAreas.length ? <span style={{ ...SUB, display: 'block' }}>Skill areas: {c.skillAreas.join(' · ')}</span> : null}
       </span>
-      <Badge bg={c.departmentId ? '#eef2ff' : '#e6f2ea'} fg={c.departmentId ? '#3730a3' : '#0d3b2a'}>{c.departmentId ? dept || 'Department' : 'All departments'}</Badge>
+      <Badge bg={c.departmentId ? '#eef2ff' : '#e6f2ea'} fg={c.departmentId ? '#3730a3' : '#0d3b2a'}>{c.departmentId ? 'Technical · ' + (dept || 'Department') : 'General Skills'}</Badge>
       <ImpBadge n={c.importance} />
       <span style={{ fontSize: '12px', color: '#374151', width: '118px', display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>Required <LevelChip n={c.requiredLevel} /></span>
       <span style={{ fontSize: '11.5px', color: '#9ca3af', width: '96px' }}>{c.questions} questions</span>

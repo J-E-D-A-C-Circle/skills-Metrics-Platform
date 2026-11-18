@@ -18,6 +18,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, Btn, Badge, CompetencyBadge, GapStatusBadge, Avg, Confirm, EmptyState, DataTable, CARD, GREEN } from '@/components/shared/smUI';
 import { api, fmtDate, fmtDateTime, fmtDuration } from '@/components/shared/smApi';
 import { formatAverage } from '@/lib/scoring';
+import {
+  cacheAssessmentPackage,
+  getCachedAssessmentPackage,
+  saveAttemptStateEncrypted,
+  getAttemptStateEncrypted,
+  enqueueSyncItem,
+  getPendingSyncQueue,
+  removeSyncItem,
+  clearAttemptSync,
+} from '@/lib/client/takeStorage';
 
 // ===== TAKE · Labels =====
 // Attempt statuses (Attempt.status) with a colour and a text label.
@@ -95,38 +105,94 @@ function useActiveTime(attemptId, questionId, on) {
 
 // ===== TAKE · Answer saving =====
 // Each answer is sent as soon as it changes (typed answers after a short pause). Saves for one question run one
-// after another so the last choice always wins; failed saves are retried every 5 s.
-function useAnswers(attemptId, onClosed) {
+// after another so the last choice always wins. In addition, answers and flags are stored in real-time in
+// encrypted client IndexedDB; when offline, operations are queued in IndexedDB and automatically synchronized.
+function useAnswers(attemptId, assessmentId, flagsRef, idxRef, onClosed) {
   const [answers, setAnswers] = useState({}), [saveState, setSaveState] = useState({});
   const latest = useRef({}), chains = useRef({}), failed = useRef(new Set()), timers = useRef({});
+
+  const persistLocal = useCallback((ans) => {
+    if (attemptId && assessmentId) {
+      saveAttemptStateEncrypted(attemptId, {
+        assessmentId,
+        answers: ans,
+        flags: flagsRef.current || {},
+        position: idxRef.current || 0,
+      });
+    }
+  }, [attemptId, assessmentId, flagsRef, idxRef]);
+
   const send = useCallback(qid => {
     chains.current[qid] = (chains.current[qid] || Promise.resolve()).then(async () => {
       const a = latest.current[qid] || {};
       setSaveState(s => ({ ...s, [qid]: 'saving' }));
+      // Always persist locally in encrypted storage
+      persistLocal(latest.current);
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        // Enqueue offline sync item in IndexedDB
+        await enqueueSyncItem(attemptId, 'response', { questionId: qid, optionIds: a.optionIds || [], textAnswer: a.textAnswer || null });
+        failed.current.delete(qid);
+        setSaveState(s => ({ ...s, [qid]: 'saved' }));
+        return;
+      }
+
       try {
         await api('PUT', '/api/attempts/' + attemptId + '/responses', { questionId: qid, optionIds: a.optionIds || [], textAnswer: a.textAnswer || null });
-        failed.current.delete(qid); setSaveState(s => ({ ...s, [qid]: 'saved' }));
+        failed.current.delete(qid);
+        setSaveState(s => ({ ...s, [qid]: 'saved' }));
       } catch (e) {
-        if (e.status === 409 || e.status === 403 || e.status === 404) { failed.current.delete(qid); onClosed(e.message); return; }
-        failed.current.add(qid); setSaveState(s => ({ ...s, [qid]: 'error' }));
+        if (e.status === 409 || e.status === 403 || e.status === 404) {
+          failed.current.delete(qid);
+          onClosed(e.message);
+          return;
+        }
+        // Save to offline sync queue on network glitch
+        await enqueueSyncItem(attemptId, 'response', { questionId: qid, optionIds: a.optionIds || [], textAnswer: a.textAnswer || null });
+        failed.current.add(qid);
+        setSaveState(s => ({ ...s, [qid]: 'saved' }));
       }
     });
     return chains.current[qid];
-  }, [attemptId, onClosed]);
+  }, [attemptId, onClosed, persistLocal]);
+
   const change = useCallback((qid, value, delay) => {
-    latest.current[qid] = value; setAnswers(x => ({ ...x, [qid]: value }));
+    latest.current[qid] = value;
+    setAnswers(x => {
+      const n = { ...x, [qid]: value };
+      persistLocal(n);
+      return n;
+    });
     clearTimeout(timers.current[qid]);
     if (delay) timers.current[qid] = setTimeout(() => send(qid), delay); else send(qid);
+  }, [send, persistLocal]);
+
+  const load = useCallback(saved => {
+    latest.current = { ...saved };
+    setAnswers(saved);
+    setSaveState({});
+    persistLocal(saved);
+  }, [persistLocal]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        failed.current.forEach(qid => send(qid));
+      }
+    }, 5000);
+    return () => clearInterval(t);
   }, [send]);
-  const load = useCallback(saved => { latest.current = { ...saved }; setAnswers(saved); setSaveState({}); }, []);
-  useEffect(() => { const t = setInterval(() => failed.current.forEach(qid => send(qid)), 5000); return () => clearInterval(t); }, [send]);
-  // Waits for every pending save (typed answers waiting for their pause are sent now). true = all saved.
+
+  // Waits for every pending save. true = all saved.
   const settle = useCallback(async () => {
     Object.entries(timers.current).forEach(([qid, t]) => { clearTimeout(t); delete timers.current[qid]; send(Number(qid)); });
-    failed.current.forEach(qid => send(qid));
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      failed.current.forEach(qid => send(qid));
+    }
     await Promise.all(Object.values(chains.current));
-    return failed.current.size === 0;
+    return failed.current.size === 0 || (typeof navigator !== 'undefined' && !navigator.onLine);
   }, [send]);
+
   return { answers, saveState, change, load, settle };
 }
 const isAnswered = a => !!a && ((a.optionIds && a.optionIds.length > 0) || !!(a.textAnswer && a.textAnswer.trim()));
@@ -137,59 +203,255 @@ export default function SMTake({ go, id, vw, toast }) {
   const [stage, setStage] = useState('loading'), [error, setError] = useState('');
   const [item, setItem] = useState(null), [att, setAtt] = useState(null), [idx, setIdx] = useState(0);
   const [confirm, setConfirm] = useState(null), [busy, setBusy] = useState(false), [navOpen, setNavOpen] = useState(false), [done, setDone] = useState(null);
+  const [flags, setFlags] = useState({});
+  const flagsRef = useRef({});
+  flagsRef.current = flags;
+  const idxRef = useRef(0);
+  idxRef.current = idx;
+  const [isOnline, setIsOnline] = useState(true);
+  const [syncingOffline, setSyncingOffline] = useState(false);
+
   const closed = useCallback(msg => { setError(msg || 'This attempt can no longer be changed.'); setStage('closed'); }, []);
-  const { answers, saveState, change, load, settle } = useAnswers(att && att.attempt.id, closed);
+  const { answers, saveState, change, load, settle } = useAnswers(att && att.attempt.id, assessmentId, flagsRef, idxRef, closed);
   const questions = att ? att.questions : [], q = questions[idx];
   const answering = stage === 'answer' || stage === 'review';
   const flushTime = useActiveTime(att && att.attempt.id, stage === 'answer' && q ? q.id : null, answering);
   const phone = vw < 640;
 
-  const loadItem = useCallback(async () => { const d = await api('GET', '/api/my/assessments/' + assessmentId); setItem(d.item); return d.item; }, [assessmentId]);
+  // Service Worker Registration for Offline Capability
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw-take.js').catch(err => {
+        console.warn('[SMTake] Service Worker registration failed:', err);
+      });
+    }
+  }, []);
+
+  const loadItem = useCallback(async () => {
+    try {
+      const d = await api('GET', '/api/my/assessments/' + assessmentId);
+      setItem(d.item);
+      return d.item;
+    } catch (err) {
+      // Fallback to locally cached package if offline
+      const cached = await getCachedAssessmentPackage(assessmentId);
+      if (cached && cached.item) {
+        setItem(cached.item);
+        return cached.item;
+      }
+      throw err;
+    }
+  }, [assessmentId]);
+
   useEffect(() => {
     if (!Number.isInteger(assessmentId) || assessmentId < 1) { setStage('none'); return; }
     loadItem().then(() => setStage('intro')).catch(e => { setError(e.message); setStage('error'); });
   }, [assessmentId, loadItem]);
 
-  // Start (or resume) on the server, then load the questions and saved answers.
+  // Synchronize offline queue when connectivity is restored
+  const syncPending = useCallback(async (currentAttId) => {
+    const targetAttemptId = currentAttId || (att && att.attempt?.id);
+    if (!targetAttemptId) return;
+    setSyncingOffline(true);
+    try {
+      const pending = await getPendingSyncQueue(targetAttemptId);
+      let hadSubmit = false;
+      for (const queueItem of pending) {
+        if (queueItem.type === 'response') {
+          try {
+            await api('PUT', '/api/attempts/' + targetAttemptId + '/responses', queueItem.payload);
+            if (queueItem.id) await removeSyncItem(queueItem.id);
+          } catch (e) {
+            if (e.status !== 409 && e.status !== 403) break;
+          }
+        } else if (queueItem.type === 'flag') {
+          if (queueItem.id) await removeSyncItem(queueItem.id);
+        } else if (queueItem.type === 'submit') {
+          hadSubmit = true;
+          if (queueItem.id) await removeSyncItem(queueItem.id);
+        }
+      }
+      // If a submit was queued while offline, auto-submit once synced
+      if (hadSubmit) {
+        toast && toast('Connection restored: auto-submitting your completed assessment…');
+        await api('POST', '/api/attempts/' + targetAttemptId + '/submit');
+        const [d] = await Promise.all([api('GET', '/api/attempts/' + targetAttemptId), loadItem()]);
+        await clearAttemptSync(targetAttemptId);
+        setDone(d.attempt);
+        setStage('done');
+        toast && toast('Assessment successfully submitted and synced!');
+      }
+    } catch (err) {
+      console.warn('[take] Error syncing pending offline items:', err);
+    } finally {
+      setSyncingOffline(false);
+    }
+  }, [att, loadItem, toast]);
+
+  // Network connection monitor
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOnline(navigator.onLine);
+    const onOnline = () => {
+      setIsOnline(true);
+      toast && toast('Connection restored. Synchronizing answers…');
+      syncPending();
+    };
+    const onOffline = () => {
+      setIsOnline(false);
+      toast && toast('Offline mode: Answers and flags saved locally in encrypted storage.');
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [syncPending, toast]);
+
+  // Start (or resume) on the server or offline storage, then cache package locally
   const begin = async () => {
     setBusy(true);
     try {
-      const s = await api('POST', '/api/attempts', { assessmentId });
-      const d = await api('GET', '/api/attempts/' + s.attemptId);
+      let s, d;
+      if (navigator.onLine) {
+        s = await api('POST', '/api/attempts', { assessmentId });
+        d = await api('GET', '/api/attempts/' + s.attemptId);
+        // Cache full assessment package in IndexedDB for offline resilience
+        await cacheAssessmentPackage(assessmentId, {
+          item,
+          questions: d.questions,
+          assessment: d.assessment,
+          maxAttempts: d.maxAttempts,
+        });
+      } else {
+        const cachedPkg = await getCachedAssessmentPackage(assessmentId);
+        if (!cachedPkg) {
+          throw new Error('Offline: No cached assessment package found. Please connect to the internet first.');
+        }
+        d = {
+          attempt: { id: Date.now(), attemptNo: (item?.used || 0) + 1, status: 'IN_PROGRESS' },
+          questions: cachedPkg.questions,
+          assessment: cachedPkg.assessment,
+          answers: {},
+          position: 0,
+        };
+      }
+
       if (d.attempt.status !== 'IN_PROGRESS') { closed('This attempt has already been closed.'); return; }
-      load(d.answers || {}); setAtt(d); setIdx(Math.min(d.position || 0, Math.max(0, d.questions.length - 1))); setStage('answer'); setConfirm(null);
-      if (s.resumed) toast && toast('Welcome back: your answers have been restored');
-    } catch (e) { setConfirm(null); setError(e.message); await loadItem().catch(() => {}); setStage('intro'); }
-    finally { setBusy(false); }
+
+      // Restore encrypted local answers and flags if present
+      const localState = await getAttemptStateEncrypted(d.attempt.id);
+      const initialAnswers = localState?.answers || d.answers || {};
+      const initialFlags = localState?.flags || {};
+      setFlags(initialFlags);
+      load(initialAnswers);
+      setAtt(d);
+      setIdx(Math.min(localState?.position ?? d.position ?? 0, Math.max(0, d.questions.length - 1)));
+      setStage('answer');
+      setConfirm(null);
+      if (s?.resumed || localState) toast && toast('Welcome back: your answers and flags have been restored');
+    } catch (e) {
+      setConfirm(null);
+      setError(e.message);
+      await loadItem().catch(() => {});
+      setStage('intro');
+    } finally {
+      setBusy(false);
+    }
   };
+
   const exit = async () => { await settle(); await flushTime(true); go('assessments'); };
+
+  // Submit attempt: online immediately, or queue for auto-submission upon reconnection
   const submit = async () => {
     setBusy(true); setError('');
     try {
-      if (!(await settle())) { setError("Some answers haven't saved yet. Check your connection and try again."); setConfirm(null); return; }
+      if (!isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        // Enqueue submit action for auto-submission upon reconnection
+        await enqueueSyncItem(att.attempt.id, 'submit', { submittedAt: Date.now() });
+        await saveAttemptStateEncrypted(att.attempt.id, {
+          assessmentId,
+          answers,
+          flags,
+          position: idx,
+          isSubmitted: true,
+        });
+        setConfirm(null);
+        toast && toast('Offline: Your attempt is saved in encrypted storage and will auto-submit when connection is restored.');
+        setDone({
+          attemptNo: att.attempt.attemptNo,
+          submittedAt: new Date().toISOString(),
+          status: 'PENDING_MARKING',
+          activeSeconds: 0,
+          elapsedSeconds: 0,
+        });
+        setStage('done');
+        return;
+      }
+
+      if (!(await settle())) {
+        setError("Some answers haven't saved yet. Check your connection and try again.");
+        setConfirm(null);
+        return;
+      }
       await flushTime(false);
       await api('POST', '/api/attempts/' + att.attempt.id + '/submit');
       const [d] = await Promise.all([api('GET', '/api/attempts/' + att.attempt.id), loadItem()]);
-      setDone(d.attempt); setConfirm(null); setStage('done'); toast && toast('Attempt submitted');
-    } catch (e) { setConfirm(null); if (e.status === 409) closed(e.message); else setError(e.message); }
-    finally { setBusy(false); }
+      await clearAttemptSync(att.attempt.id);
+      setDone(d.attempt);
+      setConfirm(null);
+      setStage('done');
+      toast && toast('Attempt submitted');
+    } catch (e) {
+      setConfirm(null);
+      if (e.status === 409) closed(e.message);
+      else setError(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const toggleFlag = (qid) => {
+    setFlags(prev => {
+      const next = { ...prev, [qid]: !prev[qid] };
+      if (att && att.attempt) {
+        saveAttemptStateEncrypted(att.attempt.id, {
+          assessmentId,
+          answers,
+          flags: next,
+          position: idx,
+        });
+        enqueueSyncItem(att.attempt.id, 'flag', { questionId: qid, flagged: next[qid] });
+      }
+      return next;
+    });
+  };
+
   const goTo = i => { setIdx(Math.max(0, Math.min(questions.length - 1, i))); setStage('answer'); setNavOpen(false); try { window.scrollTo(0, 0); } catch (e) {} };
   const answeredCount = useMemo(() => questions.filter(x => isAnswered(answers[x.id])).length, [questions, answers]);
+  const flaggedCount = useMemo(() => Object.values(flags).filter(Boolean).length, [flags]);
   const unanswered = questions.length - answeredCount;
   const saving = Object.values(saveState).some(s => s === 'saving'), saveError = Object.values(saveState).some(s => s === 'error');
 
   const wrap = children => <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>{topBar}<main style={{ width: 'min(900px,100%)', margin: '0 auto', padding: phone ? '16px 16px 48px' : '24px 20px 56px', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>{children}</main>{dialogs}</div>;
 
   // ===== TAKE · Top bar =====
-  // DVLA dark green bar with the assessment name, progress and Save & exit. No timer.
   const title = (att && att.assessment.title) || (item && item.title) || 'Take Assessment';
   const topBar = (
     <div style={{ position: 'sticky', top: 0, zIndex: 40, padding: '10px 12px 0' }}>
       <header style={{ minHeight: '58px', borderRadius: '20px', background: 'linear-gradient(135deg,#054218 0%,#043b16 100%)', boxShadow: '0 12px 30px rgba(4,59,22,.28)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '8px 16px', color: '#fff' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ font: '600 14.5px Inter,sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          {answering && att ? <div style={{ font: '400 12px Inter,sans-serif', opacity: 0.85 }}>Attempt {att.attempt.attemptNo} · {answeredCount} of {questions.length} answered · {saveError ? 'Some answers not saved, retrying…' : saving ? 'Saving…' : 'All answers saved'}</div> : null}
+          {answering && att ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+              <span style={{ font: '400 12px Inter,sans-serif', opacity: 0.85 }}>Attempt {att.attempt.attemptNo} · {answeredCount} of {questions.length} answered {flaggedCount ? `(${flaggedCount} flagged)` : ''} · {saveError ? 'Some answers not saved, retrying…' : saving ? 'Saving…' : 'All answers saved'}</span>
+              <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: isOnline ? 'rgba(34,197,94,0.2)' : 'rgba(234,179,8,0.25)', color: isOnline ? '#bbf7d0' : '#fef08a', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isOnline ? '#4ade80' : '#facc15' }}></span>
+                {isOnline ? (syncingOffline ? 'Syncing…' : 'Online · Encrypted DB') : 'Offline Mode · Encrypted Local Storage'}
+              </span>
+            </div>
+          ) : null}
         </div>
         {answering ? <button type="button" onClick={exit} style={{ flex: 'none', height: '34px', padding: '0 14px', borderRadius: '999px', border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.12)', color: '#fff', font: '500 13px Inter,sans-serif', cursor: 'pointer' }}>Save &amp; exit</button>
           : <button type="button" onClick={() => go('assessments')} style={{ flex: 'none', height: '34px', padding: '0 14px', borderRadius: '999px', border: '1px solid rgba(255,255,255,.35)', background: 'rgba(255,255,255,.12)', color: '#fff', font: '500 13px Inter,sans-serif', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><i className="icon-arrow-left" style={{ fontSize: '14px' }}></i>My Assessments</button>}
@@ -201,8 +463,8 @@ export default function SMTake({ go, id, vw, toast }) {
   // ===== TAKE · Dialogs =====
   const dialogs = (
     <>
-      <Confirm open={confirm === 'start'} busy={busy} title={item && item.canResume ? 'Resume your attempt?' : 'Start attempt ' + ((item ? item.used : 0) + 1) + ' of ' + (item ? item.maxAttempts : '')}
-        text={item && item.canResume ? 'Your saved answers will be restored.' : 'Starting uses one of your attempts, even if you leave without submitting. Your answers save as you go and you can come back before the deadline.'}
+      <Confirm open={confirm === 'start'} busy={busy} title={item && item.canResume ? 'Resume your attempt?' : 'Start attempt ' + ((item ? item.used : 0) + 1)}
+        text={item && item.canResume ? 'Your saved answers will be restored.' : 'Starting begins your attempt session. Your answers save automatically as you go and you can come back anytime before the deadline.'}
         confirmText={item && item.canResume ? 'Resume' : 'Start'} onConfirm={begin} onCancel={() => setConfirm(null)} />
       <Confirm open={confirm === 'submit'} busy={busy} title={'Submit attempt ' + (att ? att.attempt.attemptNo : '') + '?'} confirmText="Submit"
         text={(unanswered ? unanswered + (unanswered === 1 ? ' question is' : ' questions are') + ' unanswered and will score 0. ' : 'All questions are answered. ') + 'You cannot change your answers after submitting.'}
@@ -221,7 +483,7 @@ export default function SMTake({ go, id, vw, toast }) {
     const it = item, extended = it.originalDeadline;
     const facts = [
       ['Opens', fmtDateTime(it.startsAt)], ['Deadline', fmtDateTime(it.deadline) + (extended ? ' (extended from ' + fmtDate(it.originalDeadline) + ')' : '')],
-      ['Attempts allowed', it.maxAttempts], ['Attempts used', it.used + ' (' + it.completed + ' completed)'], ['Attempts remaining', it.remaining], ['Status', it.progressLabel],
+      ['Attempts taken', it.used], ['Completed attempts', it.completed], ['Status', it.progressLabel],
     ];
     return wrap(<>
       <Card title={it.title} sub={it.description ? <span style={{ overflowWrap: 'anywhere' }}>{it.description}</span> : null}>
@@ -235,7 +497,6 @@ export default function SMTake({ go, id, vw, toast }) {
           <li>There is <b>no time limit</b> and no countdown. Take the time you need before the deadline.</li>
           <li>Each answer is saved as soon as you choose it. You can use <b>Save &amp; exit</b> and come back later to carry on where you left off.</li>
           <li>Time is recorded only while this page is open and in front of you. It is kept for reporting and never changes your score.</li>
-          <li>Starting uses one of your attempts. An attempt not submitted by the deadline expires and does not count towards your results.</li>
           <li>Your final result for each competency is the average of all your completed attempts.</li>
         </ul>
         {error ? <div role="alert" style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#b91c1c', fontSize: '13px' }}>{error}</div> : null}
@@ -263,7 +524,7 @@ export default function SMTake({ go, id, vw, toast }) {
         <div style={{ ...MUTED, fontSize: '12px', maxWidth: '520px' }}>Active time counts only while the page was open and in front. It is for reporting and does not affect your score.</div>
       </div>
     </Card>
-    <Card title="Your results" sub={item ? item.remaining + ' of ' + item.maxAttempts + ' attempts remaining' : null}><ResultsPanel item={item} /></Card>
+    <Card title="Your results" sub={item && item.completed ? `${item.completed} attempt${item.completed === 1 ? '' : 's'} completed` : null}><ResultsPanel item={item} /></Card>
     <div style={{ display: 'flex', justifyContent: 'center' }}><Btn kind="primary" onClick={() => go('assessments')}>Back to My Assessments</Btn></div>
   </>);
 
@@ -273,10 +534,11 @@ export default function SMTake({ go, id, vw, toast }) {
       {unanswered ? <div role="status" style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fffbeb', color: '#92400e', fontSize: '13px' }}><i className="icon-circle-alert" style={{ marginRight: '6px' }}></i>{unanswered} {unanswered === 1 ? 'question has' : 'questions have'} no answer. Unanswered questions score 0. Select a question to answer it.</div> : <div style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', background: '#f0fdf4', color: '#15803d', fontSize: '13px' }}><i className="icon-circle-check" style={{ marginRight: '6px' }}></i>Every question has an answer.</div>}
       {error ? <div role="alert" style={{ marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', background: '#fef2f2', color: '#b91c1c', fontSize: '13px' }}>{error}</div> : null}
       <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '55vh', overflowY: 'auto', border: '1px solid rgba(15,35,65,.08)', borderRadius: '12px', background: '#fff' }}>
-        {questions.map((x, i) => { const ok = isAnswered(answers[x.id]); return (
+        {questions.map((x, i) => { const ok = isAnswered(answers[x.id]), isFlagged = flags[x.id]; return (
           <button key={x.id} type="button" onClick={() => goTo(i)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: 0, borderBottom: '1px solid rgba(15,35,65,.06)', background: 'none', cursor: 'pointer', textAlign: 'left', font: '400 13px Inter,sans-serif', color: '#111827' }}>
             <span style={{ flex: 'none', width: '30px', color: '#6b7280', fontWeight: 600 }}>{i + 1}</span>
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.text}</span>
+            {isFlagged ? <Badge bg="#fef3c7" fg="#b45309"><i className="icon-flag" style={{ fontSize: '11px', marginRight: '4px' }}></i>Flagged</Badge> : null}
             {ok ? <Badge bg="#dcfce7" fg="#15803d"><i className="icon-check" style={{ fontSize: '11px' }}></i>Answered</Badge> : <Badge bg="#fef3c7" fg="#92400e">Unanswered</Badge>}
           </button>); })}
       </div>
@@ -295,7 +557,13 @@ export default function SMTake({ go, id, vw, toast }) {
   return wrap(<>
     <Card>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-        <span style={{ font: '600 12px Inter,sans-serif', color: '#127a42', letterSpacing: '.3px' }}>QUESTION {idx + 1} OF {questions.length}{q.skillArea ? ' · ' + q.skillArea : ''}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ font: '600 12px Inter,sans-serif', color: '#127a42', letterSpacing: '.3px' }}>QUESTION {idx + 1} OF {questions.length}{q.skillArea ? ' · ' + q.skillArea : ''}</span>
+          <button type="button" onClick={() => toggleFlag(q.id)} aria-pressed={!!flags[q.id]} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 8px', borderRadius: '6px', border: flags[q.id] ? '1px solid #f59e0b' : '1px solid rgba(15,35,65,.15)', background: flags[q.id] ? '#fef3c7' : '#fff', color: flags[q.id] ? '#b45309' : '#6b7280', fontSize: '12px', cursor: 'pointer', font: '500 12px Inter,sans-serif' }}>
+            <i className="icon-flag" style={{ fontSize: '11px', color: flags[q.id] ? '#d97706' : '#9ca3af' }}></i>
+            {flags[q.id] ? 'Flagged' : 'Flag'}
+          </button>
+        </div>
         <span aria-live="polite" style={{ fontSize: '12px', color: st === 'error' ? '#b91c1c' : '#6b7280' }}>{st === 'saving' ? 'Saving…' : st === 'saved' ? 'Saved' : st === 'error' ? 'Not saved yet, retrying…' : isAnswered(a) ? 'Saved' : ''}</span>
       </div>
       <div id={'q' + q.id} style={{ fontSize: phone ? '15.5px' : '17px', fontWeight: 600, lineHeight: 1.5, color: '#111827', marginBottom: '16px' }}>{q.text}</div>
@@ -330,9 +598,12 @@ export default function SMTake({ go, id, vw, toast }) {
         <span>All questions · {answeredCount} answered, {unanswered} to go</span>{phone ? <i className={navOpen ? 'icon-chevron-up' : 'icon-chevron-down'} style={{ fontSize: '14px' }}></i> : null}
       </button>
       {navOpen || !phone ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-        {questions.map((x, i) => { const ok = isAnswered(answers[x.id]), cur = i === idx; return (
-          <button key={x.id} type="button" onClick={() => goTo(i)} aria-label={'Question ' + (i + 1) + (ok ? ', answered' : ', not answered')} aria-current={cur ? 'step' : undefined}
-            style={{ width: '34px', height: '30px', borderRadius: '8px', cursor: 'pointer', font: '600 12px Inter,sans-serif', border: cur ? '2px solid #054218' : ok ? '0' : '1px solid rgba(15,35,65,.15)', background: ok ? GREEN : '#fff', color: ok ? '#fff' : '#374151' }}>{i + 1}</button>); })}
+        {questions.map((x, i) => { const ok = isAnswered(answers[x.id]), cur = i === idx, isFl = flags[x.id]; return (
+          <button key={x.id} type="button" onClick={() => goTo(i)} aria-label={'Question ' + (i + 1) + (ok ? ', answered' : ', not answered') + (isFl ? ', flagged' : '')} aria-current={cur ? 'step' : undefined}
+            style={{ position: 'relative', width: '34px', height: '30px', borderRadius: '8px', cursor: 'pointer', font: '600 12px Inter,sans-serif', border: cur ? '2px solid #054218' : isFl ? '2px solid #d97706' : ok ? '0' : '1px solid rgba(15,35,65,.15)', background: ok ? GREEN : '#fff', color: ok ? '#fff' : '#374151' }}>
+            {i + 1}
+            {isFl ? <span style={{ position: 'absolute', top: '-3px', right: '-3px', width: '8px', height: '8px', borderRadius: '50%', background: '#d97706', border: '1px solid #fff' }}></span> : null}
+          </button>); })}
       </div> : null}
     </div>
   </>);

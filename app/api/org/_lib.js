@@ -25,7 +25,9 @@ export async function visibleStaff(ctx, id, include) {
   return s;
 }
 // Editors with a department scope may only change staff whose current department they can see.
+// Station Managers may also change and onboard staff in their station.
 export function assertCanEdit(ctx, staff) {
+  if (ctx.stationId != null && staff.stationId === ctx.stationId) return;
   if (!deptInScope(ctx, staff.departmentId)) throw forbidden('You can only change staff in departments you can see.');
 }
 
@@ -43,7 +45,11 @@ export async function checkStaffRefs(ctx, b, { staffId = null, changed = new Set
   await one('departmentId', 'department', 'Department');
   await one('gradeId', 'grade', 'Grade');
   await one('stationId', 'station', 'Station');
-  if (changed.has('departmentId') && !deptInScope(ctx, b.departmentId ?? null)) throw forbidden('You can only put staff in departments you can see.');
+  if (changed.has('departmentId') && !deptInScope(ctx, b.departmentId ?? null)) {
+    if (!(ctx.stationId != null && b.stationId === ctx.stationId)) {
+      throw forbidden('You can only put staff in departments you can see.');
+    }
+  }
   if (b.supervisorId != null && changed.has('supervisorId')) {
     if (b.supervisorId === staffId) fields.supervisorId = ['A person cannot be their own supervisor.'];
     else {

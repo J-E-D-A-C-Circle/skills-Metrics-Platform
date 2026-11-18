@@ -95,6 +95,10 @@ export const ROLE_PERMS = {
   'Assessment Creator': ['forms.view', 'forms.create', 'forms.edit', 'framework.view'],
   'Manager / Supervisor': ['staff-evals.view', 'staff-evals.report', 'staff-evals.export', 'assessments.view', 'cycles.view',
     'analytics.view', 'analytics.departments', 'analytics.heatmap', 'training.view', 'training.top', 'training.export', 'reports.view', 'reports.export'],
+  // Station Managers onboard local station staff, view station gap heatmaps, schedule station sessions and request extensions.
+  'Station Manager / Regional Coordinator': ['org.view', 'org.staff', 'cycles.view', 'cycles.assign', 'cycles.extend',
+    'staff-evals.view', 'staff-evals.report', 'staff-evals.export', 'assessments.view',
+    'analytics.view', 'analytics.departments', 'analytics.heatmap', 'training.view', 'training.top', 'training.export', 'reports.view'],
   Participant: ['assessments.view'],
   // A designated ticket resolver only handles tickets assigned to them.
   'Ticket Resolver': ['tickets.resolve'],

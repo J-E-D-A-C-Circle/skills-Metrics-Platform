@@ -14,23 +14,54 @@ import { CompetencyInput, duplicateMessage } from '@/lib/server/org';
 import { COMP_INCLUDE, compRow, auditComp, inactiveCategories, freeCode } from './_lib';
 
 // ===== FRAMEWORK · Read =====
-// ?q=&departmentId=(id|general)&categoryId=&status=(active|inactive|all, default all)
+// ?q=&departmentId=(id|general)&categoryId=&status=(active|inactive|all, default all)&skillType=(all|technical|general)
 export const GET = handle(async req => {
   await requirePermission('framework.view');
   const p = Object.fromEntries(req.nextUrl.searchParams), and = [];
   const q = (p.q || '').trim();
   if (q) and.push({ OR: [{ name: { contains: q, mode: 'insensitive' } }, { short: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }, { category: { group: { contains: q, mode: 'insensitive' } } }] });
-  if (p.departmentId === 'general') and.push({ departmentId: null }); else if (/^\d+$/.test(p.departmentId || '')) and.push({ departmentId: Number(p.departmentId) });
+  if (p.departmentId === 'general' || p.skillType === 'general') and.push({ departmentId: null });
+  else if (/^\d+$/.test(p.departmentId || '')) and.push({ departmentId: Number(p.departmentId) });
+  else if (p.skillType === 'technical') and.push({ departmentId: { not: null } });
   if (/^\d+$/.test(p.categoryId || '')) and.push({ categoryId: Number(p.categoryId) });
   if (p.status === 'active') and.push({ active: true }); else if (p.status === 'inactive') and.push({ active: false });
-  const [rows, categories, departments, off, total] = await Promise.all([
+  const [rows, categories, departments, off, total, allComps] = await Promise.all([
     db.competency.findMany({ where: { AND: and }, include: COMP_INCLUDE, orderBy: [{ category: { name: 'asc' } }, { category: { group: 'asc' } }, { name: 'asc' }] }),
     db.competencyCategory.findMany({ include: { _count: { select: { competencies: true } } }, orderBy: [{ name: 'asc' }, { group: 'asc' }] }),
     db.department.findMany({ select: { id: true, name: true, code: true, active: true }, orderBy: { name: 'asc' } }),
     inactiveCategories(), db.competency.count(),
+    db.competency.findMany({ select: { id: true, departmentId: true, skillAreas: true, active: true } }),
   ]);
+
+  let totalSkillAreas = 0;
+  let generalCompetencies = 0;
+  let generalSkillAreas = 0;
+  let technicalCompetencies = 0;
+  let technicalSkillAreas = 0;
+
+  for (const c of allComps) {
+    const areas = Array.isArray(c.skillAreas) ? c.skillAreas.length : 0;
+    totalSkillAreas += areas;
+    if (c.departmentId == null) {
+      generalCompetencies++;
+      generalSkillAreas += areas;
+    } else {
+      technicalCompetencies++;
+      technicalSkillAreas += areas;
+    }
+  }
+
+  const metrics = {
+    totalCompetencies: allComps.length,
+    totalSkillAreas,
+    generalCompetencies,
+    generalSkillAreas,
+    technicalCompetencies,
+    technicalSkillAreas,
+  };
+
   return json({
-    rows: rows.map(compRow), total,
+    rows: rows.map(compRow), total, metrics,
     categories: categories.map(c => ({ id: c.id, name: c.name, group: c.group, competencies: c._count.competencies, active: !off.includes(c.id) })),
     departments,
   });

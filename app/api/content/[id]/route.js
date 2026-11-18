@@ -64,7 +64,10 @@ const Body = z.object({
   title: z.string().trim().min(3, 'Enter a title of at least 3 characters.').max(LIMITS.title),
   description: z.string().trim().max(LIMITS.description),
   instructions: z.string().trim().max(LIMITS.instructions),
-  maxAttempts: z.coerce.number().int().min(1, 'At least 1 attempt.').max(LIMITS.maxAttempts, 'No more than ' + LIMITS.maxAttempts + ' attempts.'),
+  departmentId: z.coerce.number().int().positive().nullable().optional(),
+  skillType: z.enum(['GENERAL', 'TECHNICAL']).optional(),
+  jobLevel: z.string().trim().nullable().optional(),
+  maxAttempts: z.coerce.number().int().min(1).max(LIMITS.maxAttempts).optional().default(3),
   resultRelease: z.enum(['IMMEDIATE', 'AFTER_DEADLINE', 'MANUAL']),
   audience: AudienceBody, // omitted = unchanged · null = decide later on the Assignments page
 });

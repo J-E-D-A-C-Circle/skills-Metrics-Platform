@@ -11,7 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 vi.mock('../lib/server/db.js', () => ({ db: {} }));
 const { deadlineFor, progressStatus } = await import('../lib/server/assigned.js');
-const { targetAllowed, targetIdOf, checkDates, checkExtension, limitOf, mergeEntry, summarize, latestDeadline, assignmentState, reminderKind, reminderDedupe, filterPeople, pageOf } = await import('../app/api/assignments/rules.js');
+const { targetAllowed, targetIdOf, checkDates, checkExtension, limitOf, mergeEntry, summarize, latestDeadline, assignmentState, reminderKind, reminderDedupe, filterPeople, pageOf, isZeroProgress } = await import('../app/api/assignments/rules.js');
 
 const D = s => new Date(s);
 const NOW = D('2026-10-19T12:00:00Z');
@@ -29,6 +29,9 @@ describe('targets and scope', () => {
     expect(targetAllowed([1, 2], 'GRADE', 1)).toBe(false);
     expect(targetAllowed([1, 2], 'STATION', 1)).toBe(false);
     expect(targetAllowed([1, 2], 'LOCATION', 1)).toBe(false);
+    // Station manager may assign to their own station target
+    expect(targetAllowed([1, 2], 'STATION', 5, 5)).toBe(true);
+    expect(targetAllowed([1, 2], 'STATION', 6, 5)).toBe(false);
   });
   it('reads the target id from the right column', () => {
     expect(targetIdOf({ targetType: 'GRADE', gradeId: 4, departmentId: 1 })).toBe(4);
@@ -141,6 +144,12 @@ describe('deadline reminders', () => {
     expect(a).not.toBe(reminderDedupe('soon', 5, 3, '2026-10-22T12:00:00Z'));
     expect(a).not.toBe(reminderDedupe('passed', 5, 3, '2026-10-20T12:00:00Z'));
     expect(a).not.toBe(reminderDedupe('soon', 5, 4, '2026-10-20T12:00:00Z'));
+  });
+  it('identifies 0% progress for escalation alerts', () => {
+    expect(isZeroProgress([])).toBe(true);
+    expect(isZeroProgress([{ status: 'NOT_STARTED' }])).toBe(true);
+    expect(isZeroProgress([{ status: 'IN_PROGRESS' }])).toBe(false);
+    expect(isZeroProgress([{ status: 'COMPLETED' }])).toBe(false);
   });
 });
 

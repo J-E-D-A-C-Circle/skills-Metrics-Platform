@@ -26,6 +26,18 @@ describe('roles', () => {
     expect(hasPermission(sup, 'staff-evals.view')).toBe(true);
     expect(hasPermission(sup, 'settings.general')).toBe(false);
   });
+  it('station managers onboard local staff, view heatmaps, schedule sessions and extend cycles without global admin privileges', () => {
+    const sm = { roles: ['STATION_MANAGER'] };
+    expect(hasPermission(sm, 'org.staff')).toBe(true);
+    expect(hasPermission(sm, 'analytics.heatmap')).toBe(true);
+    expect(hasPermission(sm, 'cycles.assign')).toBe(true);
+    expect(hasPermission(sm, 'cycles.extend')).toBe(true);
+    expect(hasPermission(sm, 'assessments.view')).toBe(true);
+    // Hard restrictions: cannot publish content, cannot change global settings
+    expect(hasPermission(sm, 'forms.publish')).toBe(false);
+    expect(hasPermission(sm, 'settings.general')).toBe(false);
+    expect(hasPermission(sm, 'settings.access')).toBe(false);
+  });
   it('staff only take assessments', () => {
     expect(effectivePermissions({ roles: ['STAFF'] })).toEqual(['assessments.view']);
   });
@@ -34,6 +46,7 @@ describe('roles', () => {
   });
   it('the shown role is the most senior one', () => {
     expect(primaryRole(['STAFF', 'SUPERVISOR'])).toBe('SUPERVISOR');
+    expect(primaryRole(['STAFF', 'STATION_MANAGER'])).toBe('STATION_MANAGER');
     expect(primaryRole([])).toBe('STAFF');
   });
 });
@@ -56,7 +69,7 @@ describe('department scope', () => {
     expect(canSeeDepartment({ deptScope: 'ALL' }, 99)).toBe(true);
   });
   it('every role and grade starts on its own department; wider access is only ever granted', () => {
-    for (const role of ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Participant', 'Ticket Resolver', undefined]) expect(defaultScope(role)).toBe('own');
+    for (const role of ['Administrator', 'Assessment Creator', 'Manager / Supervisor', 'Station Manager / Regional Coordinator', 'Participant', 'Ticket Resolver', undefined]) expect(defaultScope(role)).toBe('own');
     expect(visibleDepts({ role: 'Assessment Creator' }, 'Human Resources')).toEqual(['Human Resources']);
     expect(visibleDepts({ role: 'Participant' }, 'Research, Business Development & Innovation')).toEqual(['Research, Business Development & Innovation']);
     expect(scopeOf({ role: 'Assessment Creator', scope: 'all' })).toBe('all');

@@ -79,7 +79,7 @@ export default function SMMyAssessments({ go, vw }) {
               <div style={FACT}><span style={FACT_K}>Opens</span><span style={{ fontSize: '13.5px' }}>{it.startsAt ? fmtDateTime(it.startsAt) : '—'}</span></div>
               <div style={FACT}><span style={FACT_K}>Deadline</span><span style={{ fontSize: '13.5px', color: it.progress === 'OVERDUE' ? '#b91c1c' : '#111827' }}>{it.deadline ? fmtDateTime(it.deadline) : '—'}</span>
                 {it.originalDeadline ? <span title={it.extensionReason || ''} style={{ fontSize: '11.5px', color: '#075985' }}>Extended from {fmtDate(it.originalDeadline)}</span> : null}</div>
-              <div style={FACT}><span style={FACT_K}>Attempts</span><span style={{ fontSize: '13.5px' }}>{it.used} of {it.maxAttempts} used · <b>{it.remaining}</b> remaining</span><span style={{ fontSize: '11.5px', color: '#6b7280' }}>{it.completed} completed</span></div>
+              <div style={FACT}><span style={FACT_K}>Attempts</span><span style={{ fontSize: '13.5px' }}>{it.used} attempt{it.used === 1 ? '' : 's'} taken</span><span style={{ fontSize: '11.5px', color: '#6b7280' }}>{it.completed} completed</span></div>
               <div style={{ ...FACT, flex: '1 1 220px' }}><span style={FACT_K}>Results</span>
                 {!it.completed ? <span style={{ fontSize: '13px', color: '#6b7280' }}>{it.attempts.some(a => a.status === 'PENDING_MARKING') ? 'Waiting for marking' : 'No completed attempts yet'}</span>
                   : !it.released ? <span style={{ fontSize: '13px', color: '#6b7280' }}>{it.releaseNote}</span>

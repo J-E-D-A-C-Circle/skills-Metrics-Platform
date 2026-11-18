@@ -27,7 +27,7 @@ export async function checkTarget(tx, ctx, targetType, id) {
     if (s.status !== 'ACTIVE') throw badRequest('Only active staff can be given an assessment.');
     return;
   }
-  if (!targetAllowed(ctx.visibleDepartmentIds, targetType, id)) throw forbidden(targetType === 'DEPARTMENT' ? 'You can only assign to departments you manage.' : 'Only people who can see every department can assign by grade, station or location.');
+  if (!targetAllowed(ctx.visibleDepartmentIds, targetType, id, ctx.stationId)) throw forbidden(targetType === 'DEPARTMENT' ? 'You can only assign to departments you manage.' : (targetType === 'STATION' ? 'You can only assign to your own station.' : 'Only people who can see every department can assign by grade, station or location.'));
   const t = await tx[TARGET_MODEL[targetType]].findUnique({ where: { id } });
   if (!t) throw badRequest('That ' + TARGET_LABEL[targetType].toLowerCase() + ' was not found.');
   if (t.active === false) throw badRequest(t.name + ' is inactive, so it cannot be assigned to.');

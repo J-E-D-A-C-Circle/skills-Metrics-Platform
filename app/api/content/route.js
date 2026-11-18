@@ -39,12 +39,21 @@ export const GET = handle(async req => {
   const and = [base];
   if (q) and.push({ OR: [{ title: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }] });
   if (mine) and.push({ OR: [{ createdById: ctx.account.id }, { versions: { some: { reviewEvents: { some: { actorId: ctx.account.id, action: 'CREATE' } } } } }] });
+  if (sp.get('departmentId')) {
+    const dId = Number(sp.get('departmentId'));
+    if (Number.isInteger(dId) && dId > 0) and.push({ departmentId: dId });
+  }
+  if (sp.get('skillType')) {
+    const st = sp.get('skillType').toUpperCase();
+    if (['GENERAL', 'TECHNICAL'].includes(st)) and.push({ skillType: st });
+  }
   const filtered = { AND: [...and, statusWhere(sp.get('status') || '')] };
   const sort = sp.get('sort') === 'title' ? [{ title: 'asc' }, { id: 'asc' }] : [{ updatedAt: 'desc' }, { id: 'desc' }];
   const [total, rows, groups, review] = await Promise.all([
     db.assessment.count({ where: filtered }),
     db.assessment.findMany({ where: filtered, orderBy: sort, skip: (page - 1) * size, take: size, include: {
       createdBy: { select: { id: true, displayName: true } },
+      department: { select: { id: true, name: true, code: true } },
       versions: { orderBy: { versionNo: 'desc' }, include: { reviewEvents: { where: { action: { in: ['CREATE', 'SUBMIT'] } }, select: { action: true, actorId: true } }, _count: { select: { questions: true, attempts: true } } } },
     } }),
     db.assessment.groupBy({ by: ['status'], where: { AND: and }, _count: { _all: true } }),
@@ -57,6 +66,7 @@ export const GET = handle(async req => {
       const latest = a.versions[0], live = a.versions.find(v => v.status === 'PUBLISHED');
       return {
         id: a.id, title: a.title, status: a.status, createdBy: a.createdBy?.displayName || 'System', updatedAt: a.updatedAt, source: a.sourceRef ? 'DVLA question bank' : null,
+        departmentId: a.departmentId, department: a.department?.name || null, skillType: a.skillType, jobLevel: a.jobLevel,
         versionNo: latest?.versionNo ?? null, versionStatus: latest?.status ?? null, liveVersionNo: live?.versionNo ?? null,
         questions: latest?._count?.questions ?? 0, attempts: (a.versions || []).reduce((s, v) => s + (v._count?.attempts || 0), 0),
         mine: !!latest && versionAuthorId(latest, a) === ctx.account.id,
@@ -70,6 +80,9 @@ const Body = z.object({
   title: z.string().trim().min(3, 'Enter a title of at least 3 characters.').max(LIMITS.title),
   description: z.string().trim().max(LIMITS.description).optional().default(''),
   instructions: z.string().trim().max(LIMITS.instructions).optional().default(''),
+  departmentId: z.coerce.number().int().positive().nullable().optional(),
+  skillType: z.enum(['GENERAL', 'TECHNICAL']).optional().default('TECHNICAL'),
+  jobLevel: z.string().trim().nullable().optional(),
   maxAttempts: z.coerce.number().int().min(1).max(LIMITS.maxAttempts).optional(),
   resultRelease: z.enum(['IMMEDIATE', 'AFTER_DEADLINE', 'MANUAL']).optional().default('IMMEDIATE'),
   audience: AudienceBody,
@@ -85,12 +98,15 @@ export const POST = handle(async req => {
     const plan = await checkedPlan(tx, ctx, b.audience);
     const a = await tx.assessment.create({ data: {
       title: b.title, description: b.description || null, instructions: b.instructions || null, createdById: ctx.account.id, status: 'DRAFT',
+      departmentId: b.skillType === 'GENERAL' ? null : (b.departmentId || null),
+      skillType: b.skillType,
+      jobLevel: b.jobLevel || null,
       maxAttempts: b.maxAttempts ?? cfg?.defaultMaxAttempts ?? 3, resultRelease: b.resultRelease, ...(plan ? { plannedAssignment: plan } : {}),
     } });
     const v = await tx.assessmentVersion.create({ data: { assessmentId: a.id, versionNo: 1, status: 'DRAFT', scoringConfigId: cfg?.id ?? null } });
     await tx.assessmentReviewEvent.create({ data: { versionId: v.id, actorId: ctx.account.id, action: 'CREATE' } });
     await syncAssessmentStatus(tx, a.id);
-    await audit({ actorId: ctx.account.id, action: 'assessment.create', entityType: 'Assessment', entityId: a.id, after: { title: a.title, maxAttempts: a.maxAttempts, resultRelease: a.resultRelease, versionNo: 1, plannedAssignment: plan }, ip: clientIp(req) }, tx);
+    await audit({ actorId: ctx.account.id, action: 'assessment.create', entityType: 'Assessment', entityId: a.id, after: { title: a.title, skillType: a.skillType, departmentId: a.departmentId, jobLevel: a.jobLevel, maxAttempts: a.maxAttempts, resultRelease: a.resultRelease, versionNo: 1, plannedAssignment: plan }, ip: clientIp(req) }, tx);
     return a;
   });
   return json({ id: created.id }, 201);

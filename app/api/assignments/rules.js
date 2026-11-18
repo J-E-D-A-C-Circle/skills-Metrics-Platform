@@ -17,10 +17,12 @@ export const TARGET_LABEL = { INDIVIDUAL: 'Individual', DEPARTMENT: 'Department'
 export const targetIdOf = a => a[TARGET_FIELD[a.targetType]] ?? null;
 // May someone with this department scope (null = every department) assign to / manage this kind of target?
 // Departments must be inside their scope; grade, station and location targets reach across departments, so only
-// people who see every department may use them. Individuals are checked against the staff record separately.
-export function targetAllowed(visibleDepartmentIds, targetType, targetId) {
+// people who see every department may use them (unless they are a Station Manager managing their own station target).
+// Individuals are checked against the staff record separately.
+export function targetAllowed(visibleDepartmentIds, targetType, targetId, stationId = null) {
   if (visibleDepartmentIds === null) return true;
   if (targetType === 'DEPARTMENT') return visibleDepartmentIds.includes(targetId);
+  if (targetType === 'STATION' && stationId != null) return targetId === stationId;
   if (targetType === 'INDIVIDUAL') return true; // checked with assertStaffVisible on the staff record
   return false;
 }
@@ -85,6 +87,12 @@ export function assignmentState(a, now = new Date()) {
 export const STATE_LABEL = { UPCOMING: 'Upcoming', OPEN: 'Open', CLOSED: 'Closed' };
 
 // ===== RULES · Reminders =====
+// Returns true if the person has made 0% progress on an assessment (no completed or in-progress attempts).
+export function isZeroProgress(attempts) {
+  if (!attempts || !attempts.length) return true;
+  return !attempts.some(a => a.status === 'COMPLETED' || a.status === 'IN_PROGRESS');
+}
+
 // Which reminder (if any) one person should get now. entry = their merged entry; attempts = their attempts on it.
 //   'soon'   deadline within the next `soonHours` (48), not completed, open, and an attempt is still possible.
 //   'passed' deadline has passed (within the last `passedDays`, 14, so a first run never floods people about

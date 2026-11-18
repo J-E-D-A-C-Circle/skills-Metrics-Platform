@@ -20,6 +20,7 @@ import React, { useEffect, useState } from 'react';
 import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, INPUT } from '@/components/shared/smUI';
 import { useLoad, qs, fmtDate, fmtDateTime } from '@/components/shared/smApi';
 import { STATUS_LABEL, STATUS_COLOURS, RELEASE_LABEL, LIMITS, AUDIENCE_TARGETS, AUDIENCE_LABEL, audienceProblems } from '@/lib/server/content';
+import { JOB_LEVELS, JOB_LEVEL_LABEL, computeAssessmentTitle } from '@/lib/levels';
 import SMFormBuilder from '@/components/admin/SMFormBuilder';
 
 // ===== CONTENT · Helpers =====
@@ -62,6 +63,8 @@ function Banner({ tone = 'info', icon, children, action }) {
 }
 
 // ===== CONTENT · Status badge =====
+export { JOB_LEVELS, JOB_LEVEL_LABEL, computeAssessmentTitle };
+
 export function ContentStatus({ status, prefix }) {
   const c = STATUS_COLOURS[status] || ['#f3f4f6', '#374151'];
   return <Badge bg={c[0]} fg={c[1]}>{prefix ? prefix + ' · ' : ''}{STATUS_LABEL[status] || status}</Badge>;
@@ -77,16 +80,26 @@ export default function SMContent(S) {
 const FILTERS = [['All', 'All statuses'], ['REVIEW', 'Waiting for review'], ...Object.entries(STATUS_LABEL)];
 function ContentList({ S }) {
   const { me, go } = S;
+  const lk = useLoad('/api/lookups');
+  const depts = (lk.data && lk.data.departments) || [];
   const [q, setQ] = useState(''), [dq, setDq] = useState('');
   const [status, setStatus] = useState('All'), [mine, setMine] = useState(false), [sort, setSort] = useState('updated'), [page, setPage] = useState(1);
+  const [deptFilter, setDeptFilter] = useState('');
+  const [skillTypeFilter, setSkillTypeFilter] = useState('');
   const [creating, setCreating] = useState(false);
   useEffect(() => { const t = setTimeout(() => { setDq(q); setPage(1); }, 300); return () => clearTimeout(t); }, [q]);
-  const { data, error, loading, reload } = useLoad('/api/content' + qs({ q: dq, status, mine: mine ? '1' : '', sort: sort === 'title' ? 'title' : '', page, size: 20 }));
+  const { data, error, loading, reload } = useLoad('/api/content' + qs({ q: dq, status, mine: mine ? '1' : '', sort: sort === 'title' ? 'title' : '', departmentId: deptFilter, skillType: skillTypeFilter, page, size: 20 }));
   const pick = st => { setStatus(st); setPage(1); };
   const cols = [
     { key: 'title', label: 'Assessment', render: r => (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '220px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '240px' }}>
         <button type="button" style={LINK} onClick={() => go('forms', undefined, r.id)}>{r.title}</button>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Badge bg={r.skillType === 'GENERAL' ? '#e6f2ea' : '#eef2ff'} fg={r.skillType === 'GENERAL' ? '#0d3b2a' : '#3730a3'}>
+            {r.skillType === 'GENERAL' ? 'General Skills' : (r.department ? `Technical · ${r.department}` : 'Technical')}
+          </Badge>
+          {r.jobLevel ? <Badge bg="#f3f4f6" fg="#4b5563">{JOB_LEVEL_LABEL[r.jobLevel] || r.jobLevel}</Badge> : null}
+        </div>
         <span style={{ fontSize: '11.5px', color: '#6b7280' }}>{r.source || 'Created by ' + r.createdBy}{r.mine ? ' · yours' : ''}</span>
       </div>) },
     { key: 'status', label: 'Status', render: r => (
@@ -106,6 +119,8 @@ function ContentList({ S }) {
         actions={can(me, 'forms.create') ? <Btn kind="primary" icon="icon-plus" onClick={() => setCreating(true)}>New assessment</Btn> : null}
         filters={<>
           <Search value={q} onChange={setQ} placeholder="Search titles and descriptions" />
+          <Sel value={skillTypeFilter} onChange={v => { setSkillTypeFilter(v); setPage(1); }} options={[['', 'All Skill Types'], ['TECHNICAL', 'Technical Skills'], ['GENERAL', 'General Skills']]} title="Skill Type" />
+          <Sel value={deptFilter} onChange={v => { setDeptFilter(v); setPage(1); }} options={[['', 'All departments'], ...depts.map(d => [String(d.id), d.name + (d.active ? '' : ' (inactive)')])]} title="Department" />
           <Sel value={status} onChange={pick} options={FILTERS} title="Status" />
           <Sel value={sort} onChange={v => { setSort(v); setPage(1); }} options={[['updated', 'Recently updated'], ['title', 'Title A–Z']]} title="Sort" />
           {can(me, 'forms.create') ? <Toggle on={mine} onClick={() => { setMine(!mine); setPage(1); }} label="Only mine" /> : null}
@@ -126,8 +141,8 @@ function ContentList({ S }) {
           : !data ? <EmptyState icon="icon-loader" title="Loading assessments…" />
           : <>
             <DataTable columns={cols} rows={data.rows} minWidth={760} rowKey={r => r.id}
-              empty={<EmptyState icon="icon-file-pen-line" title={dq || status !== 'All' || mine ? 'No assessments match' : 'No assessments yet'}
-                text={dq || status !== 'All' || mine ? 'Try a different search or status.' : can(me, 'forms.create') ? 'Start with "New assessment", then add questions or upload them from the template.' : 'Approved and published assessments will appear here.'} />} />
+              empty={<EmptyState icon="icon-file-pen-line" title={dq || status !== 'All' || mine || deptFilter || skillTypeFilter ? 'No assessments match' : 'No assessments yet'}
+                text={dq || status !== 'All' || mine || deptFilter || skillTypeFilter ? 'Try a different search or filter.' : can(me, 'forms.create') ? 'Start with "New assessment", then add questions or upload them from the template.' : 'Approved and published assessments will appear here.'} />} />
             <Pager page={data.page} size={data.size} total={data.total} onPage={setPage} />
             {loading ? <div style={{ ...MUTED, padding: '0 20px 12px' }}>Updating…</div> : null}
           </>}
@@ -145,33 +160,147 @@ function SettingsFields({ v, set, disabled }) {
       <Field label="TITLE"><input style={INPUT} value={v.title} onChange={f('title')} disabled={disabled} maxLength={LIMITS.title} placeholder="e.g. Front Desk Service · Officer" /></Field>
       <Field label="DESCRIPTION" hint="What the assessment covers (shown in lists)."><textarea style={TEXTAREA} value={v.description || ''} onChange={f('description')} disabled={disabled} maxLength={LIMITS.description} /></Field>
       <Field label="INSTRUCTIONS FOR PARTICIPANTS" hint="Shown before the first question."><textarea style={TEXTAREA} value={v.instructions || ''} onChange={f('instructions')} disabled={disabled} maxLength={LIMITS.instructions} /></Field>
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-        <Field label="MAXIMUM ATTEMPTS" hint="Default 3 (Settings > Scoring & Attempts). An assignment can override it." style={{ flex: '1 1 160px' }}>
-          <input type="number" min="1" max={LIMITS.maxAttempts} style={INPUT} value={v.maxAttempts} onChange={f('maxAttempts')} disabled={disabled} /></Field>
-        <Field label="RESULTS SHOWN TO STAFF" style={{ flex: '2 1 240px' }}>
-          <Sel value={v.resultRelease} onChange={x => set({ ...v, resultRelease: x })} disabled={disabled} options={Object.entries(RELEASE_LABEL)} /></Field>
-      </div>
+      <Field label="RESULTS SHOWN TO STAFF">
+        <Sel value={v.resultRelease} onChange={x => set({ ...v, resultRelease: x })} disabled={disabled} options={Object.entries(RELEASE_LABEL)} /></Field>
     </div>
   );
 }
+
 function NewAssessment({ open, onClose, onMade, canPickPeople, deptIds }) {
-  const blank = { title: '', description: '', instructions: '', maxAttempts: 3, resultRelease: 'IMMEDIATE' };
-  const [v, setV] = useState(blank), [aud, setAud] = useState(null), [busy, setBusy] = useState(false), [err, setErr] = useState('');
-  useEffect(() => { if (open) { setV(blank); setAud(null); setErr(''); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lk = useLoad('/api/lookups');
+  const depts = (lk.data && lk.data.departments) || [];
+  const limitedDepts = Array.isArray(deptIds) ? depts.filter(d => deptIds.includes(d.id)) : depts;
+
+  const [skillType, setSkillType] = useState('TECHNICAL');
+  const [departmentId, setDepartmentId] = useState('');
+  const [jobLevel, setJobLevel] = useState('LEVEL_9');
+  const [customTitle, setCustomTitle] = useState('');
+  const [manualTitle, setManualTitle] = useState(false);
+  const [description, setDescription] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [resultRelease, setResultRelease] = useState('IMMEDIATE');
+  const [aud, setAud] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const autoTitle = computeAssessmentTitle(skillType, departmentId, jobLevel, depts);
+  const finalTitle = manualTitle ? customTitle : autoTitle;
+
+  useEffect(() => {
+    if (open) {
+      setSkillType('TECHNICAL');
+      setDepartmentId(limitedDepts[0] ? String(limitedDepts[0].id) : '');
+      setJobLevel('LEVEL_9');
+      setCustomTitle('');
+      setManualTitle(false);
+      setDescription('');
+      setInstructions('');
+      setResultRelease('IMMEDIATE');
+      setAud(null);
+      setErr('');
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const audErr = audienceError(aud);
   const save = async () => {
+    if (skillType === 'TECHNICAL' && !departmentId) {
+      setErr('Please select a department for this technical skills assessment.');
+      return;
+    }
     if (audErr) { setErr(audErr); return; }
     setBusy(true); setErr('');
-    try { const d = await call('POST', '/api/content', { ...v, maxAttempts: Number(v.maxAttempts), audience: audienceBody(aud) }); onClose(); onMade(d.id); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+    try {
+      const payload = {
+        title: finalTitle.trim(),
+        description: description.trim(),
+        instructions: instructions.trim(),
+        skillType,
+        departmentId: skillType === 'GENERAL' ? null : Number(departmentId),
+        jobLevel,
+        resultRelease,
+        audience: audienceBody(aud),
+      };
+      const d = await call('POST', '/api/content', payload);
+      onClose();
+      onMade(d.id);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   };
+
   return (
-    <Drawer open={open} title="New assessment" sub="Starts as a Draft (version 1). Choose who it is for, then build the questions in the Form Builder and submit it for review." onClose={onClose} width={680}
-      footer={<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>{err ? <span style={ERR}>{err}</span> : null}<Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" disabled={busy || v.title.trim().length < 3} onClick={save}>{busy ? 'Creating…' : 'Create and open the Form Builder'}</Btn></div>}>
-      <div style={{ padding: '18px 22px', display: 'grid', gap: '22px' }}>
-        <SettingsFields v={v} set={setV} />
+    <Drawer open={open} title="New assessment" sub="Starts as a Draft (version 1). Select skill scope and target level, choose who it is for, then build questions in the Form Builder." onClose={onClose} width={720}
+      footer={<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>{err ? <span style={ERR}>{err}</span> : null}<Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" disabled={busy || finalTitle.trim().length < 3} onClick={save}>{busy ? 'Creating…' : 'Create and open Form Builder'}</Btn></div>}>
+      <div style={{ padding: '18px 22px', display: 'grid', gap: '20px' }}>
+        
+        {/* SKILL TYPE SELECTION */}
+        <div style={{ display: 'grid', gap: '6px' }}>
+          <label style={{ font: '600 11.5px Inter,sans-serif', color: '#374151', textTransform: 'uppercase', letterSpacing: '.4px' }}>SKILL TYPE *</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <button type="button" onClick={() => { setSkillType('TECHNICAL'); setErr(''); }}
+              style={{ padding: '12px 14px', borderRadius: '12px', textAlign: 'left', cursor: 'pointer', border: skillType === 'TECHNICAL' ? '2px solid #15803d' : '1px solid rgba(15,35,65,.15)', background: skillType === 'TECHNICAL' ? '#f0fdf4' : '#fff' }}>
+              <div style={{ fontWeight: 600, fontSize: '13.5px', color: skillType === 'TECHNICAL' ? '#15803d' : '#111827' }}>Technical Skills</div>
+              <div style={{ fontSize: '11.5px', color: '#6b7280', marginTop: '2px' }}>Department-specific competency assessment (e.g. HR, RBDI)</div>
+            </button>
+            <button type="button" onClick={() => { setSkillType('GENERAL'); setDepartmentId(''); setErr(''); }}
+              style={{ padding: '12px 14px', borderRadius: '12px', textAlign: 'left', cursor: 'pointer', border: skillType === 'GENERAL' ? '2px solid #15803d' : '1px solid rgba(15,35,65,.15)', background: skillType === 'GENERAL' ? '#f0fdf4' : '#fff' }}>
+              <div style={{ fontWeight: 600, fontSize: '13.5px', color: skillType === 'GENERAL' ? '#15803d' : '#111827' }}>General Skills</div>
+              <div style={{ fontSize: '11.5px', color: '#6b7280', marginTop: '2px' }}>Universal cross-department competencies applicable across all staff</div>
+            </button>
+          </div>
+        </div>
+
+        {/* DEPARTMENT SELECTION: Locked & hidden if General */}
+        {skillType === 'TECHNICAL' ? (
+          <Field label="DEPARTMENT *" hint="Choose the department whose technical matrix applies to this assessment.">
+            <Sel value={departmentId} onChange={v => { setDepartmentId(v); setErr(''); }} options={[['', 'Select a department...'], ...limitedDepts.map(d => [String(d.id), d.name + (d.active ? '' : ' (inactive)')])]} />
+          </Field>
+        ) : (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', fontSize: '12.5px', color: '#475569' }}>
+            <i className="icon-info" style={{ marginRight: '6px', color: '#3b82f6' }}></i>
+            <b>General Skills:</b> Applies universally across all departments. Department selection is automatically disabled.
+          </div>
+        )}
+
+        {/* JOB LEVEL & ROLE SELECTION (Starting from Level 9 for Assistant Officer) */}
+        <Field label="TARGET LEVEL & ROLE *" hint="Select the official DVLA job level and hierarchy tier.">
+          <Sel value={jobLevel} onChange={v => setJobLevel(v)} options={JOB_LEVELS.map(j => [j.id, j.label])} />
+        </Field>
+
+        {/* AUTOMATIC TITLE PREVIEW */}
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '.4px' }}>ASSESSMENT TITLE</span>
+            <button type="button" onClick={() => { if (!manualTitle) setCustomTitle(autoTitle); setManualTitle(!manualTitle); }} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontSize: '12px', color: '#15803d', textDecoration: 'underline' }}>
+              {manualTitle ? 'Reset to auto title' : 'Edit title manually'}
+            </button>
+          </div>
+          {manualTitle ? (
+            <input style={{ ...INPUT, marginTop: '4px' }} value={customTitle} onChange={e => setCustomTitle(e.target.value)} maxLength={LIMITS.title} />
+          ) : (
+            <div style={{ fontSize: '14.5px', fontWeight: 600, color: '#166534', lineHeight: 1.4 }}>{autoTitle}</div>
+          )}
+          <div style={{ fontSize: '11px', color: '#15803d', opacity: 0.85, marginTop: '4px' }}>
+            <i className="icon-check" style={{ marginRight: '4px' }}></i>Title is automatically generated from your department and level selections.
+          </div>
+        </div>
+
+        {/* DESCRIPTION & INSTRUCTIONS */}
+        <Field label="DESCRIPTION" hint="What this assessment covers (shown in candidate lists).">
+          <textarea style={TEXTAREA} value={description} onChange={e => setDescription(e.target.value)} maxLength={LIMITS.description} placeholder="Optional brief overview of competencies assessed..." />
+        </Field>
+        <Field label="INSTRUCTIONS FOR PARTICIPANTS" hint="Shown to candidate before questions begin.">
+          <textarea style={TEXTAREA} value={instructions} onChange={e => setInstructions(e.target.value)} maxLength={LIMITS.instructions} placeholder="Optional instructions or guidance for candidates..." />
+        </Field>
+        <Field label="RESULTS SHOWN TO STAFF">
+          <Sel value={resultRelease} onChange={setResultRelease} options={Object.entries(RELEASE_LABEL)} />
+        </Field>
+
+        {/* WHO IT IS FOR */}
         <div style={{ display: 'grid', gap: '10px' }}>
-          <div style={{ font: '600 13px Inter,sans-serif', color: '#111827' }}>Who it is for</div>
+          <div style={{ font: '600 13px Inter,sans-serif', color: '#111827' }}>Who it is for (Planned Audience)</div>
           <AudienceFields aud={aud} set={setAud} canPickPeople={canPickPeople} deptIds={deptIds} />
         </div>
       </div>
@@ -370,17 +499,26 @@ function BulkUpload({ open, id, data, onClose, onDone }) {
   const pick = async f => {
     setFile(f); setRows(null); setCheck(null); setErr('');
     if (!f) return;
-    if (!/\.(xlsx|xls|csv)$/i.test(f.name)) { setErr('Choose an Excel (.xlsx) or CSV file.'); return; }
+    if (!/\.(docx|doc|xlsx|xls|csv)$/i.test(f.name)) {
+      setErr('Choose a Word document (.docx), Excel (.xlsx), or CSV file.');
+      return;
+    }
     if (f.size > MAX_FILE) { setErr('The file is larger than 2 MB. Split it into smaller files.'); return; }
     try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
-      const name = wb.SheetNames.find(n => /question/i.test(n)) || wb.SheetNames[0];
-      const all = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: false, blankrows: false });
-      const r = all.map(row => row.slice(0, 30).map(c => String(c == null ? '' : c).slice(0, LIMITS.text + 50)));
+      let r = [];
+      if (/\.docx$/i.test(f.name)) {
+        const { parseDocxToRows } = await import('@/lib/docxParser');
+        r = await parseDocxToRows(await f.arrayBuffer());
+      } else {
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false });
+        const name = wb.SheetNames.find(n => /question/i.test(n)) || wb.SheetNames[0];
+        const all = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: false, blankrows: false });
+        r = all.map(row => row.slice(0, 30).map(c => String(c == null ? '' : c).slice(0, LIMITS.text + 50)));
+      }
       if (r.length > LIMITS.importRows + 1) { setErr('The file has more than ' + LIMITS.importRows + ' rows. Split it into smaller files.'); return; }
       setRows(r); run('check', r);
-    } catch (e) { setErr('This file could not be read. Save it as .xlsx or .csv from the template and try again.'); }
+    } catch (e) { setErr(e.message || 'This file could not be read. Save it as .docx, .xlsx or .csv from the template and try again.'); }
   };
   const clean = check && !check.fileErrors.length && !check.errors.length && check.valid > 0;
   return (
@@ -389,12 +527,15 @@ function BulkUpload({ open, id, data, onClose, onDone }) {
         {check ? <span style={clean ? { ...MUTED, color: '#15803d' } : ERR}>{clean ? check.valid + ' question' + (check.valid === 1 ? '' : 's') + ' ready to import' : 'Fix the problems and upload the file again'}</span> : null}
         <Btn onClick={onClose}>Close</Btn><Btn kind="primary" icon="icon-upload" disabled={!clean || busy} onClick={() => setConfirm(true)}>Import {clean ? check.valid : ''} question{clean && check.valid === 1 ? '' : 's'}</Btn></div>}>
       <div style={{ padding: '18px 22px', display: 'grid', gap: '16px' }}>
-        <Card title="1. Download the template" sub="One question per row. The Competencies sheet lists every code you can use.">
-          <a href="/api/content/template" download style={{ textDecoration: 'none' }}><Btn icon="icon-download">Download Excel template</Btn></a>
+        <Card title="1. Download the template" sub="Download the official Excel or Word template. One question per row or formatted block.">
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <a href="/api/content/template-docx" download style={{ textDecoration: 'none' }}><Btn icon="icon-file-text">Download Word (.docx) template</Btn></a>
+            <a href="/api/content/template" download style={{ textDecoration: 'none' }}><Btn icon="icon-download">Download Excel template</Btn></a>
+          </div>
         </Card>
-        <Card title="2. Upload your file" sub="Excel (.xlsx) or CSV, up to 2 MB and 1,000 questions.">
+        <Card title="2. Upload your file" sub="Word (.docx), Excel (.xlsx) or CSV, up to 2 MB and 1,000 questions.">
           <div style={{ display: 'grid', gap: '10px' }}>
-            <input type="file" accept=".xlsx,.xls,.csv" onChange={e => pick(e.target.files && e.target.files[0])} aria-label="Question file" style={{ font: '400 13px Inter,sans-serif' }} />
+            <input type="file" accept=".docx,.doc,.xlsx,.xls,.csv" onChange={e => pick(e.target.files && e.target.files[0])} aria-label="Question file" style={{ font: '400 13px Inter,sans-serif' }} />
             <Toggle on={replace} onClick={() => { const r = !replace; setReplace(r); if (rows) run('check', rows, r); }} label="Replace the questions already in this version" desc={replace ? 'All ' + data.version.questions.length + ' current questions will be removed first.' : 'New questions are added after the ' + data.version.questions.length + ' already there.'} />
             {busy ? <span style={MUTED}>Checking…</span> : null}
             {err ? <div style={ERR} role="alert">{err}</div> : null}
@@ -429,7 +570,7 @@ function SettingsTab({ data, editable, reload, toast, id, me }) {
     const ae = audienceError(aud);
     if (!done && ae) { setErr(ae); return; }
     setBusy(true); setErr('');
-    try { const r = await call('PATCH', '/api/content/' + id, { ...v, description: v.description || '', instructions: v.instructions || '', maxAttempts: Number(v.maxAttempts), ...(done ? {} : { audience: audienceBody(aud) }) }); reload(); toast(r.pending ? 'Saved; settings apply when the new version is published' : 'Settings saved'); }
+    try { const r = await call('PATCH', '/api/content/' + id, { ...v, description: v.description || '', instructions: v.instructions || '', ...(done ? {} : { audience: audienceBody(aud) }) }); reload(); toast(r.pending ? 'Saved; settings apply when the new version is published' : 'Settings saved'); }
     catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   return (

@@ -23,8 +23,9 @@ import { randomUUID } from 'node:crypto';
 // ===== ENUMS =====
 export const staffStatusEnum = (col = 'status') => mysqlEnum(col, ['ACTIVE', 'INACTIVE', 'LEFT']);
 export const accountStatusEnum = (col = 'status') => mysqlEnum(col, ['ACTIVE', 'MUST_CHANGE_PASSWORD', 'SUSPENDED', 'DISABLED']);
-export const roleEnum = (col = 'role') => mysqlEnum(col, ['STAFF', 'SUPERVISOR', 'CREATOR', 'ADMIN', 'TICKET_RESOLVER']);
+export const roleEnum = (col = 'role') => mysqlEnum(col, ['STAFF', 'SUPERVISOR', 'STATION_MANAGER', 'CREATOR', 'ADMIN', 'TICKET_RESOLVER']);
 export const deptScopeEnum = (col = 'deptScope') => mysqlEnum(col, ['ALL', 'OWN', 'SELECTED']);
+export const skillTypeEnum = (col = 'skillType') => mysqlEnum(col, ['GENERAL', 'TECHNICAL']);
 export const assessmentStatusEnum = (col = 'status') => mysqlEnum(col, ['DRAFT', 'SUBMITTED', 'RETURNED', 'REJECTED', 'APPROVED', 'PUBLISHED', 'ARCHIVED']);
 export const resultReleaseEnum = (col = 'resultRelease') => mysqlEnum(col, ['IMMEDIATE', 'AFTER_DEADLINE', 'MANUAL']);
 export const questionTypeEnum = (col = 'type') => mysqlEnum(col, ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'TEXT']);
@@ -229,15 +230,20 @@ export const assessments = mysqlTable('Assessment', {
   description: text('description'),
   instructions: text('instructions'),
   createdById: int('createdById').notNull().references(() => accounts.id),
+  departmentId: int('departmentId').references(() => departments.id),
+  skillType: skillTypeEnum('skillType').default('TECHNICAL').notNull(),
+  jobLevel: varchar('jobLevel', { length: 100 }),
   status: assessmentStatusEnum('status').default('DRAFT').notNull(),
-  maxAttempts: int('maxAttempts').default(3).notNull(),
+  maxAttempts: int('maxAttempts').default(3),
   resultRelease: resultReleaseEnum('resultRelease').default('IMMEDIATE').notNull(),
   resultsReleasedAt: timestamp('resultsReleasedAt', { fsp: 3 }),
   sourceRef: varchar('sourceRef', { length: 191 }).unique(),
   plannedAssignment: json('plannedAssignment'),
   createdAt: timestamp('createdAt', { fsp: 3 }).defaultNow().notNull(),
   updatedAt: timestamp('updatedAt', { fsp: 3 }).defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  index('Assessment_departmentId_idx').on(table.departmentId),
+]);
 
 export const assessmentVersions = mysqlTable('AssessmentVersion', {
   id: int('id').autoincrement().primaryKey(),
@@ -535,6 +541,7 @@ export const systemSettings = mysqlTable('SystemSetting', {
 export const departmentsRelations = relations(departments, ({ many }) => ({
   staff: many(staffRecords),
   competencies: many(competencies),
+  assessments: many(assessments),
   scopeAccounts: many(accountScopeDepartments),
   supervisorLinks: many(supervisorAssignments),
   assignments: many(assessmentAssignments),
@@ -645,6 +652,7 @@ export const competenciesRelations = relations(competencies, ({ one, many }) => 
 
 export const assessmentsRelations = relations(assessments, ({ one, many }) => ({
   createdBy: one(accounts, { fields: [assessments.createdById], references: [accounts.id], relationName: 'AssessmentCreator' }),
+  department: one(departments, { fields: [assessments.departmentId], references: [departments.id] }),
   versions: many(assessmentVersions),
   assignments: many(assessmentAssignments),
   attempts: many(attempts),

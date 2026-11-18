@@ -19,7 +19,7 @@ USE `skill_matrix`;
 
 -- =============================================================================
 -- 1. TABLES
--- =============================================================================
+-- ============================================================================= 
 
 CREATE TABLE IF NOT EXISTS `Department` (
     `id` INT NOT NULL AUTO_INCREMENT,
@@ -239,8 +239,11 @@ CREATE TABLE IF NOT EXISTS `Assessment` (
     `description` TEXT NULL,
     `instructions` TEXT NULL,
     `createdById` INT NOT NULL,
+    `departmentId` INT NULL,
+    `skillType` ENUM('GENERAL', 'TECHNICAL') NOT NULL DEFAULT 'TECHNICAL',
+    `jobLevel` VARCHAR(100) NULL,
     `status` ENUM('DRAFT', 'SUBMITTED', 'RETURNED', 'REJECTED', 'APPROVED', 'PUBLISHED', 'ARCHIVED') NOT NULL DEFAULT 'DRAFT',
-    `maxAttempts` INT NOT NULL DEFAULT 3,
+    `maxAttempts` INT NULL DEFAULT 3,
     `resultRelease` ENUM('IMMEDIATE', 'AFTER_DEADLINE', 'MANUAL') NOT NULL DEFAULT 'IMMEDIATE',
     `resultsReleasedAt` DATETIME(3) NULL,
     `sourceRef` VARCHAR(191) NULL,
@@ -249,7 +252,9 @@ CREATE TABLE IF NOT EXISTS `Assessment` (
     `updatedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (`id`),
     UNIQUE KEY `Assessment_sourceRef_key` (`sourceRef`),
-    CONSTRAINT `Assessment_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `Account` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    INDEX `Assessment_departmentId_idx` (`departmentId`),
+    CONSTRAINT `Assessment_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `Account` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT `Assessment_departmentId_fkey` FOREIGN KEY (`departmentId`) REFERENCES `Department` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `AssessmentVersion` (
