@@ -14,13 +14,13 @@
 //   AUDIT · Detail drawer
 // =============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
-import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, CompetencyBadge, GapStatusBadge, download, INPUT } from '@/components/shared/smUI';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, CompetencyBadge, GapStatusBadge, download, INPUT, Spinner } from '@/components/shared/smUI';
 import { api, useLoad, qs, fmtDateTime } from '@/components/shared/smApi';
 import { validateConfig, competencyStatus, gapStatus, formatAverage } from '@/lib/scoring';
 
 // ===== SETTINGS · Shared parts =====
 const ErrorLine = ({ text }) => (text ? <div role="alert" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: '10px', padding: '8px 12px', fontSize: '13px' }}>{text}</div> : null);
-const Loading = ({ text = 'Loading…' }) => <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280', fontSize: '13px' }}>{text}</div>;
+const Loading = ({ text = 'Loading…' }) => <div style={{ padding: '40px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}><Spinner size="md" tone="brand" label={text} /></div>;
 const LoadError = ({ L }) => <Card><ErrorLine text={L.error} /><div style={{ marginTop: '10px' }}><Btn icon="icon-refresh-cw" onClick={L.reload}>Try again</Btn></div></Card>;
 const TEXTAREA = { ...INPUT, height: 'auto', minHeight: '80px', padding: '8px 10px', resize: 'vertical', lineHeight: 1.45 };
 const fieldErr = (fields, k) => (fields && fields[k] ? <span style={{ color: '#b91c1c', font: '400 11.5px Inter,sans-serif' }}>{fields[k][0]}</span> : null);

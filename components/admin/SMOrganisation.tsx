@@ -12,7 +12,7 @@
 //   ORG · Grades, ORG · Stations & Locations, ORG · Supervisors
 // =============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
-import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, KpiTile, download, INPUT, LABEL } from '@/components/shared/smUI';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, KpiTile, download, INPUT, LABEL, Spinner } from '@/components/shared/smUI';
 import { api, qs, useLoad, fmtDate } from '@/components/shared/smApi';
 
 // ===== ORG · Helpers =====
@@ -48,7 +48,7 @@ function Pager({ page, pageSize, total, onPage }) {
     </div>
   );
 }
-const Loading = () => <div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>Loading…</div>;
+const Loading = () => <div style={{ padding: '36px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}><Spinner size="md" tone="brand" label="Loading…" /></div>;
 const LoadError = ({ text, retry }) => <EmptyState icon="icon-circle-alert" title="Could not load this list" text={text} action={retry ? <Btn icon="icon-refresh-cw" onClick={retry}>Try again</Btn> : null} />;
 
 // ===== ORG · Page wrapper =====

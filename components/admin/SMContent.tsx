@@ -17,7 +17,7 @@
 //   CONTENT · Settings tab · Who it is for
 // =============================================================================
 import React, { useEffect, useState } from 'react';
-import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, INPUT } from '@/components/shared/smUI';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, DataTable, Drawer, INPUT, Spinner } from '@/components/shared/smUI';
 import { useLoad, qs, fmtDate, fmtDateTime } from '@/components/shared/smApi';
 import { STATUS_LABEL, STATUS_COLOURS, RELEASE_LABEL, LIMITS, AUDIENCE_TARGETS, AUDIENCE_LABEL, audienceProblems } from '@/lib/server/content';
 import { JOB_LEVELS, JOB_LEVEL_LABEL, computeAssessmentTitle } from '@/lib/levels';
@@ -537,7 +537,19 @@ function BulkUpload({ open, id, data, onClose, onDone }) {
           <div style={{ display: 'grid', gap: '10px' }}>
             <input type="file" accept=".docx,.doc,.xlsx,.xls,.csv" onChange={e => pick(e.target.files && e.target.files[0])} aria-label="Question file" style={{ font: '400 13px Inter,sans-serif' }} />
             <Toggle on={replace} onClick={() => { const r = !replace; setReplace(r); if (rows) run('check', rows, r); }} label="Replace the questions already in this version" desc={replace ? 'All ' + data.version.questions.length + ' current questions will be removed first.' : 'New questions are added after the ' + data.version.questions.length + ' already there.'} />
-            {busy ? <span style={MUTED}>Checking…</span> : null}
+            {busy ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '12px', background: 'rgba(21,144,76,0.06)', border: '1px solid rgba(21,144,76,0.18)', boxShadow: '0 2px 8px rgba(21,144,76,0.05)' }}>
+                <Spinner size="sm" tone="brand" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ font: '600 13px Inter,sans-serif', color: '#15803d' }}>
+                    {file ? `Checking "${file.name}"…` : 'Checking questions…'}
+                  </span>
+                  <span style={{ font: '400 11.5px Inter,sans-serif', color: '#4b5563' }}>
+                    Validating question formats, options, and competency tags across rows.
+                  </span>
+                </div>
+              </div>
+            ) : null}
             {err ? <div style={ERR} role="alert">{err}</div> : null}
           </div>
         </Card>

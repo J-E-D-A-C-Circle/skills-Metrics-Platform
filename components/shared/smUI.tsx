@@ -84,17 +84,175 @@ export function Card({ title, sub, actions, children, style, bodyStyle, flush })
   );
 }
 
+// ===== UI KIT · Spinner =====
+// Modern, fluid circular progress indicator with gradient stroke and organic breath animation.
+export function Spinner({ size = 'md', tone = 'brand', label, inline = false, style, className }) {
+  const dim = typeof size === 'number' ? size : ({
+    xs: 15,
+    sm: 18,
+    md: 26,
+    lg: 38,
+    xl: 50,
+  }[size] || 26);
+
+  const strokeWidth = dim >= 40 ? 3.5 : dim >= 26 ? 3 : 2.4;
+  const radius = (dim - strokeWidth * 2) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  const tones = {
+    brand: {
+      track: 'rgba(21, 144, 76, 0.12)',
+      gradientStart: '#2fb36b',
+      gradientEnd: '#15803d',
+      textColor: '#15803d',
+      glow: 'rgba(21, 144, 76, 0.28)',
+    },
+    white: {
+      track: 'rgba(255, 255, 255, 0.28)',
+      gradientStart: '#ffffff',
+      gradientEnd: '#f1f5f9',
+      textColor: '#ffffff',
+      glow: 'rgba(255, 255, 255, 0.45)',
+    },
+    muted: {
+      track: 'rgba(156, 163, 175, 0.16)',
+      gradientStart: '#9ca3af',
+      gradientEnd: '#4b5563',
+      textColor: '#6b7280',
+      glow: 'rgba(156, 163, 175, 0.22)',
+    },
+    dark: {
+      track: 'rgba(17, 24, 39, 0.1)',
+      gradientStart: '#374151',
+      gradientEnd: '#111827',
+      textColor: '#111827',
+      glow: 'rgba(17, 24, 39, 0.2)',
+    },
+  };
+  const activeTone = tones[tone] || tones.brand;
+  const gradientId = React.useId ? React.useId() : 'sm-spin-grad';
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={className}
+      style={{
+        display: 'inline-flex',
+        flexDirection: inline || !label ? 'row' : 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: label ? (inline ? '8px' : dim >= 36 ? '10px' : '6px') : '0',
+        ...(style || {}),
+      }}
+    >
+      <div style={{ position: 'relative', width: dim, height: dim, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <svg
+          viewBox={`0 0 ${dim} ${dim}`}
+          width={dim}
+          height={dim}
+          style={{
+            animation: 'sm-spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+            transformOrigin: 'center center',
+          }}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={activeTone.gradientStart} />
+              <stop offset="100%" stopColor={activeTone.gradientEnd} />
+            </linearGradient>
+          </defs>
+
+          {/* Background circle track */}
+          <circle
+            cx={dim / 2}
+            cy={dim / 2}
+            r={radius}
+            fill="none"
+            stroke={activeTone.track}
+            strokeWidth={strokeWidth}
+          />
+
+          {/* Active spinning arc with tapered cap and gradient glow */}
+          <circle
+            cx={dim / 2}
+            cy={dim / 2}
+            r={radius}
+            fill="none"
+            stroke={`url(#${gradientId})`}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * 0.32}
+            style={{
+              filter: `drop-shadow(0 1px 2px ${activeTone.glow})`,
+            }}
+          />
+        </svg>
+      </div>
+
+      {label ? (
+        <span
+          style={{
+            font: '500 ' + (dim >= 36 ? '13px' : '12px') + ' Inter,sans-serif',
+            color: activeTone.textColor,
+            letterSpacing: '0.01em',
+            animation: 'sm-pulse 1.8s ease-in-out infinite',
+          }}
+        >
+          {label}
+        </span>
+      ) : (
+        <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>
+          Loading…
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ===== UI KIT · Full State Loader =====
+export function LoadingState({ title = 'Loading…', text, size = 'lg', tone = 'brand' }) {
+  return (
+    <div style={{ padding: '48px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px' }}>
+      <div style={{
+        width: '60px',
+        height: '60px',
+        borderRadius: '18px',
+        background: 'radial-gradient(circle at center, rgba(47,179,107,0.14) 0%, rgba(21,144,76,0.03) 75%)',
+        border: '1px solid rgba(21,144,76,0.16)',
+        boxShadow: '0 8px 24px -4px rgba(21,144,76,0.12)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <Spinner size={size} tone={tone} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontSize: '15px', fontWeight: '600', color: '#111827', letterSpacing: '-0.2px' }}>{title}</div>
+        {text ? <div style={{ fontSize: '13px', color: '#6b7280', maxWidth: '380px', lineHeight: 1.5 }}>{text}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 // ===== UI KIT · Buttons =====
-export function Btn({ kind = 'secondary', icon, children, onClick, disabled, title, small, type }) {
+export function Btn({ kind = 'secondary', icon, children, onClick, disabled, title, small, type, busy, loading }) {
+  const isBusy = !!(busy || loading);
   const h = small ? '30px' : '36px';
-  const base = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px', height: h, padding: small ? '0 10px' : '0 14px', cursor: disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', font: (kind === 'primary' ? '600 ' : '500 ') + (small ? '12px' : '13px') + ' Inter,sans-serif', opacity: disabled ? 0.55 : 1 };
+  const base = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px', height: h, padding: small ? '0 10px' : '0 14px', cursor: (disabled || isBusy) ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', font: (kind === 'primary' ? '600 ' : '500 ') + (small ? '12px' : '13px') + ' Inter,sans-serif', opacity: disabled ? 0.55 : 1, transition: 'all 0.15s ease' };
   const k = {
     primary: { border: '0', borderRadius: '999px', background: disabled ? '#a3acb9' : GREEN, boxShadow: disabled ? 'none' : '0 6px 16px rgba(21,144,76,.32),inset 0 1px 0 rgba(255,255,255,.35)', color: '#fff' },
     secondary: { border: '1px solid rgba(15,35,65,.14)', borderRadius: '10px', background: '#fff', color: '#374151' },
     danger: { border: '1px solid #fecaca', borderRadius: '10px', background: '#fff', color: '#b91c1c' },
     ghost: { border: '0', borderRadius: '10px', background: 'transparent', color: '#127a42', padding: '0 6px' },
   }[kind];
-  return <button type={type || 'button'} title={title} aria-label={title} disabled={disabled} onClick={disabled ? undefined : onClick} style={{ ...base, ...k }}>{icon ? <i className={icon} style={{ fontSize: small ? '13px' : '14px' }}></i> : null}{children}</button>;
+  return (
+    <button type={type || 'button'} title={title} aria-label={title} disabled={disabled || isBusy} onClick={(disabled || isBusy) ? undefined : onClick} style={{ ...base, ...k }}>
+      {isBusy ? <Spinner size={small ? 'xs' : 'sm'} tone={kind === 'primary' ? 'white' : 'brand'} /> : icon ? <i className={icon} style={{ fontSize: small ? '13px' : '14px' }}></i> : null}
+      {children}
+    </button>
+  );
 }
 
 // ===== UI KIT · Form controls (select, search, field, toggle) =====
@@ -184,11 +342,31 @@ export function Confirm({ open, title, text, confirmText = 'Confirm', danger, on
 
 // ===== UI KIT · Empty state =====
 export function EmptyState({ icon = 'icon-inbox', title, text, action }) {
+  const isLoading = icon === 'icon-loader' || icon === 'icon-loading';
   return (
-    <div style={{ padding: '40px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-      <span style={{ width: '44px', height: '44px', borderRadius: '14px', background: '#f3f4f6', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i className={icon} style={{ fontSize: '20px' }}></i></span>
+    <div style={{ padding: '40px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+      {isLoading ? (
+        <div style={{
+          width: '54px',
+          height: '54px',
+          borderRadius: '16px',
+          background: 'radial-gradient(circle at center, rgba(47,179,107,0.14) 0%, rgba(21,144,76,0.03) 75%)',
+          border: '1px solid rgba(21,144,76,0.16)',
+          boxShadow: '0 8px 22px -4px rgba(21,144,76,0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: '2px',
+        }}>
+          <Spinner size="md" tone="brand" />
+        </div>
+      ) : (
+        <span style={{ width: '44px', height: '44px', borderRadius: '14px', background: '#f3f4f6', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <i className={icon} style={{ fontSize: '20px' }}></i>
+        </span>
+      )}
       <div style={{ fontSize: '14.5px', fontWeight: '600', color: '#111827' }}>{title}</div>
-      {text ? <div style={{ fontSize: '13px', color: '#6b7280', maxWidth: '420px' }}>{text}</div> : null}
+      {text ? <div style={{ fontSize: '13px', color: '#6b7280', maxWidth: '420px', lineHeight: 1.5 }}>{text}</div> : null}
       {action || null}
     </div>
   );

@@ -31,7 +31,7 @@ import SMHelp from '../support/SMHelp';
 import { buildModel, ALL } from '../shared/smModel';
 import { JOB_LEVELS, BANKS, HR_FRAMEWORK, RBDI_FRAMEWORK } from '../shared/dvlaBanks';
 import { Select } from '../shared/select';
-import { TabsContext, avatarKey, Toast } from '../shared/smUI';
+import { TabsContext, avatarKey, Toast, Spinner } from '../shared/smUI';
 import { permsOf, pageKeys, defaultPerms, visibleDepts } from '../shared/smAccess';
 
 // ===== APP SHELL · Feature flags =====
@@ -609,7 +609,29 @@ class SkillMatrixApp extends React.Component {
   render() {
     // ===== APP SHELL · Waiting for the sign-in check =====
     // Plain page while GET /api/auth/me answers (Sign in itself shows straight away).
-    if (!this.state.authChecked && this.state.page !== 'signin') return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', font: '500 14px Inter,sans-serif', color: '#6b7280' }}>Loading…</div>;
+    if (!this.state.authChecked && this.state.page !== 'signin') {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', gap: '16px' }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '20px',
+            background: 'radial-gradient(circle at center, rgba(47,179,107,0.15) 0%, rgba(21,144,76,0.03) 70%)',
+            border: '1px solid rgba(21,144,76,0.16)',
+            boxShadow: '0 12px 30px -4px rgba(21,144,76,0.14)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Spinner size="lg" tone="brand" />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <div style={{ font: '600 15px Inter,sans-serif', color: '#111827', letterSpacing: '-0.2px' }}>Skills Assessment Platform</div>
+            <div style={{ font: '400 12.5px Inter,sans-serif', color: '#6b7280' }}>Connecting to secure session…</div>
+          </div>
+        </div>
+      );
+    }
     const __v = this.renderVals() || {};
     const P = { data: __v.data, role: __v.role, vw: __v.vw, go: __v.go, features: __v.features, model: __v.model, scope: __v.scope, myDept: __v.myDept, deptLocked: __v.deptLocked, can: __v.can };
     const R = { ...P, data: __v.rdata, model: __v.rmodel };

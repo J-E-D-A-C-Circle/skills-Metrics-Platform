@@ -15,7 +15,7 @@
 // chosen; leaving and coming back resumes at the same place.
 // =============================================================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Btn, Badge, CompetencyBadge, GapStatusBadge, Avg, Confirm, EmptyState, DataTable, CARD, GREEN } from '@/components/shared/smUI';
+import { Card, Btn, Badge, CompetencyBadge, GapStatusBadge, Avg, Confirm, EmptyState, DataTable, CARD, GREEN, LoadingState, Spinner } from '@/components/shared/smUI';
 import { api, fmtDate, fmtDateTime, fmtDuration } from '@/components/shared/smApi';
 import { formatAverage } from '@/lib/scoring';
 import {
@@ -473,7 +473,7 @@ export default function SMTake({ go, id, vw, toast }) {
   );
 
   // ===== TAKE · Loading & errors =====
-  if (stage === 'loading') return wrap(<Card><div style={{ ...MUTED, padding: '30px', textAlign: 'center' }}>Loading…</div></Card>);
+  if (stage === 'loading') return wrap(<Card><LoadingState title="Preparing your assessment session…" text="Setting up questions, offline engine, and verification packages." /></Card>);
   if (stage === 'none') return wrap(<Card><EmptyState icon="icon-clipboard-list" title="Choose an assessment" text="Open My Assessments and pick the assessment you want to take." action={<Btn kind="primary" onClick={() => go('assessments')}>My Assessments</Btn>} /></Card>);
   if (stage === 'error') return wrap(<Card><EmptyState icon="icon-circle-alert" title="This assessment can't be opened" text={error} action={<Btn kind="primary" onClick={() => go('assessments')}>Back to My Assessments</Btn>} /></Card>);
   if (stage === 'closed') return wrap(<Card><EmptyState icon="icon-circle-alert" title="This attempt is closed" text={error} action={<Btn kind="primary" onClick={() => go('assessments')}>Back to My Assessments</Btn>} /></Card>);

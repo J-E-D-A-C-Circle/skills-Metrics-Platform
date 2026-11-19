@@ -10,7 +10,7 @@
 // Deactivating a competency or category only stops it being used for new content; saved results never change.
 // =============================================================================
 import React, { useMemo, useState } from 'react';
-import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, Drawer, INPUT, LABEL, KpiTile } from '@/components/shared/smUI';
+import { Page, PageHeader, Card, Btn, Sel, Search, Field, Toggle, Badge, Confirm, EmptyState, Drawer, INPUT, LABEL, KpiTile, Spinner } from '@/components/shared/smUI';
 import { api, qs, useLoad, fmtDate } from '@/components/shared/smApi';
 import { IMPORTANCE, scoreColours } from '@/lib/scoring';
 
@@ -84,7 +84,7 @@ export default function SMCompetencies(S) {
       {/* ===== FRAMEWORK · Category groups ===== */}
       <Card title={data ? rows.length + (filtered ? ' of ' + data.total : '') + ' competencies' : 'Competencies'} sub={data ? data.categories.length + ' categories · ' + data.rows.filter(c => c.active).length + ' active in this view' : null} flush>
         {error ? <EmptyState icon="icon-circle-alert" title="Could not load the framework" text={error} action={<Btn icon="icon-refresh-cw" onClick={reload}>Try again</Btn>} />
-          : !data ? <div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>Loading…</div>
+          : !data ? <div style={{ padding: '36px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}><Spinner size="md" tone="brand" label="Loading framework…" /></div>
           : !groups.length ? <EmptyState icon="icon-network" title={filtered ? 'No competencies match these filters' : 'No competencies yet'} text={filtered ? 'Try a different search or clear a filter.' : mayEdit ? 'Add a category, then add competencies to it.' : ''} />
           : <div style={{ opacity: loading ? 0.6 : 1 }}>{groups.map(g => (
             <div key={g.id} style={{ borderBottom: '1px solid rgba(15,35,65,.07)' }}>
@@ -145,7 +145,7 @@ function CompDrawer({ open, setOpen, data, mayEdit, toast, onChanged }) {
       footer={c && mayEdit ? <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
         {c.active ? <Btn icon="icon-circle-pause" onClick={() => setAsk(true)}>Deactivate</Btn> : <Btn icon="icon-circle-play" onClick={() => setAsk(true)}>Reactivate</Btn>}
         <Btn kind="primary" icon="icon-pencil" onClick={() => setOpen({ id: c.id, edit: true })}>Edit</Btn></div> : null}>
-      {d.error ? <EmptyState icon="icon-circle-alert" title="Could not load this competency" text={d.error} /> : !c ? <div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>Loading…</div> : (
+      {d.error ? <EmptyState icon="icon-circle-alert" title="Could not load this competency" text={d.error} /> : !c ? <div style={{ padding: '36px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}><Spinner size="md" tone="brand" label="Loading competency…" /></div> : (
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {err ? <div style={ERR}>{err}</div> : null}
           {!c.active ? <div style={NOTE}>This competency is inactive: it is not offered for new questions. Results already saved for it are kept unchanged.</div> : null}
@@ -198,7 +198,7 @@ function CompForm({ row, loading, data, presetCategory, onClose, onSaved }) {
   return (
     <Drawer open title={row ? 'Edit ' + row.name : 'Add competency'} sub={row ? 'Changes apply to new content and reports; saved scores are not recalculated.' : 'A new competency that questions can be mapped to.'} onClose={onClose} width={700}
       footer={<div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}><Btn onClick={onClose} disabled={busy}>Cancel</Btn><Btn kind="primary" icon="icon-check" onClick={save} disabled={busy || loading}>{busy ? 'Saving…' : row ? 'Save changes' : 'Add competency'}</Btn></div>}>
-      {loading ? <div style={{ padding: '30px', textAlign: 'center', fontSize: '13px', color: '#6b7280' }}>Loading…</div> : (
+      {loading ? <div style={{ padding: '36px', textAlign: 'center', display: 'flex', justifyContent: 'center' }}><Spinner size="md" tone="brand" label="Loading…" /></div> : (
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {err ? <div style={ERR}>{err}</div> : null}
           <div style={GRID}>
