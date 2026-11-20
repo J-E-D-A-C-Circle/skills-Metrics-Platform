@@ -368,7 +368,13 @@ export function buildWhereConditions(table, where) {
     }
 
     const col = table[k];
-    if (!col) continue; // Skip unmapped relation fields
+    if (!col) {
+      // Support Prisma-style compound unique keys (e.g. { attemptId_questionId: { attemptId, questionId } })
+      if (k.includes('_') && v && typeof v === 'object' && !(v instanceof Date)) {
+        conds.push(...buildWhereConditions(table, v));
+      }
+      continue; // Skip unmapped relation fields
+    }
 
     if (v === null) {
       conds.push(isNull(col));

@@ -164,4 +164,10 @@ describe('completeMarkedAttempt', () => {
   it('scoringQuestions turns Prisma rows into the scoring engine shape', () => {
     expect(scoringQuestions([{ id: 1, points: '2.00', competencies: [{ competencyId: 3 }] }])).toEqual([{ id: 1, points: 2, competencies: [3] }]);
   });
+  it('buildWhereConditions expands compound unique keys like attemptId_questionId', async () => {
+    const { buildWhereConditions } = await import('../lib/server/drizzleBridge.js');
+    const { attemptResponses } = await import('../drizzle/schema.js');
+    const conds = buildWhereConditions(attemptResponses, { attemptId_questionId: { attemptId: 12, questionId: 99 } });
+    expect(conds).toHaveLength(2);
+  });
 });

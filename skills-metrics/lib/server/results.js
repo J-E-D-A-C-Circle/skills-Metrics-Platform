@@ -247,7 +247,7 @@ export async function saveAnswer({ ctx, attemptId, b }) {
       if (id != null && !valid.has(id)) return { fail: [400, 'That answer is not one of the options.'] };
       data = id != null ? { optionId: id, textAnswer: null } : null;
     }
-    const where = { attemptId_questionId: { attemptId, questionId: q.id } }, savedAt = new Date();
+    const where = { attemptId, questionId: q.id }, savedAt = new Date();
     if (!data) { await tx.attemptResponse.deleteMany({ where: { attemptId, questionId: q.id } }); return { saved: true, cleared: true, savedAt }; }
     await tx.attemptResponse.upsert({ where, create: { attemptId, questionId: q.id, ...data, savedAt }, update: { ...data, isCorrect: null, savedAt } });
     return { saved: true, savedAt };

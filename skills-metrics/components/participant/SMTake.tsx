@@ -445,7 +445,7 @@ export default function SMTake({ go, id, vw, toast }) {
           <div style={{ font: '600 14.5px Inter,sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
           {answering && att ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-              <span style={{ font: '400 12px Inter,sans-serif', opacity: 0.85 }}>Attempt {att.attempt.attemptNo} · {answeredCount} of {questions.length} answered {flaggedCount ? `(${flaggedCount} flagged)` : ''} · {saveError ? 'Some answers not saved, retrying…' : saving ? 'Saving…' : 'All answers saved'}</span>
+              <span style={{ font: '400 12px Inter,sans-serif', opacity: 0.85 }}>Attempt {att.attempt.attemptNo} of {att.attempt.maxAttempts ?? item?.maxAttempts ?? 3} · {answeredCount} of {questions.length} answered {flaggedCount ? `(${flaggedCount} flagged)` : ''} · {saveError ? 'Some answers not saved, retrying…' : saving ? 'Saving…' : 'All answers saved'}</span>
               <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: isOnline ? 'rgba(34,197,94,0.2)' : 'rgba(234,179,8,0.25)', color: isOnline ? '#bbf7d0' : '#fef08a', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isOnline ? '#4ade80' : '#facc15' }}></span>
                 {isOnline ? (syncingOffline ? 'Syncing…' : 'Online · Encrypted DB') : 'Offline Mode · Encrypted Local Storage'}
@@ -466,7 +466,7 @@ export default function SMTake({ go, id, vw, toast }) {
       <Confirm open={confirm === 'start'} busy={busy} title={item && item.canResume ? 'Resume your attempt?' : 'Start attempt ' + ((item ? item.used : 0) + 1)}
         text={item && item.canResume ? 'Your saved answers will be restored.' : 'Starting begins your attempt session. Your answers save automatically as you go and you can come back anytime before the deadline.'}
         confirmText={item && item.canResume ? 'Resume' : 'Start'} onConfirm={begin} onCancel={() => setConfirm(null)} />
-      <Confirm open={confirm === 'submit'} busy={busy} title={'Submit attempt ' + (att ? att.attempt.attemptNo : '') + '?'} confirmText="Submit"
+      <Confirm open={confirm === 'submit'} busy={busy} title={'Submit attempt ' + (att ? att.attempt.attemptNo + ' of ' + (att.attempt.maxAttempts ?? item?.maxAttempts ?? 3) : '') + '?'} confirmText="Submit"
         text={(unanswered ? unanswered + (unanswered === 1 ? ' question is' : ' questions are') + ' unanswered and will score 0. ' : 'All questions are answered. ') + 'You cannot change your answers after submitting.'}
         onConfirm={submit} onCancel={() => setConfirm(null)} />
     </>
@@ -483,7 +483,7 @@ export default function SMTake({ go, id, vw, toast }) {
     const it = item, extended = it.originalDeadline;
     const facts = [
       ['Opens', fmtDateTime(it.startsAt)], ['Deadline', fmtDateTime(it.deadline) + (extended ? ' (extended from ' + fmtDate(it.originalDeadline) + ')' : '')],
-      ['Attempts taken', it.used], ['Completed attempts', it.completed], ['Status', it.progressLabel],
+      ['Attempts used', (it.used || 0) + ' of ' + (it.maxAttempts ?? 3) + ' (' + (it.remaining ?? Math.max(0, (it.maxAttempts ?? 3) - (it.used || 0))) + ' remaining)'], ['Completed attempts', it.completed], ['Status', it.progressLabel],
     ];
     return wrap(<>
       <Card title={it.title} sub={it.description ? <span style={{ overflowWrap: 'anywhere' }}>{it.description}</span> : null}>
@@ -503,7 +503,7 @@ export default function SMTake({ go, id, vw, toast }) {
         {!it.canStart && !it.canResume && it.blockedReason ? <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: '#f3f4f6', color: '#374151', fontSize: '13px' }}>{it.blockedReason}</div> : null}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '16px' }}>
           {it.canResume ? <Btn kind="primary" icon="icon-play" onClick={begin} disabled={busy}>{busy ? 'Opening…' : 'Resume attempt'}</Btn> : null}
-          {it.canStart ? <Btn kind="primary" icon="icon-play" onClick={() => { setError(''); setConfirm('start'); }}>{it.used ? 'Retake (attempt ' + (it.used + 1) + ')' : 'Start assessment'}</Btn> : null}
+          {it.canStart ? <Btn kind="primary" icon="icon-play" onClick={() => { setError(''); setConfirm('start'); }}>{it.used ? 'Retake (attempt ' + (it.used + 1) + ' of ' + (it.maxAttempts ?? 3) + ')' : 'Start assessment'}</Btn> : null}
           {it.completed ? <Btn icon="icon-chart-column" onClick={() => setStage('results')}>View results</Btn> : null}
           <Btn onClick={() => go('assessments')}>Back</Btn>
         </div>
@@ -516,7 +516,7 @@ export default function SMTake({ go, id, vw, toast }) {
     <Card>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '8px', padding: '12px 0' }}>
         <span style={{ width: '48px', height: '48px', borderRadius: '50%', background: GREEN, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><i className="icon-check" style={{ fontSize: '24px' }}></i></span>
-        <div style={{ fontSize: '18px', fontWeight: 700 }}>Attempt {done.attemptNo} submitted</div>
+        <div style={{ fontSize: '18px', fontWeight: 700 }}>Attempt {done.attemptNo} of {att?.attempt?.maxAttempts ?? item?.maxAttempts ?? 3} submitted</div>
         <div style={MUTED}>Submitted {fmtDateTime(done.submittedAt)} · <AttemptStatusBadge status={done.status} /></div>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '18px', marginTop: '6px', fontSize: '13.5px' }}>
           <span>Active time on the page: <b>{fmtDuration(done.activeSeconds)}</b></span><span>Time from start to submit: <b>{fmtDuration(done.elapsedSeconds)}</b></span>
