@@ -1,0 +1,331 @@
+/**
+ * Frog / Wigal SMS & OTP Integration Service (v3 API)
+ * Documentation: https://frogapi.wigal.com.gh/
+ */
+
+export interface SendSmsParams {
+  destination: string;
+  message: string;
+  senderId?: string;
+}
+
+export interface GenerateOtpParams {
+  destination: string;
+  senderId?: string;
+  expiryMinutes?: number;
+  length?: number;
+  messageTemplate?: string;
+}
+
+export interface VerifyOtpParams {
+  destination: string;
+  code: string;
+}
+
+export interface WigalApiResponse {
+  success: boolean;
+  status: number;
+  data: any;
+  formattedNumber: string;
+}
+
+/**
+ * Normalizes Ghanaian phone numbers for Frog API v3.
+ * e.g., '233241234567' or '0241234567' -> '0241234567' (or standard formatting)
+ */
+export function normalizePhoneForWigal(phone: string): string {
+  let cleaned = String(phone || "").replace(/[\s\-\(\)\+]/g, "");
+  if (cleaned.startsWith("233") && cleaned.length === 12) {
+    cleaned = "0" + cleaned.substring(3);
+  } else if (cleaned.length === 9) {
+    cleaned = "0" + cleaned;
+  }
+  return cleaned;
+}
+
+const DEFAULT_FROG_KEY = "$2a$10$5X3KvL/v/kzYoVzyEv9XsODWHASgrxvh5X7sJVUJDlPnUc/3x5d52";
+
+export function getWigalCredentials() {
+  let apiKey = process.env.WIGAL_API_KEY || process.env.FROG_API_KEY || process.env.WIGAL_PASSWORD;
+  if (!apiKey || !apiKey.startsWith("$2a$") || apiKey.includes("your-frog") || apiKey.length < 20) {
+    apiKey = DEFAULT_FROG_KEY;
+  }
+  let username = process.env.WIGAL_USERNAME || process.env.FROG_USERNAME;
+  if (!username || username.includes("your-frog")) {
+    username = "DVLA";
+  }
+  const defaultSenderId = process.env.WIGAL_SENDER_ID || process.env.FROG_SENDER_ID || "DVLA";
+  return { apiKey, username, defaultSenderId };
+}
+
+export function getWigalBaseUrl(): string {
+  const customUrl = process.env.WIGAL_BASE_URL || process.env.FROG_BASE_URL || process.env.SMS_BASE_URL;
+  if (customUrl) {
+    return customUrl.replace(/\/+$/, "");
+  }
+  return "https://frogapi.wigal.com.gh";
+}
+
+/**
+ * Sends a general SMS message using Frog API v3.
+ * Endpoint: POST https://frogapi.wigal.com.gh/api/v3/sms/send
+ */
+export async function sendWigalSms({
+  destination,
+  message,
+  senderId,
+}: SendSmsParams): Promise<WigalApiResponse> {
+  const { apiKey, username, defaultSenderId } = getWigalCredentials();
+  const source = senderId || defaultSenderId;
+
+  const formattedNumber = normalizePhoneForWigal(destination);
+
+  console.log(`[Frog API v3 SMS] Sending SMS to ${formattedNumber} (Sender ID: ${source}): "${message}"`);
+
+  if (!apiKey || !username) {
+    console.warn("[Frog API v3 SMS] WIGAL_API_KEY or WIGAL_USERNAME not set in environment variables.");
+    return {
+      success: false,
+      status: 400,
+      data: "WIGAL_API_KEY and WIGAL_USERNAME must be set in .env",
+      formattedNumber,
+    };
+  }
+
+  try {
+    const baseUrl = getWigalBaseUrl();
+    const url = `${baseUrl}/api/v3/sms/send`;
+    const msgId = `MSG_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+    const payload = {
+      senderid: source,
+      destinations: [
+        {
+          destination: formattedNumber,
+          message: message,
+          msgid: msgId,
+          smstype: "text",
+        },
+      ],
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "API-KEY": apiKey,
+        USERNAME: username,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    const responseText = await response.text();
+    let responseData: any = responseText;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {}
+
+    console.log(`[Frog API v3 SMS] Response (${response.status}):`, responseText);
+
+    const isSuccess =
+      response.ok &&
+      (typeof responseData !== "object" ||
+        (responseData?.status !== "REJECTED" &&
+          responseData?.status !== "FAILED" &&
+          responseData?.status !== "ERROR" &&
+          responseData?.status !== "PERMISSION_DENIED"));
+
+    return {
+      success: Boolean(isSuccess),
+      status: response.status,
+      data: responseData,
+      formattedNumber,
+    };
+  } catch (error: any) {
+    const baseUrl = getWigalBaseUrl();
+    console.error(`[Frog API v3 SMS Network Error] Failed reaching ${baseUrl}:`, error.message || error);
+    if (
+      error.name === "TimeoutError" ||
+      error.code === "ETIMEDOUT" ||
+      error.code === "ENOTFOUND" ||
+      error.code === "ECONNREFUSED"
+    ) {
+      console.warn(
+        `[Network Advice] Server outbound request to ${baseUrl} failed (${error.code || error.name}). If this server is behind a firewall/proxy, configure WIGAL_BASE_URL=http://10.70.X.X:PORT in .env or request outbound whitelisting.`
+      );
+    }
+    return {
+      success: false,
+      status: 500,
+      data: error.message || "Network error sending SMS via Frog API v3",
+      formattedNumber,
+    };
+  }
+}
+
+/**
+ * Generates and dispatches an OTP via Frog API v3 OTP Endpoint.
+ * Endpoint: POST https://frogapi.wigal.com.gh/api/v3/sms/otp/generate
+ */
+export async function generateFrogOtp({
+  destination,
+  senderId,
+  expiryMinutes = 10,
+  length = 6,
+  messageTemplate,
+}: GenerateOtpParams): Promise<WigalApiResponse> {
+  const { apiKey, username, defaultSenderId } = getWigalCredentials();
+  const source = senderId || defaultSenderId;
+
+  const formattedNumber = normalizePhoneForWigal(destination);
+
+  console.log(`[Frog API v3 OTP Generate] Sending OTP to ${formattedNumber} (Sender ID: ${source})`);
+
+  if (!apiKey || !username) {
+    console.warn("[Frog API v3 OTP] WIGAL_API_KEY or WIGAL_USERNAME not set in .env");
+    return {
+      success: false,
+      status: 400,
+      data: "WIGAL_API_KEY and WIGAL_USERNAME must be configured in .env",
+      formattedNumber,
+    };
+  }
+
+  try {
+    const baseUrl = getWigalBaseUrl();
+    const url = `${baseUrl}/api/v3/sms/otp/generate`;
+    const payload = {
+      number: formattedNumber,
+      expiry: expiryMinutes,
+      length: length,
+      messagetemplate: messageTemplate || "Your code is : %OTPCODE%",
+      type: "NUMERIC",
+      senderid: source,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "API-KEY": apiKey,
+        USERNAME: username,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    const responseText = await response.text();
+    let responseData: any = responseText;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {}
+
+    console.log(`[Frog API v3 OTP Generate] Response (${response.status}):`, responseText);
+
+    const isSuccess =
+      response.ok &&
+      (typeof responseData !== "object" ||
+        (responseData?.status !== "REJECTED" &&
+          responseData?.status !== "FAILED" &&
+          responseData?.status !== "ERROR" &&
+          responseData?.status !== "PERMISSION_DENIED"));
+
+    return {
+      success: Boolean(isSuccess),
+      status: response.status,
+      data: responseData,
+      formattedNumber,
+    };
+  } catch (error: any) {
+    const baseUrl = getWigalBaseUrl();
+    console.error(`[Frog API v3 OTP Generate Error] Failed reaching ${baseUrl}:`, error.message || error);
+    return {
+      success: false,
+      status: 500,
+      data: error.message || "Error generating OTP via Frog API v3",
+      formattedNumber,
+    };
+  }
+}
+
+/**
+ * Verifies an OTP code via Frog API v3 OTP Verify Endpoint.
+ * Endpoint: POST https://frogapi.wigal.com.gh/api/v3/sms/otp/verify
+ */
+export async function verifyFrogOtp({
+  destination,
+  code,
+}: VerifyOtpParams): Promise<WigalApiResponse> {
+  const { apiKey, username } = getWigalCredentials();
+
+  const formattedNumber = normalizePhoneForWigal(destination);
+
+  console.log(`[Frog API v3 OTP Verify] Verifying code ${code} for ${formattedNumber}`);
+
+  if (!apiKey || !username) {
+    return {
+      success: false,
+      status: 400,
+      data: "WIGAL_API_KEY and WIGAL_USERNAME must be set in .env",
+      formattedNumber,
+    };
+  }
+
+  try {
+    const baseUrl = getWigalBaseUrl();
+    const url = `${baseUrl}/api/v3/sms/otp/verify`;
+    const payload = {
+      otpcode: code,
+      number: formattedNumber,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "API-KEY": apiKey,
+        USERNAME: username,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(12000),
+    });
+
+    const responseText = await response.text();
+    let responseData: any = responseText;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch {}
+
+    console.log(`[Frog API v3 OTP Verify] Response (${response.status}):`, responseText);
+
+    const isSuccess =
+      response.ok &&
+      (typeof responseData !== "object" ||
+        responseData?.status === "SUCCESS" ||
+        responseData?.status === "ACCEPTED" ||
+        responseData?.code === "1000" ||
+        responseData?.message?.toLowerCase().includes("success") ||
+        responseData?.message?.toLowerCase().includes("verified"));
+
+    return {
+      success: Boolean(isSuccess),
+      status: response.status,
+      data: responseData,
+      formattedNumber,
+    };
+  } catch (error: any) {
+    const baseUrl = getWigalBaseUrl();
+    console.error(`[Frog API v3 OTP Verify Error] Failed reaching ${baseUrl}:`, error.message || error);
+    return {
+      success: false,
+      status: 500,
+      data: error.message || "Error verifying OTP via Frog API v3",
+      formattedNumber,
+    };
+  }
+}
+

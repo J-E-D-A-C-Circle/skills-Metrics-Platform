@@ -1,0 +1,78 @@
+# =============================================================================
+# layoff/docker-compose.yml · DVLA Vehicle Layoff System (MySQL 8 + Next.js + phpMyAdmin)
+# =============================================================================
+services:
+  layoff-mysql:
+    image: mysql:8.0
+    container_name: layoff-mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${LAYOFF_MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: ${LAYOFF_MYSQL_DATABASE:-layoff_db}
+      MYSQL_USER: ${LAYOFF_MYSQL_USER:-layoff}
+      MYSQL_PASSWORD: ${LAYOFF_MYSQL_PASSWORD:-change-me}
+    ports:
+      - "${LAYOFF_DB_PORT:-3311}:3306"
+    volumes:
+      - layoff-mysql-data:/var/lib/mysql
+    networks:
+      - layoff-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+
+  layoff-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: layoff-app
+    restart: unless-stopped
+    ports:
+      - "${LAYOFF_PORT:-3005}:3005"
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: mysql://${LAYOFF_MYSQL_USER:-layoff}:${LAYOFF_MYSQL_PASSWORD:-change-me}@layoff-mysql:3306/${LAYOFF_MYSQL_DATABASE:-layoff_db}
+      WIGAL_API_KEY: ${WIGAL_API_KEY:-}
+      WIGAL_USERNAME: ${WIGAL_USERNAME:-DVLA}
+      WIGAL_SENDER_ID: ${WIGAL_SENDER_ID:-DVLA}
+      WIGAL_BASE_URL: ${WIGAL_BASE_URL:-https://frogapi.wigal.com.gh}
+    volumes:
+      - layoff-uploads:/app/uploads
+    networks:
+      - layoff-network
+    depends_on:
+      layoff-mysql:
+        condition: service_healthy
+
+  layoff-phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: layoff-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "${LAYOFF_PHPMYADMIN_PORT:-8086}:80"
+    environment:
+      PMA_HOST: layoff-mysql
+      PMA_PORT: 3306
+      PMA_USER: ${LAYOFF_MYSQL_USER:-layoff}
+      PMA_PASSWORD: ${LAYOFF_MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${LAYOFF_MYSQL_ROOT_PASSWORD:-change-me-root}
+      UPLOAD_LIMIT: 64M
+    networks:
+      - layoff-network
+    depends_on:
+      layoff-mysql:
+        condition: service_healthy
+
+volumes:
+  layoff-mysql-data:
+  layoff-uploads:
+
+networks:
+  layoff-network:
+    driver: bridge

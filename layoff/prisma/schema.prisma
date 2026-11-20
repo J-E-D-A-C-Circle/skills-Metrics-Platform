@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/prisma-client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String               @id @default(cuid())
+  fullName         String
+  staffId          String?              @unique
+  email            String               @unique
+  phone            String
+  passwordHash     String
+  role             String               @default("TECHNICAL_OFFICER") // "ADMINISTRATOR" | "TECHNICAL_OFFICER" | "COMPLIANCE_OFFICER"
+  region           String               @default("Greater Accra") // "Greater Accra" | "Ashanti" | "Western" | etc.
+  stationLocation  String               @default("DVLA 37 Head Office") // "DVLA 37 Head Office", "Kumasi Central", etc.
+  isActive         Boolean              @default(true)
+  lastLoginAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  inspections      InspectionRecord[]
+  assignedTickets  HelplineTicket[]
+  createdCampaigns BulkSMSCampaign[]
+
+  @@map("users")
+}
+
+model Application {
+  id                         String       @id
+  // Primary applicant / contact details
+  applicantName              String
+  applicantPhone             String
+  applicantEmail             String
+  idNumber                   String
+  residentialAddress         String?
+  digitalAddress             String?
+
+  // VRS & Ownership details
+  vrsVerified                Boolean      @default(false)
+  vrsVerificationDate        String?
+  applicantType              String       @default("OWNER") // "OWNER" | "REPRESENTATIVE"
+  ownerName                  String?
+  ownerIdNumber              String?
+  ownerPhone                 String?
+  ownerEmail                 String?
+  representativeName         String?
+  representativePhone        String?
+  representativeEmail        String?
+  representativeIdType       String?
+  representativeIdNumber     String?
+  representativeRelationship String?
+  representativeAddress      String?
+
+  // Vehicle Specifications
+  registrationNumber         String
+  chassisNumber              String
+  engineNumber               String?
+  make                       String
+  model                      String
+  yearOfMake                 String?
+  vehicleType                String
+  colour                     String
+
+  // Classification & Roadworthiness
+  vehicleUsageClassification String       @default("Private") // "Private" | "Commercial"
+  roadworthinessExpiryDate   String?
+  roadworthinessCutoffDate   String?
+  roadworthinessValid        Boolean      @default(true)
+  isEmergencyMechanicalFailure Boolean    @default(false)
+  emergencyFee               Float        @default(0)
+  emergencyFeeReason         String?
+
+  // Layoff Request Particulars
+  reason                     String
+  explanation                String       @db.Text
+  storageFacilityName        String?
+  storageRegion              String?
+  proposedStartDate          String
+  layoffPeriodMonths         Int
+
+  // Inspection Workflow
+  inspectionMethod           String       @default("OFFICE") // "OFFICE" | "ON_SITE"
+  inspectionOfficeLocation   String?
+  inspectionSiteAddress      String?
+  inspectionSiteArea         String?
+  inspectionContactPerson    String?
+  inspectionContactPhone     String?
+  inspectionNotes            String?      @db.Text
+  inspectionStatus           String       @default("Pending Assignment") // "Pending Assignment" | "Assigned" | "In Progress" | "Completed" | "Requires Further Action"
+  assignedOfficerId          String?
+  assignedOfficerName        String?
+  claimedAt                  String?
+  inspectionDate             String?
+  inspectionFindings         String?      @db.Text
+  inspectionDefects          String?      @db.Text
+  inspectionOutcome          String? // "Inspection completed successfully" | "Inspection completed with issues" | "Further inspection or information required"
+  inspectionReportSubmittedAt String?
+  inspectionReportUrl        String?
+  inspectionReportFileName   String?
+  inspectionReportUploadedAt String?
+  inspectionReportUploadedBy String?
+
+  // Statuses (Separated Lifecycle Concepts)
+  status                     String // Legacy general status: "Pending Verification", "Active Layoff", etc.
+  applicationStatus          String       @default("Submitted") // "Draft" | "Submitted" | "Under Review" | "Pending Inspection" | "Inspection Completed" | "Approved" | "Rejected" | "Returned for Correction" | "Active" | "Completed" | "Expired"
+  submittedAt                String
+  verificationOutcome        String?
+  verificationNote           String?      @db.Text
+  rejectionReason            String?      @db.Text
+
+  // Administrative Approval
+  adminApprovalStatus        String       @default("Pending") // "Pending" | "Approved" | "Rejected" | "Returned for Correction"
+  adminApprovedBy            String?
+  adminApprovedAt            String?
+  adminComments              String?      @db.Text
+
+  // IPP Pro & Invoicing
+  invoiceNumber              String?
+  invoiceStatus              String       @default("Not Generated") // "Not Generated" | "Generated" | "Cancelled"
+  paymentStatus              String       @default("Pending") // "Pending" | "Paid" | "Failed" | "Cancelled"
+  paymentReference           String?
+  paymentConfirmedAt         String?
+  ippProSubmissionStatus     String       @default("Not Started") // "Not Started" | "Pending" | "Succeeded" | "Failed" | "Pending Retry"
+  ippProSubmissionRef        String?
+  ippProSubmittedAt          String?
+  ippProSubmissionError      String?      @db.Text
+
+  // Authoritative Vehicle Road Status (On Road | Off Road)
+  vehicleRoadStatus          String       @default("On Road") // "On Road" | "Off Road"
+  roadStatusChangedAt        String?
+  roadStatusReason           String?
+  roadStatusChangedBy        String?
+  returnToRoadDate           String?
+  returnToRoadNotes          String?      @db.Text
+
+  // Dates & Extension
+  layoffStartDate            String?
+  layoffExpiryDate           String?
+  extensionCount             Int          @default(0)
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+
+  attachments                Attachment[]
+  invoices                   Invoice[]
+  activities                 ApplicationActivity[]
+  inspectionRecords          InspectionRecord[]
+  extensionRequests          ExtensionRequest[]
+  declarationAcceptances     DeclarationAcceptance[]
+
+  @@map("applications")
+}
+
+model Attachment {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fileName      String
+  fileUrl       String
+  fileType      String
+  fileSize      String
+  category      String // "document_title" | "photo_front" | "photo_side" | "photo_rear" | "photo_engine" | "photo_chassis" | "technical_inspection_photo" | "representative_auth" | "document" | "photo"
+  uploaderRole  String?     @default("APPLICANT") // "APPLICANT" | "TECHNICAL_OFFICER"
+  uploaderName  String?
+  capturedAt    String?
+  createdAt     DateTime    @default(now())
+
+  @@index([applicationId])
+  @@map("attachments")
+}
+
+model Invoice {
+  id                   String      @id @default(cuid())
+  invoiceNumber        String      @unique
+  applicationId        String
+  application          Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  registrationNumber   String
+  chassisNumber        String
+  applicantName        String
+  amount               Float
+  emergencyFee         Float       @default(0)
+  invoiceDate          String
+  layoffStartDate      String
+  layoffExpiryDate     String
+  paymentStatus        String      @default("Pending") // "Pending" | "Paid" | "Waived"
+  extensionStatus      String      @default("Eligible")
+  ippProTransactionRef String?
+  billingDetails       String?     @db.Text
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@index([applicationId])
+  @@map("invoices")
+}
+
+model ApplicationActivity {
+  id              String      @id @default(cuid())
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  category        String      // "APPLICATION" | "PAYMENT" | "INSPECTION" | "EXTENSION" | "COMMUNICATION" | "ADMINISTRATIVE"
+  action          String
+  description     String      @db.Text
+  actorName       String
+  actorRole       String
+  source          String      @default("SYSTEM_AUTOMATION") // "APPLICANT" | "ADMINISTRATOR" | "TECHNICAL_OFFICER" | "SYSTEM_AUTOMATION"
+  previousValue   String?     @db.Text
+  newValue        String?     @db.Text
+  referenceNumber String?
+  metadata        String?     @db.Text
+  timestamp       DateTime    @default(now())
+
+  @@index([applicationId])
+  @@index([category])
+  @@map("application_activities")
+}
+
+model InspectionRecord {
+  id              String      @id @default(cuid())
+  applicationId   String
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  inspectionType  String      @default("INITIAL") // "INITIAL" | "FOLLOW_UP" | "RETURN_TO_ROAD"
+  officerId       String
+  officer         User        @relation(fields: [officerId], references: [id])
+  officerName     String
+  officerPhone    String
+  region          String
+  status          String      @default("Claimed") // "Claimed" | "In Progress" | "Completed" | "Requires Action"
+  claimedAt       DateTime    @default(now())
+  conductedAt     DateTime?
+  findings        String?     @db.Text
+  defects         String?     @db.Text
+  recommendations String?     @db.Text
+  outcome         String?
+  reportUrl       String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([applicationId])
+  @@index([officerId])
+  @@map("inspection_records")
+}
+
+model ExtensionRequest {
+  id                 String      @id @default(cuid())
+  applicationId      String
+  application        Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  extensionNumber    Int         @default(1)
+  previousExpiryDate String
+  requestedMonths    Int
+  calculatedFee      Float
+  status             String      @default("Pending Review") // "Pending Review" | "Approved" | "Rejected" | "Invoiced" | "Paid" | "Activated"
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  reviewComments     String?     @db.Text
+  invoiceNumber      String?     @unique
+  paymentReference   String?
+  paymentStatus      String      @default("Pending")
+  paymentConfirmedAt DateTime?
+  newExpiryDate      String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([applicationId])
+  @@map("extension_requests")
+}
+
+model BulkSMSCampaign {
+  id              String      @id @default(cuid())
+  title           String
+  message         String      @db.Text
+  createdById     String
+  createdBy       User        @relation(fields: [createdById], references: [id])
+  targetFilter    String?     @db.Text
+  totalRecipients Int
+  deliveredCount  Int         @default(0)
+  failedCount     Int         @default(0)
+  status          String      @default("Completed") // "Draft" | "Sending" | "Completed" | "Failed"
+  createdAt       DateTime    @default(now())
+
+  @@map("bulk_sms_campaigns")
+}
+
+model HelplineTicket {
+  id                   String      @id @default(cuid())
+  ticketNumber         String      @unique
+  applicantName        String
+  applicantPhone       String
+  applicantEmail       String?
+  registrationNumber   String?
+  applicationReference String?
+  category             String      // "ENQUIRY" | "PAYMENT_ISSUE" | "INSPECTION_DELAY" | "COMPLAINT" | "GENERAL"
+  subject              String
+  description          String      @db.Text
+  priority             String      @default("Medium") // "Low" | "Medium" | "High" | "Urgent"
+  status               String      @default("Open") // "Open" | "In Progress" | "Escalated" | "Resolved" | "Closed"
+  assignedOfficerId    String?
+  assignedOfficer      User?       @relation(fields: [assignedOfficerId], references: [id])
+  resolutionNotes      String?     @db.Text
+  resolvedAt           DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@map("helpline_tickets")
+}
+
+model DeclarationAcceptance {
+  id                 String      @id @default(cuid())
+  applicationId      String      @unique
+  application        Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  declarationText    String      @db.Text
+  statutoryReference String      @default("Road Traffic Regulations, 2026 (L.I. 2519), Regulation 28")
+  applicantName      String
+  idNumber           String
+  acceptedAt         DateTime    @default(now())
+  ipAddress          String?
+  userAgent          String?
+
+  @@map("declaration_acceptances")
+}
+
+model SystemConfig {
+  id          String   @id @default(cuid())
+  configKey   String   @unique
+  configValue String   @db.Text
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configs")
+}
+
+model AuditLog {
+  id                String   @id
+  timestamp         String
+  userRole          String
+  userName          String
+  action            String
+  referenceNumber   String
+  vehicleReference  String?
+  previousStatus    String?
+  newStatus         String?
+  processIdentifier String?
+  details           String   @db.Text
+  createdAt         DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SMSNotification {
+  id             String   @id
+  recipientPhone String
+  message        String   @db.Text
+  event          String
+  sentAt         String
+  status         String
+  createdAt      DateTime @default(now())
+
+  @@map("sms_notifications")
+}

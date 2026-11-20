@@ -1,0 +1,86 @@
+# =============================================================================
+# skills-metrics/docker-compose.yml · Skills Metrics Platform (MySQL 8 + Next.js + phpMyAdmin)
+# =============================================================================
+services:
+  skm-mysql:
+    image: mysql:8.0
+    container_name: skm-mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SKM_MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: ${SKM_MYSQL_DATABASE:-skill_matrix}
+      MYSQL_USER: ${SKM_MYSQL_USER:-skm}
+      MYSQL_PASSWORD: ${SKM_MYSQL_PASSWORD:-change-me}
+    ports:
+      - "${SKM_DB_PORT:-3310}:3306"
+    volumes:
+      - skm-mysql-data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - skm-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+
+  skm-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: skm-app
+    restart: unless-stopped
+    ports:
+      - "${SKM_PORT:-3004}:3004"
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: mysql://${SKM_MYSQL_USER:-skm}:${SKM_MYSQL_PASSWORD:-change-me}@skm-mysql:3306/${SKM_MYSQL_DATABASE:-skill_matrix}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@dvla.gov.gh}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-System Administrator}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Password123!}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-}
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+      SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-60}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      JOBS_SECRET: ${JOBS_SECRET:-}
+      STORAGE_DIR: /app/storage
+    volumes:
+      - skm-app-storage:/app/storage
+    networks:
+      - skm-network
+    depends_on:
+      skm-mysql:
+        condition: service_healthy
+
+  skm-phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: skm-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "${SKM_PHPMYADMIN_PORT:-8085}:80"
+    environment:
+      PMA_HOST: skm-mysql
+      PMA_PORT: 3306
+      PMA_USER: ${SKM_MYSQL_USER:-skm}
+      PMA_PASSWORD: ${SKM_MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${SKM_MYSQL_ROOT_PASSWORD:-change-me-root}
+      UPLOAD_LIMIT: 64M
+    networks:
+      - skm-network
+    depends_on:
+      skm-mysql:
+        condition: service_healthy
+
+volumes:
+  skm-mysql-data:
+  skm-app-storage:
+
+networks:
+  skm-network:
+    driver: bridge

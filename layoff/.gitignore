@@ -1,0 +1,58 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# generated prisma client
+lib/prisma-client/
+
+# IDE & tooling
+.gemini/
+.cursor/
+.vscode/
+
+# Local reference documents (do not commit to GitHub)
+CamScanner 07-09-2026 09.57.pdf
+MX-4060N_20260805_100818.pdf
+DVLA_Vehicle_Layoff_Process_Flow.pdf
+DVLA_Vehicle_Layoff_Flowchart.pdf
+DVLA Vehicle Layoff Flowchart.pdf
+DVLA Vehicle Layoff PID.pdf
+Vehicle Layoff PID and flowchart.zip

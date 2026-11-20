@@ -11,12 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy package dependency manifests
 COPY package.json package-lock.json ./
 
-# Install dependencies with connection resilience
-RUN npm config set fetch-retries 5 \
-    && npm config set fetch-retry-mintimeout 20000 \
+# Install dependencies with connection resilience and BuildKit npm cache
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set fetch-retries 10 \
+    && npm config set fetch-retry-mintimeout 15000 \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm config set fetch-timeout 300000 \
-    && npm ci --no-audit --no-fund --maxsockets 5
+    && npm ci --no-audit --no-fund --maxsockets 3
 
 # Copy the rest of the application code
 COPY . .
@@ -27,10 +28,11 @@ ENV DATABASE_URL="mysql://skm:placeholder@localhost:3306/skill_matrix"
 # Build Next.js production bundle
 RUN npm run build
 
-# Expose Next.js default port
-EXPOSE 3000
+# Expose Next.js port
+EXPOSE 3004
 
-ENV PORT=3000
+ENV PORT=3004
+ENV HOSTNAME=0.0.0.0
 ENV NODE_ENV=production
 
 # On container startup: start the server
